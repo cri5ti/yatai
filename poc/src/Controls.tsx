@@ -1,7 +1,7 @@
 import { useS, set, resetAll } from './store';
 import type { Flags, Layout } from './store';
 import {
-  addInboxSamples, jumpToNextMeeting, openCapture, setClock, setFlag, setLayout, toggleHidden,
+  addInboxSamples, jumpToNextMeeting, openCapture, redo, setClock, setFlag, setLayout, toggleHidden, undo,
 } from './actions';
 import { fmt } from './model';
 
@@ -28,7 +28,7 @@ export function Controls() {
   const groups = [...new Set(scenarios.map((x) => x.group))];
   return (
     <aside className="controls">
-      <h2>◆ yatai · UX POC</h2>
+      <h2>yatai · UX POC</h2>
       <p className="note">Mock desktop + mocked services. State persists in localStorage.</p>
 
       <section>
@@ -45,7 +45,7 @@ export function Controls() {
           <button onClick={openCapture}>Quick capture</button>
         </div>
         <p className="note">
-          <kbd>Alt</kbd>+<kbd>1/2/3</kbd> tabs · <kbd>Alt</kbd>+<kbd>Y</kbd> show/hide · <kbd>Alt</kbd>+<kbd>Space</kbd> capture
+          <kbd>⌘1/2/3</kbd> tabs (or <kbd>Alt</kbd>+<kbd>1/2/3</kbd> if the browser grabs ⌘) · <kbd>Alt</kbd>+<kbd>Y</kbd> show/hide · <kbd>Alt</kbd>+<kbd>Space</kbd> capture · <kbd>?</kbd> shortcuts
         </p>
       </section>
 
@@ -110,6 +110,12 @@ export function Controls() {
         <div className="btnrow">
           <button onClick={addInboxSamples}>+ Inbox samples</button>
           <button onClick={() => set(() => ({ inbox: [] }))}>Clear inbox</button>
+          <button onClick={undo} disabled={!s.past.length}>
+            ↶ Undo ({s.past.length})
+          </button>
+          <button onClick={redo} disabled={!s.future.length}>
+            ↷ Redo ({s.future.length})
+          </button>
           <button className="danger" onClick={resetAll}>
             Reset all
           </button>

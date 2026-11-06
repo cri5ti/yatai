@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useS } from './store';
-import type { Layout, State } from './store';
-import { Today } from './Today';
+import type { Layout, State, Tab } from './store';
+import { Next } from './Next';
 import { Inbox } from './Inbox';
 import { Organizer } from './Organizer';
 import { Focus } from './Focus';
-import { capture, closeCapture, dismissToast, setLayout, setTab, toggleHidden } from './actions';
+import { Menu } from './Menu';
+import { AiPop } from './AiPop';
+import { capture, closeCapture, dismissToast, redo, setLayout, setTab, toggleHelp, toggleHidden, undo } from './actions';
 import { fmt, meetingsFor } from './model';
 
 export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.layout);
@@ -17,35 +19,61 @@ function Win() {
   const pill = layout === 'pill';
   const endedFocus = !!s.focus?.ended;
   const cycle: Layout[] = ['dock', 'float', 'max', 'pill'];
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'next', label: 'Next' },
+    { id: 'inbox', label: 'Inbox' },
+    { id: 'organizer', label: 'Organizer' },
+  ];
 
   return (
     <div className={`win layout-${layout} ${endedFocus ? 'ended' : ''} ${s.hidden ? 'hidden' : ''}`}>
       {!pill && (
         <div className="titlebar">
-          <span className="logo">◆ yatai</span>
-          <nav className="tabs">
-            <button className={s.tab === 'today' ? 'on' : ''} onClick={() => setTab('today')}>
-              Today
-            </button>
-            <button className={s.tab === 'inbox' ? 'on' : ''} onClick={() => setTab('inbox')}>
-              Inbox{s.inbox.length > 0 && <b className="badge">{s.inbox.length}</b>}
-            </button>
-            <button className={s.tab === 'organizer' ? 'on' : ''} onClick={() => setTab('organizer')}>
-              Organizer
-            </button>
+          <nav className="tabs" role="tablist" aria-label="Views">
+            {tabs.map((t, i) => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={s.tab === t.id}
+                className={s.tab === t.id ? 'on' : ''}
+                title={`${t.label} (⌘${i + 1})`}
+                onClick={() => setTab(t.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id;
+                    setTab(n);
+                    requestAnimationFrame(() => (document.querySelectorAll('.tabs button')[tabs.findIndex((x) => x.id === n)] as HTMLElement)?.focus());
+                  }
+                }}
+              >
+                {t.label}
+                {t.id === 'inbox' && s.inbox.length > 0 && <b className="badge">{s.inbox.length}</b>}
+                {layout !== 'dock' && <kbd>⌘{i + 1}</kbd>}
+              </button>
+            ))}
           </nav>
           <div className="wc">
-            <button title="Cycle layout" onClick={() => setLayout(cycle[(cycle.indexOf(s.layout) + 1) % cycle.length])}>
+            <button title={s.past.length ? `Undo: ${s.past[s.past.length - 1].label} (⌘Z)` : 'Nothing to undo'} aria-label="Undo" disabled={!s.past.length} onClick={undo}>
+              ↶
+            </button>
+            <button title={s.future.length ? `Redo: ${s.future[0].label} (⌘⇧Z)` : 'Nothing to redo'} aria-label="Redo" disabled={!s.future.length} onClick={redo}>
+              ↷
+            </button>
+            <button title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={toggleHelp}>
+              ?
+            </button>
+            <button title="Cycle layout" aria-label="Cycle layout" onClick={() => setLayout(cycle[(cycle.indexOf(s.layout) + 1) % cycle.length])}>
               ⧉
             </button>
-            <button title="Hide to tray" onClick={toggleHidden}>
+            <button title="Hide to tray" aria-label="Hide to tray" onClick={toggleHidden}>
               ✕
             </button>
           </div>
         </div>
       )}
       <div className="content">
-        {pill ? <Focus /> : s.tab === 'today' ? <Today /> : s.tab === 'inbox' ? <Inbox /> : <Organizer />}
+        {pill ? <Focus /> : s.tab === 'next' ? <Next /> : s.tab === 'inbox' ? <Inbox /> : <Organizer />}
       </div>
       {s.aiBusy && <div className="aibusy">✨ {s.aiBusy}</div>}
     </div>
@@ -114,6 +142,77 @@ function Capture() {
   );
 }
 
+const HELP: [string, [string, string][]][] = [
+  [
+    'Everywhere',
+    [
+      ['⌘1 ⌘2 ⌘3', 'Next · Inbox · Organizer (Alt+1/2/3 also works in a browser)'],
+      ['↑ ↓ ← →', 'Navigate everything'],
+      ['⌘⏎', 'Create a new thing right here (⏎ or Esc on a blank field cancels)'],
+      ['⌘↑ ⌘↓', 'Reorder (animated) — or drag'],
+      ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
+      ['/  or right-click', 'Commands: /consolidate /abandon /due /reschedule /tomorrow /estimate /duplicate /ai'],
+      ['⌘Z  ⌘⇧Z', 'Undo / redo — every change goes through the undo manager'],
+      ['⌘/', 'Ask AI'],
+      ['?', 'This sheet'],
+    ],
+  ],
+  [
+    'Next',
+    [
+      ['↑ ↓', 'Move across tasks · → goes into its actions · ← back to the task'],
+      ['⏎', 'Start the action (on a task: its first action) — starts a stopwatch, moves it to the top'],
+      ['⌘⇧⏎  or F', 'Start in focus mode'],
+      ['Space', 'Toggle done (just a marker — nothing disappears)'],
+      ['→ / ←', 'On an action: expand / collapse its notes · on a task: expand / collapse the task'],
+      ['⌘↑ ⌘↓ on an action', 'Reorder inside the task; past the edge it splits out into its own card'],
+      ['R / F2', 'Edit (⇧⏎ for a new line)'],
+      ['E', 'Estimate picker: 1=5m 2=15m 3=30m 4=1h 5=2h 6=4h 8=8h'],
+    ],
+  ],
+  [
+    'Organizer · Inbox',
+    [
+      ['A  N  ⇧N', 'Organizer: add child · sibling · project'],
+      ['T', 'Organizer: put in / take out of Next'],
+      ['⏎ · A · S', 'Inbox: file into… · accept AI suggestion · suggest'],
+    ],
+  ],
+];
+
+function Help() {
+  const s = useS();
+  if (!s.help) return null;
+  return (
+    <div className="ai-veil" onMouseDown={toggleHelp}>
+      <div
+        className="help"
+        role="dialog"
+        aria-label="Keyboard shortcuts"
+        tabIndex={-1}
+        ref={(el) => el?.focus()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' || e.key === '?') (e.preventDefault(), e.stopPropagation(), toggleHelp());
+        }}
+      >
+        <h3>Keyboard shortcuts</h3>
+        {HELP.map(([group, rows]) => (
+          <div key={group}>
+            <div className="lh">{group}</div>
+            {rows.map(([k, d]) => (
+              <div key={k} className="hrow">
+                <kbd>{k}</kbd>
+                <span>{d}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Desktop() {
   const s = useS();
   const att = s.inbox.length;
@@ -128,6 +227,9 @@ export function Desktop() {
       )}
       <Win />
       <Capture />
+      <Menu />
+      <AiPop />
+      <Help />
 
       <div className="toasts">
         {s.toasts.map((t) => (
@@ -135,7 +237,7 @@ export function Desktop() {
             key={t.id}
             className={`toast ${t.tone}`}
             onClick={() => {
-              setTab('today');
+              setTab('next');
               dismissToast(t.id);
             }}
           >

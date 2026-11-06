@@ -1,5 +1,5 @@
 import type { Node, State } from './store';
-import { childrenOf, pathOf } from './model';
+import { childrenOf, nextActions, nextModel, pathOf } from './model';
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,3 +62,39 @@ export function aiPlan(s: State): string[] {
 
 export const breadcrumb = (nodes: Node[], id: string | null) => pathOf(nodes, id).join(' › ');
 export const hasKids = (nodes: Node[], id: string) => childrenOf(nodes, id).length > 0;
+
+/* ---------- AI popup (mocked conversation) ---------- */
+export interface AiReply {
+  text: string;
+  intent?: 'plan' | 'breakdown';
+}
+
+export function aiReply(q: string, ctx: string | undefined, s: State): AiReply {
+  const t = q.toLowerCase();
+  const about = ctx ? `**${ctx}**` : 'your list';
+  if (/break|split|steps|subtask/.test(t))
+    return {
+      intent: 'breakdown',
+      text: `Here is how I'd break down ${about}:\n1. Clarify the goal and the definition of done\n2. Draft a first pass\n3. Review and refine\n4. Share / hand off\n\nI can add these as actions.`,
+    };
+  if (/plan|today|schedule|what.*(next|do)|start/.test(t)) {
+    const next = nextActions(s).slice(0, 3);
+    const m = s.meetings.length;
+    return {
+      intent: 'plan',
+      text: next.length
+        ? `Given ${m} meetings today I'd go in this order:\n${next.map((n, i) => `${i + 1}. **${n.title.split('\n')[0]}**${n.est ? ` (${n.est} min)` : ''}`).join('\n')}\n\nWant me to fill the rest of the day?`
+        : 'Your Next list is empty — I can pull a few neglected actions in for you.',
+    };
+  }
+  if (/estimate|how long|duration/.test(t))
+    return { text: `Based on similar past work, ${about} is about **45 min** — most comparable items took 30–60 min.` };
+  if (/summar|status|progress|how am i/.test(t)) {
+    const m = nextModel(s);
+    return { text: `You have done **${m.done} of ${m.total}** planned actions so far. ${m.total - m.done} left across ${m.cards.length} cards.` };
+  }
+  if (/thank/.test(t)) return { text: 'Anytime. ✨' };
+  return {
+    text: `(mock) I looked at ${about}. I can *break it down*, *estimate it*, *plan your day* or *summarize progress* — just ask.`,
+  };
+}

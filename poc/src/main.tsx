@@ -1,10 +1,12 @@
 import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import './tokens.css';
 import './styles.css';
 import { Desktop } from './Desktop';
 import { Controls } from './Controls';
 import { get, useS } from './store';
-import { openCapture, setClock, setTab, toggleHidden, closeCapture } from './actions';
+import { closeCapture, openAi, closeAi, openCapture, redo, setClock, setTab, toggleHelp, toggleHidden, undo } from './actions';
+import { isEditable, mod } from './kbd';
 
 function App() {
   const s = useS();
@@ -20,18 +22,32 @@ function App() {
     return () => clearInterval(t);
   }, [s.clockSpeed]);
 
-  // mock global hotkeys
+  // global shortcuts
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (!e.altKey) return;
-      if (e.key === ' ') (e.preventDefault(), get().capture ? closeCapture() : openCapture());
-      else if (e.key.toLowerCase() === 'y') (e.preventDefault(), toggleHidden());
-      else if (e.key === '1') (e.preventDefault(), setTab('today'));
-      else if (e.key === '2') (e.preventDefault(), setTab('inbox'));
-      else if (e.key === '3') (e.preventDefault(), setTab('organizer'));
+      const M = mod(e);
+      const k = e.key;
+      const tabs = ['next', 'inbox', 'organizer'] as const;
+      // mock of OS-level global hotkeys (Alt)
+      if (e.altKey && !M) {
+        if (k === ' ') return (e.preventDefault(), get().capture ? closeCapture() : openCapture());
+        if (k.toLowerCase() === 'y' || k === '¥') return (e.preventDefault(), toggleHidden());
+        const code = e.code.replace('Digit', '');
+        if (['1', '2', '3'].includes(code)) return (e.preventDefault(), setTab(tabs[+code - 1]));
+        return;
+      }
+      if (M && !e.altKey) {
+        if (['1', '2', '3'].includes(k)) return (e.preventDefault(), setTab(tabs[+k - 1]));
+        if (k === '/') return (e.preventDefault(), get().ai ? closeAi() : openAi(contextId()));
+        if (isEditable(e.target)) return; // let text fields keep their own undo
+        if (k.toLowerCase() === 'z') return (e.preventDefault(), e.shiftKey ? redo() : undo());
+        if (k.toLowerCase() === 'y') return (e.preventDefault(), redo());
+        return;
+      }
+      if (k === '?' && !isEditable(e.target) && !M) (e.preventDefault(), toggleHelp());
     };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
   }, []);
 
   return (
@@ -40,6 +56,14 @@ function App() {
       <Controls />
     </div>
   );
+}
+
+/** ⌘/ asks about whatever is selected */
+function contextId(): string | undefined {
+  const s = get();
+  if (s.tab === 'organizer') return s.sel ?? undefined;
+  if (s.tab === 'next') return s.nsel.row && !s.nsel.row.startsWith('fx_') ? s.nsel.row : undefined;
+  return undefined;
 }
 
 createRoot(document.getElementById('root')!).render(
