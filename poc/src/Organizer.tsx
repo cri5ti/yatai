@@ -1,30 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { set, useS } from './store';
-import type { Kind, Node } from './store';
+import type { Node } from './store';
 import {
-  addNode, breakDown, canParent, cycleEst, editText, estimate, leafIds, moveNode, removeNodes, reorder, startFirst,
-  startFocus, toast, toggleDoneNodes, toggleOpen, toggleStart, toggleToday,
+  addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
+  fileInboxTo, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
-import { childrenOf, fmt, fmtEst, laterLabel, relTime } from './model';
+import { childrenOf, depthOf, fmtEst, hlSubtree, laterLabel, plain, relTime } from './model';
 import { InlineEdit } from './Inline';
 import { inline } from './md';
+import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Chips, DueChip } from './Chips';
 import { useFlip } from './flip';
 import { cx, focusArea, isEditable, mod } from './kbd';
 
-const icon = { project: '▣', task: '◧', action: '•' } as const;
-
 interface RowItem {
   n: Node;
   depth: number;
+  kids: boolean;
 }
 function visibleRows(nodes: Node[]): RowItem[] {
   const out: RowItem[] = [];
   const walk = (pid: string | null, d: number) => {
     for (const n of childrenOf(nodes, pid)) {
-      out.push({ n, depth: d });
-      if (n.open) walk(n.id, d + 1);
+      const kids = nodes.some((c) => c.parentId === n.id);
+      out.push({ n, depth: d, kids });
+      if (n.open && kids) walk(n.id, d + 1);
     }
   };
   walk(null, 0);
@@ -32,16 +33,30 @@ function visibleRows(nodes: Node[]): RowItem[] {
 }
 
 type Hint = { id: string; zone: 'before' | 'inside' | 'after' };
+export const INBOX_MIME = 'application/x-yatai-inbox';
+const TABLE_AT = 880; // px: below this the organizer is a list, above it the same rows grow columns
 
-export function Organizer() {
+/** Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room). */
+export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const s = useS();
   const rows = useMemo(() => visibleRows(s.nodes), [s.nodes]);
+  const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const wide = s.layout === 'max';
+  const [width, setWidth] = useState(0);
+  const wide = width >= TABLE_AT;
   useFlip(area, 'data-fr');
+
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
 
   // selection always resolves to something visible (a collapsed parent stands in for hidden children)
   const selId = useMemo(() => {
@@ -50,54 +65,104 @@ export function Organizer() {
     while (cur && !vis.has(cur.id)) cur = s.nodes.find((n) => n.id === cur!.parentId);
     return cur?.id ?? rows[0]?.n.id ?? null;
   }, [s.sel, s.nodes, rows]);
-  const selNode = s.nodes.find((n) => n.id === selId) ?? null;
+  const live = useMemo(() => s.multi.filter((id) => s.nodes.some((n) => n.id === id)), [s.multi, s.nodes]);
+  const multi = useMemo(() => new Set(live.length > 1 ? live : []), [live]);
 
   useEffect(() => {
-    area.current?.focus({ preventScroll: true });
+    if (!embedded) area.current?.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
     area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [selId, rows.length]);
+  // moving the keyboard cursor onto a yellow highlight counts as having seen it
+  const lastSel = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastSel.current !== null && lastSel.current !== selId && selId) {
+      const n = s.nodes.find((x) => x.id === selId);
+      const kids = s.nodes.some((c) => c.parentId === selId);
+      dismissHl(s.hl[selId] ? [selId] : n && kids && !n.open ? hlSubtree(s.nodes, s.hl, selId) : []);
+    }
+    lastSel.current = selId;
+  }, [selId]);
 
-  const select = (id: string | null) => set(() => ({ sel: id }));
-  const insertSibling = (n: Node) => set(() => ({ ins: { kind: 'node', nodeKind: n.kind, parentId: n.parentId, afterId: n.id } }));
+  const select = (id: string | null) => set(() => ({ sel: id, multi: [], anchor: null }));
+  const targets = () => (live.length > 1 ? live : selId ? [selId] : []);
+
+  const extendTo = (id: string) => {
+    const a = s.anchor ?? selId;
+    const ai = rows.findIndex((r) => r.n.id === a);
+    const bi = rows.findIndex((r) => r.n.id === id);
+    if (ai < 0 || bi < 0) return;
+    const [lo, hi] = ai < bi ? [ai, bi] : [bi, ai];
+    set(() => ({ multi: rows.slice(lo, hi + 1).map((r) => r.n.id), anchor: a, sel: id }));
+  };
+  const onRowClick = (e: React.MouseEvent, id: string) => {
+    if (e.shiftKey) return extendTo(id);
+    if (e.metaKey || e.ctrlKey) {
+      const base = live.length > 1 ? live : selId ? [selId] : [];
+      const next = base.includes(id) ? base.filter((v) => v !== id) : [...base, id];
+      return set(() => ({ multi: next, anchor: id, sel: id }));
+    }
+    select(id);
+  };
+
+  const insertSibling = (n: Node) => set(() => ({ ins: { kind: 'node', parentId: n.parentId, afterId: n.id } }));
+  const insertAbove = (n: Node) => set(() => ({ ins: { kind: 'node', parentId: n.parentId, afterId: null, beforeId: n.id } }));
   const insertChild = (n: Node) => {
-    if (n.kind === 'action') return insertSibling(n);
-    set(() => ({ ins: { kind: 'node', nodeKind: n.kind === 'project' ? 'task' : 'action', parentId: n.id, afterId: n.id } }));
+    set(() => ({ ins: { kind: 'node', parentId: n.id, afterId: [...s.nodes].reverse().find((c) => c.parentId === n.id)?.id ?? n.id } }));
     toggleOpen(n.id, true);
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (isEditable(e.target) || e.altKey) return;
+    if (isEditable(e.target)) return;
+    if (e.altKey && !e.metaKey && !e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      // ⌥↑↓ = skip sub-items: only top-level rows (⇧⌥ extends the selection)
+      e.preventDefault(); e.stopPropagation();
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      const ci = rows.findIndex((r) => r.n.id === selId);
+      let j = (ci < 0 ? (dir > 0 ? -1 : rows.length) : ci) + dir;
+      while (j >= 0 && j < rows.length && rows[j].depth !== 0) j += dir;
+      const nx = rows[j];
+      if (nx) (e.shiftKey ? extendTo(nx.n.id) : select(nx.n.id));
+      return;
+    }
+    if (e.altKey) return;
     const k = e.key;
     const M = mod(e);
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const i = rows.findIndex((r) => r.n.id === selId);
     const cur = i >= 0 ? rows[i].n : null;
+    const bulk = live.length > 1;
+    const ids = targets();
 
-    if (M && k === 'Enter') {
+    if (k === 'Enter') {
+      // Enter adds below, ⇧Enter adds above, ⌘⇧Enter starts focus mode
       stop();
-      if (e.shiftKey) {
-        if (cur?.kind === 'action') startFocus(cur.id);
-        else if (cur) (startFirst(cur.id), s.current && startFocus(s.current.id));
-        return;
-      }
-      if (cur) insertSibling(cur);
-      else set(() => ({ ins: { kind: 'node', nodeKind: 'project', parentId: null, afterId: null } }));
-      return;
+      if (M && e.shiftKey) return cur && focusItem(cur.id);
+      if (!cur) return set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } }));
+      return e.shiftKey ? insertAbove(cur) : insertSibling(cur);
     }
-    if (M && (k === 'ArrowUp' || k === 'ArrowDown')) {
+    if (M && k === ']') return (stop(), indentItems(ids));
+    if (M && k === '[') return (stop(), outdentItems(ids));
+    if (M && (k === 'ArrowUp' || k === 'ArrowDown')) return (stop(), reorderItems(ids, k === 'ArrowUp' ? -1 : 1));
+    if (M && k.toLowerCase() === 'a') {
       stop();
-      if (cur) reorder(cur.id, k === 'ArrowUp' ? -1 : 1);
-      return;
+      return set(() => ({ multi: rows.map((r) => r.n.id), anchor: rows[0]?.n.id ?? null }));
     }
-    if (e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight') && cur && cur.kind !== 'project') {
+    if (e.shiftKey && (k === 'ArrowUp' || k === 'ArrowDown')) {
       stop();
-      return cycleEst([cur.id], k === 'ArrowRight' ? 1 : -1);
+      const nx = rows[Math.max(0, Math.min(rows.length - 1, (i < 0 ? 0 : i) + (k === 'ArrowDown' ? 1 : -1)))];
+      return nx && extendTo(nx.n.id);
     }
-    if (M || e.shiftKey) {
-      if (!(e.shiftKey && k === 'N')) return;
+    if (e.shiftKey && k === ' ' && cur) {
+      stop();
+      return cur.smart ? toast(`(mock) opening ${plain(cur.title.split('\n')[0])} in browser`) : toggleStartItem(cur.id);
     }
+    if (e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight') && ids.length) {
+      stop();
+      return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
+    }
+    if (M || (e.shiftKey && k !== 'N')) return;
 
     if (k === 'ArrowDown' || k === 'ArrowUp') {
       stop();
@@ -114,43 +179,47 @@ export function Organizer() {
       else if (cur.parentId && s.nodes.some((n) => n.id === cur.parentId)) select(cur.parentId);
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
-    else if (k === 'N') {
+    else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
+    else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
+    else if (k === '/') {
       stop();
-      set(() => ({ ins: { kind: 'node', nodeKind: 'project', parentId: null, afterId: null } }));
-    } else if (k === '/' ) (stop(), openMenu(cur ? { t: 'node', id: cur.id } : null, undefined, undefined, { slash: true }));
-    else if (!cur) return;
-    else if (k === 'Enter') {
-      stop();
-      cur.kind === 'action' ? (cur.smart ? toast(`(mock) opening ${cur.title.split('\n')[0]} in browser`) : toggleStart(cur.id)) : startFirst(cur.id);
-    } else if (k === 'r' || k === 'F2') (stop(), set(() => ({ edit: cur.id })));
-    else if (k === ' ') (stop(), toggleDoneNodes(leafIds(s.nodes, cur.id)));
-    else if (k === 't') (stop(), cur.kind !== 'project' && toggleToday(cur.id));
-    else if (k === 'f') (stop(), cur.kind === 'action' && startFocus(cur.id));
+      openMenu(bulk ? { t: 'multi', ids: live } : cur ? { t: 'node', id: cur.id } : null, undefined, undefined, { slash: true });
+    } else if (!cur) return;
+    else if (k === 'r' || k === 'F2') (stop(), set(() => ({ edit: cur.id })));
+    else if (k === ' ') (stop(), toggleDoneNodes(ids));
+    else if (k === 't') (stop(), ids.forEach((id) => toggleToday(id)));
+    else if (k === 'f') (stop(), focusItem(cur.id));
     else if (k === 'a') (stop(), insertChild(cur));
     else if (k === 'n') (stop(), insertSibling(cur));
-    else if (k === 'b') (stop(), cur.kind !== 'project' && breakDown(cur.id));
-    else if (k === 'e') (stop(), cur.kind === 'action' ? openEstMenu([cur.id]) : estimate(cur.id));
+    else if (k === 'b') (stop(), breakDown(cur.id));
+    else if (k === 'e') (stop(), openEstMenu(ids));
     else if (k === 'Delete' || k === 'Backspace') {
       stop();
-      const next = rows[i + 1]?.n.id ?? rows[i - 1]?.n.id ?? null;
-      removeNodes([cur.id]);
+      const gone = new Set(bulk ? live : [cur.id]);
+      const next = rows.find((r, j) => j > i && !gone.has(r.n.id))?.n.id ?? [...rows].reverse().find((r) => !gone.has(r.n.id))?.n.id ?? null;
+      removeNodes([...gone]);
       select(next);
     }
   };
 
-  /* ---- drag & drop: before / inside / after a row ---- */
+  /* ---- drag & drop: before / inside / after a row; any item can go under any other ---- */
   const zoneOf = (e: React.DragEvent): Hint['zone'] => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const f = (e.clientY - r.top) / r.height;
     return f < 0.28 ? 'before' : f > 0.72 ? 'after' : 'inside';
   };
+  const isExt = (e: React.DragEvent) => !dnd.current && e.dataTransfer.types.includes(INBOX_MIME);
+  const extIds = (e: React.DragEvent): string[] => {
+    try {
+      return JSON.parse(e.dataTransfer.getData(INBOX_MIME));
+    } catch {
+      return [];
+    }
+  };
   const resolveDrop = (srcId: string, target: Node, zone: Hint['zone']) => {
-    const src = s.nodes.find((n) => n.id === srcId);
-    if (!src || src.id === target.id) return null;
-    if (zone === 'inside') return canParent(src.kind, target) ? { parentId: target.id, beforeId: null as string | null } : null;
-    const parent = s.nodes.find((n) => n.id === target.parentId) ?? null;
-    if (!canParent(src.kind, parent)) return null;
-    if (zone === 'before') return { parentId: target.parentId, beforeId: target.id };
+    if (srcId && subtree(s.nodes, srcId).has(target.id)) return null; // never into itself
+    if (zone === 'inside') return { parentId: target.id as string | null, beforeId: null as string | null };
+    if (zone === 'before') return { parentId: target.parentId, beforeId: target.id as string | null };
     const sibs = childrenOf(s.nodes, target.parentId).filter((n) => n.id !== srcId);
     const nxt = sibs[sibs.findIndex((n) => n.id === target.id) + 1];
     return { parentId: target.parentId, beforeId: nxt?.id ?? null };
@@ -160,29 +229,30 @@ export function Organizer() {
   const ins = s.ins?.kind === 'node' ? s.ins : null;
   const list: ({ row: RowItem } | { draft: true; depth: number })[] = rows.map((row) => ({ row }));
   if (ins) {
+    const depth = ins.parentId ? depthOf(s.nodes, ins.parentId) + 1 : 0;
+    const bi = ins.beforeId ? rows.findIndex((r) => r.n.id === ins.beforeId) : -1;
     const ai = ins.afterId ? rows.findIndex((r) => r.n.id === ins.afterId) : -1;
     let at = rows.length;
-    let depth = 0;
-    if (ai >= 0) {
+    if (bi >= 0) at = bi;
+    else if (ai >= 0) {
       const base = rows[ai].depth;
       at = ai + 1;
       while (at < rows.length && rows[at].depth > base) at++;
-      depth = ins.parentId === ins.afterId ? base + 1 : base;
     }
     list.splice(at, 0, { draft: true, depth });
   }
 
+  /** a new-item row: same gutter as a real row, so the editor starts where the text would */
   const draftRow = (depth: number) => (
-    <div key="draft" className="orow draft" style={{ paddingLeft: 8 + depth * 18 }}>
-      <span className="chev empty" />
-      <span className="kind">{icon[ins!.nodeKind]}</span>
+    <div key="draft" className="orow draft" style={{ ['--d' as string]: depth } as React.CSSProperties}>
+      <span className="check ghost" />
       <InlineEdit
-        multiline={ins!.nodeKind === 'action'}
-        placeholder={`New ${ins!.nodeKind}…  (⌘⏎ to keep adding)`}
+        key={`${ins!.afterId}|${ins!.beforeId}`}
+        chain
         onCommit={(t, chain) => {
-          const id = addNode(ins!.nodeKind, ins!.parentId, t, ins!.afterId);
-          const sibling = { kind: 'node' as const, nodeKind: ins!.nodeKind as Kind, parentId: ins!.parentId, afterId: id };
-          set(() => ({ ins: chain ? sibling : null }));
+          const id = addNode(ins!.parentId, t, ins!.afterId, {}, 'Add item', ins!.beforeId);
+          // keep adding: the next one goes right below the one just created
+          set(() => ({ ins: chain ? { kind: 'node' as const, parentId: ins!.parentId, afterId: id } : null }));
           if (!chain) focusArea();
         }}
         onCancel={() => (set(() => ({ ins: null })), focusArea())}
@@ -193,24 +263,15 @@ export function Organizer() {
   const running = s.current?.id;
 
   return (
-    <div className="organizer view">
-      <div className="thead">
-        <div>
-          <div className="h1">Organizer</div>
-          <div className="sub">{s.nodes.filter((n) => n.kind === 'action' && n.status !== 'done' && n.status !== 'dropped').length} open actions</div>
-        </div>
-        <button className="btn" title="New project (⇧N)" onClick={() => set(() => ({ ins: { kind: 'node', nodeKind: 'project', parentId: null, afterId: null } }))}>
-          ＋ Project
-        </button>
-      </div>
-
+    <div className={cx('organizer view', embedded && 'embedded', wide && 'is-table')} ref={root}>
       {wide && (
         <div className="ohead">
-          <span className="c-title">Title</span>
+          <span className="c-title">Item</span>
           <span className="c-m">Est</span>
+          <span className="c-m">Due</span>
           <span className="c-m">Modified</span>
           <span className="c-m">Last run</span>
-          <span className="c-m">Scheduled</span>
+          <span className="c-m">Next</span>
         </div>
       )}
 
@@ -220,41 +281,65 @@ export function Organizer() {
         tabIndex={0}
         ref={area}
         onKeyDown={onKey}
+        onMouseDown={(e) => (e.shiftKey || e.metaKey || e.ctrlKey) && !isEditable(e.target) && e.preventDefault()}
+        onCopy={(e) => {
+          if (isEditable(e.target) || !targets().length) return;
+          const tree = treeOf(s.nodes, targets(), (id) => isDone(s.nodes, id));
+          e.preventDefault();
+          e.clipboardData.setData('text/plain', toMarkdown(tree));
+          toast(`Copied ${countItems(tree)} item${countItems(tree) > 1 ? 's' : ''} as markdown`, 'info');
+        }}
+        onPaste={(e) => {
+          if (isEditable(e.target)) return;
+          const tree = parseMarkdown(e.clipboardData.getData('text/plain'));
+          if (!tree.length) return;
+          e.preventDefault();
+          const c = selId ? s.nodes.find((n) => n.id === selId) : null;
+          pasteItems(tree, { parentId: c ? c.parentId : null, afterId: c ? c.id : null });
+        }}
         aria-label="Organizer — arrows to navigate, ? for shortcuts"
         onDragOver={(e) => {
-          if (dnd.current && !e.defaultPrevented) e.preventDefault();
+          if ((dnd.current || isExt(e)) && !e.defaultPrevented) e.preventDefault();
         }}
         onDrop={(e) => {
+          if (isExt(e) && !e.defaultPrevented) {
+            e.preventDefault();
+            setHint(null);
+            return fileInboxTo(extIds(e), null, null); // empty space: top level
+          }
           if (!dnd.current || e.defaultPrevented) return;
           e.preventDefault();
-          const src = s.nodes.find((n) => n.id === dnd.current);
+          const src = dnd.current;
           dnd.current = null;
           setHint(null);
-          if (src?.kind === 'project') moveNode(src.id, null, null);
+          moveNode(src, null, null); // dropped on empty space: becomes a top-level item
         }}
       >
         {list.map((it) => {
           if ('draft' in it) return draftRow(it.depth);
-          const { n, depth } = it.row;
-          const kids = childrenOf(s.nodes, n.id).length > 0;
+          const { n, depth, kids } = it.row;
           const selected = selId === n.id;
+          const picked = multi.has(n.id);
           const editing = s.edit === n.id;
           const isRun = running === n.id;
+          const hlIds = s.hl[n.id] ? [n.id] : kids && !n.open ? hlSubtree(s.nodes, s.hl, n.id) : [];
+          const done = isDone(s.nodes, n.id);
           const h = hint?.id === n.id ? hint.zone : null;
           return (
             <div
               key={n.id}
               data-fr={n.id}
               data-sel={selected || undefined}
-              className={cx('orow', `k-${n.kind}`, selected && 'is-sel', n.status === 'done' && 'done', n.status === 'dropped' && 'dropped', isRun && 'live', dragId === n.id && 'dragging', h && `drop-${h}`)}
-              style={{ paddingLeft: 8 + depth * 18 }}
+              style={{ ['--d' as string]: depth } as React.CSSProperties}
+              className={cx('orow', depth === 0 && 'top', kids && 'has-kids', selected && 'is-sel', picked && !selected && 'is-multi', done && 'done', n.status === 'dropped' && 'dropped', isRun && 'live', hlIds.length > 0 && 'hl', dragId === n.id && 'dragging', h && `drop-${h}`)}
+              onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
               draggable={!editing}
-              onClick={() => select(n.id)}
+              onClick={(e) => onRowClick(e, n.id)}
               onDoubleClick={() => set(() => ({ edit: n.id }))}
               onContextMenu={(e) => {
                 e.preventDefault();
-                select(n.id);
-                openMenu({ t: 'node', id: n.id }, e.clientX, e.clientY);
+                if (!picked) select(n.id);
+                openMenu(picked ? { t: 'multi', ids: live } : { t: 'node', id: n.id }, e.clientX, e.clientY);
               }}
               onDragStart={(e) => {
                 dnd.current = n.id;
@@ -268,14 +353,22 @@ export function Organizer() {
                 setHint(null);
               }}
               onDragOver={(e) => {
-                if (!dnd.current) return;
+                if (!dnd.current && !isExt(e)) return;
                 const z = zoneOf(e);
-                if (!resolveDrop(dnd.current, n, z)) return;
+                if (!resolveDrop(dnd.current ?? '', n, z)) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setHint({ id: n.id, zone: z });
               }}
               onDrop={(e) => {
+                if (isExt(e)) {
+                  const r = resolveDrop('', n, zoneOf(e));
+                  setHint(null);
+                  if (!r) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return fileInboxTo(extIds(e), r.parentId, r.beforeId);
+                }
                 if (!dnd.current) return;
                 const r = resolveDrop(dnd.current, n, zoneOf(e));
                 const src = dnd.current;
@@ -287,61 +380,56 @@ export function Organizer() {
                 moveNode(src, r.parentId, r.beforeId);
               }}
             >
-              <span className={cx('chev', !kids && 'empty')} onClick={(e) => (e.stopPropagation(), kids && toggleOpen(n.id, !n.open))}>
-                {kids ? (n.open ? '▾' : '▸') : ''}
-              </span>
-              <span className="kind">{icon[n.kind]}</span>
+              {kids ? (
+                <button className="rchev" tabIndex={-1} aria-label={n.open ? 'Collapse' : 'Expand'} onClick={(e) => (e.stopPropagation(), toggleOpen(n.id, !n.open))}>
+                  {n.open ? '▾' : '▸'}
+                </button>
+              ) : null}
+              <button className={cx('check', kids && 'sq', done && 'on')} tabIndex={-1} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={(e) => (e.stopPropagation(), toggleDoneNodes([n.id]))}>
+                {done ? '✓' : ''}
+              </button>
               {editing ? (
                 <InlineEdit
-                  multiline={n.kind === 'action'}
                   initial={n.title}
                   onCommit={(t) => (editText(n.id, t), set(() => ({ edit: null })), focusArea())}
                   onCancel={() => (set(() => ({ edit: null })), focusArea())}
                 />
               ) : (
-                <span className="c-title ttl">
-                  {inline(n.title.split('\n')[0])}
-                  {n.title.includes('\n') && <span className="mini">⋯</span>}
-                  <Chips node={n} />
-                  <DueChip node={n} />
-                </span>
-              )}
-              {isRun && <span className="pulse-dot" title="Running" />}
-              {n.today && <span className="todaydot" title="In Next">★</span>}
-              {wide ? (
                 <>
-                  <span className="c-m">{fmtEst(n.est)}</span>
-                  <span className="c-m">{relTime(n.modified)}</span>
-                  <span className="c-m">{n.lastRun ? relTime(n.lastRun) : '—'}</span>
-                  <span className="c-m">{n.scheduled != null ? fmt(n.scheduled) : n.today ? 'today' : n.later != null ? laterLabel(n.later) : n.due ? `due ${n.due.slice(5)}` : '—'}</span>
+                  <span className="c-title ttl">
+                    {inline(n.title.split('\n')[0])}
+                    {n.title.includes('\n') && <span className="mini">⋯</span>}
+                    <Chips node={n} />
+                    {!wide && <DueChip node={n} />}
+                  </span>
+                  {isRun && <span className="pulse-dot" title="Running" />}
+                  {wide ? (
+                    <>
+                      <span className="c-m">{fmtEst(n.est)}</span>
+                      <span className="c-m">{n.due ? n.due.slice(5) : ''}</span>
+                      <span className="c-m">{relTime(n.modified)}</span>
+                      <span className="c-m">{n.lastRun ? relTime(n.lastRun) : '—'}</span>
+                      <span className="c-m">{n.today ? '★ today' : n.later != null ? laterLabel(n.later) : ''}</span>
+                    </>
+                  ) : (
+                    <>
+                      {n.today && <span className="todaydot" title="In Next">★</span>}
+                      {n.est && <span className="est">{fmtEst(n.est)}</span>}
+                    </>
+                  )}
                 </>
-              ) : (
-                n.est && <span className="est">{fmtEst(n.est)}</span>
               )}
             </div>
           );
         })}
       </div>
 
-      <div className="obar">
-        <div className="obtns">
-          <button className="btn sm" disabled={!selNode || selNode.kind === 'project'} onClick={() => selNode && toggleToday(selNode.id)}>
-            ★ Next
-          </button>
-          <button className="btn sm" disabled={!selNode || selNode.kind === 'project'} onClick={() => selNode && (selNode.kind === 'action' ? startFocus(selNode.id) : startFirst(selNode.id))}>
-            ▶ Start
-          </button>
-          <button className="btn sm ai" disabled={!selNode || selNode.kind === 'project' || !!s.aiBusy} onClick={() => selNode && breakDown(selNode.id)}>
-            ✨ Break down
-          </button>
-          <button className="btn sm ai" disabled={!selNode || !!s.aiBusy} onClick={() => selNode && estimate(selNode.id)}>
-            ✨ Estimate
-          </button>
-        </div>
-        <div className="keys">
-          <kbd>↑↓</kbd> move · <kbd>←→</kbd> fold · <kbd>⏎</kbd> start · <kbd>R</kbd> rename · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>A</kbd> child · <kbd>⌘↑↓</kbd> reorder · <kbd>T</kbd> in Next · <kbd>/</kbd> commands
-        </div>
-      </div>
+      {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
+      {!embedded && <div className="keys">
+        <kbd>↑↓</kbd> move · <kbd>←→</kbd> fold · <kbd>⏎</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>A</kbd> sub-item · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>T</kbd> in Next · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy / paste · <kbd>/</kbd> commands
+      </div>}
     </div>
   );
 }
+
+export { estimate, startFirst };

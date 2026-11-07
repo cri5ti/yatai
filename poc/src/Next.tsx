@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { set, useS } from './store';
 import type { State } from './store';
-import { effSel, fmt, fmtEst, fmtSpent, nextModel } from './model';
+import { ROOT, effSel, isLoose, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks } from './model';
 import type { CardM, Row } from './model';
 import {
-  addAction, addTaskCard, cycleEst, dropCard, dropRowInSeg, dropRowSplit, editText, moveCard, moveRow, pick,
-  planToday, removeNodes, setExpanded, startCard, startFocus, toast, toggleCardOpen, toggleCheckbox, toggleDoneNodes,
-  toggleStart,
+  addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropRowInSeg, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
+  moveRows, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
+  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { InlineEdit } from './Inline';
+import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
 import { Chips, DueChip } from './Chips';
 import { useFlip } from './flip';
@@ -20,7 +21,7 @@ type Hint = { t: 'row'; id: string; pos: 'before' | 'after' } | { t: 'card'; key
 
 const srcIcon: Record<string, string> = { pr: '⑂', pipeline: '⚙', workitem: '▣', ai: '✦' };
 
-/* ---------- stopwatch for the running action ---------- */
+/* ---------- stopwatch for the running item ---------- */
 const hms = (ms: number) => {
   const t = Math.floor(ms / 1000);
   const h = Math.floor(t / 3600);
@@ -35,7 +36,7 @@ function Stopwatch({ spent, since }: { spent: number; since: number }) {
     return () => clearInterval(t);
   }, []);
   return (
-    <span className="sw" title="Time on this action">
+    <span className="sw" title="Time on this item">
       <i className="pulse-dot" />
       {hms(spent + Date.now() - since)}
     </span>
@@ -54,7 +55,7 @@ function cardHint(e: React.DragEvent, card: CardM, d: Drag): Hint | null {
 function rowHint(e: React.DragEvent, card: CardM, row: Row, d: Drag): Hint | null {
   if (d.t !== 'row' || !card.seg) return null;
   if (card.seg.owner === d.owner) {
-    if (d.id === row.id) return null;
+    if (d.id === row.id || row.depth > 0) return null;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     return { t: 'row', id: row.id, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
   }
@@ -64,44 +65,49 @@ function rowHint(e: React.DragEvent, card: CardM, row: Row, d: Drag): Hint | nul
 interface Shared {
   s: State;
   sel: { card: string | null; row: string | null };
+  multi: Set<string>;
   hint: Hint | null;
   setHint: (h: Hint | null) => void;
   dnd: React.MutableRefObject<Drag | null>;
   dragId: string | null;
   setDragId: (id: string | null) => void;
+  onSelect: (e: React.MouseEvent, card: CardM, row: string | null) => void;
 }
 
-/* ---------- one action row ---------- */
+/* ---------- one row ---------- */
 function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
   const { s, sel, hint, dnd } = x;
   const n = row.node;
   const selected = sel.row === row.id;
+  const picked = !!n && x.multi.has(n.id);
   const running = !!n && s.current?.id === n.id;
   const editing = s.edit === row.id;
+  const style = { ['--d' as string]: row.depth } as React.CSSProperties;
 
   const onContext = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    pick(card.key, row.id);
-    openMenu({ t: 'row', id: row.id }, e.clientX, e.clientY);
+    if (!(n && x.multi.has(n.id) && x.multi.size > 1)) pick(card.key, row.id);
+    openMenu(n && x.multi.has(n.id) && x.multi.size > 1 ? { t: 'multi', ids: [...x.multi] } : { t: 'row', id: row.id }, e.clientX, e.clientY);
   };
-  const dnh = n
-    ? {
-        draggable: !editing,
-        onDragStart: (e: React.DragEvent) => {
-          e.stopPropagation();
-          dnd.current = { t: 'row', id: row.id, owner: card.ownerId, seg: card.key };
-          e.dataTransfer.setData('text/plain', row.id);
-          e.dataTransfer.effectAllowed = 'move';
-          x.setDragId(row.id);
-        },
-        onDragEnd: () => {
-          dnd.current = null;
-          x.setHint(null);
-          x.setDragId(null);
-        },
-      }
-    : {};
+  const dnh =
+    n && row.depth === 0
+      ? {
+          draggable: !editing,
+          onDragStart: (e: React.DragEvent) => {
+            e.stopPropagation();
+            dnd.current = { t: 'row', id: row.id, owner: card.ownerId, seg: card.key };
+            e.dataTransfer.setData('text/plain', row.id);
+            e.dataTransfer.effectAllowed = 'move';
+            x.setDragId(row.id);
+          },
+          onDragEnd: () => {
+            dnd.current = null;
+            x.setHint(null);
+            x.setDragId(null);
+          },
+        }
+      : {};
   const over = {
     onDragOver: (e: React.DragEvent) => {
       const d = dnd.current;
@@ -133,21 +139,16 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
     return (
       <div
         className={cx('arow fixed', selected && 'is-sel', hcls)}
+        style={style}
         data-fr={row.id}
         data-sel={selected || undefined}
-        onClick={() => pick(card.key, row.id)}
+        onClick={(e) => x.onSelect(e, card, row.id)}
         onContextMenu={onContext}
         {...over}
       >
         <span className="cal" title="Calendar item — fixed">
           📅
         </span>
-        <div className="abody">
-          <div className="first">
-            {fmt(m.eff)}–{fmt(m.eff + m.durationMin)} · {m.where}
-            {m.movedFrom != null && <span className="chip warn">moved from {fmt(m.movedFrom)}</span>}
-          </div>
-        </div>
         <div className="meta">
           <span className={`chip ${m.state === 'now' ? 'good' : m.minsAway <= 10 ? 'bad' : 'info'}`}>
             {m.state === 'now' ? 'in progress' : m.state === 'done' ? 'ended' : `in ${Math.ceil(m.minsAway)} min`}
@@ -155,6 +156,12 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
           <button className="btn sm" tabIndex={-1} onClick={(e) => (e.stopPropagation(), toast(`(mock) joining ${m.title}`))}>
             Join
           </button>
+        </div>
+        <div className="abody">
+          <div className="first">
+            {fmt(m.eff)}–{fmt(m.eff + m.durationMin)} · {m.where}
+            {m.movedFrom != null && <span className="chip warn">moved from {fmt(m.movedFrom)}</span>}
+          </div>
         </div>
       </div>
     );
@@ -164,40 +171,81 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
   const info = bodyInfo(node.title);
   const open = !!s.expanded[node.id];
   const hasBody = info.rest.some((l) => l.trim());
+  const container = hasKids(s.nodes, node.id); // "task": has children → square check, derived done
+  const hlIds = hlForRow(s.nodes, s.hl, row);
+  const isPr = prLinks(info.first).length > 0;
+  const done = isDone(s.nodes, node.id);
 
   return (
     <div
-      className={cx('arow', node.status === 'done' && 'done', node.status === 'dropped' && 'dropped', running && 'live', selected && 'is-sel', hcls, x.dragId === row.id && 'dragging')}
+      className={cx('arow', done && 'done', node.status === 'dropped' && 'dropped', running && 'live', selected && 'is-sel', picked && !selected && 'is-multi', editing && 'editing', hlIds.length > 0 && 'hl', hcls, x.dragId === row.id && 'dragging')}
+      onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
+      style={style}
       data-fr={row.id}
       data-sel={selected || undefined}
-      onClick={() => pick(card.key, row.id)}
+      onClick={(e) => x.onSelect(e, card, row.id)}
       onDoubleClick={() => set(() => ({ edit: row.id }))}
       onContextMenu={onContext}
       {...dnh}
       {...over}
     >
+      {row.kids && (
+        <button className="rchev" tabIndex={-1} aria-label={node.open === false ? 'Expand' : 'Collapse'} onClick={(e) => (e.stopPropagation(), toggleOpen(node.id, node.open === false))}>
+          {node.open === false ? '▸' : '▾'}
+        </button>
+      )}
       <button
-        className={cx('check', node.status === 'done' && 'on')}
+        className={cx('check', container && 'sq', done && 'on')}
         tabIndex={-1}
-        aria-label={node.status === 'done' ? 'Mark not done' : 'Mark done'}
+        aria-label={done ? 'Mark not done' : 'Mark done'}
         onClick={(e) => (e.stopPropagation(), toggleDoneNodes([node.id]))}
       >
-        {node.status === 'done' ? '✓' : ''}
+        {done ? '✓' : ''}
       </button>
-      <div className="abody">
-        {editing ? (
+      {editing ? (
+        /* the editor sits exactly where the text is, and runs to the right edge — nothing reserved for the details */
+        <div className="abody">
           <InlineEdit
             initial={node.title}
             onCommit={(t) => (editText(node.id, t), set(() => ({ edit: null })), focusArea())}
             onCancel={() => (set(() => ({ edit: null })), focusArea())}
           />
-        ) : (
-          <>
+        </div>
+      ) : (
+        <>
+          {/* floats right: the first line wraps around it, later lines use the full width */}
+          <div className="meta">
+            {running ? (
+              <Stopwatch spent={node.spent ?? 0} since={s.current!.since} />
+            ) : node.spent ? (
+              <span className="spent" title="Time spent so far">
+                {fmtSpent(node.spent)}
+              </span>
+            ) : null}
+            <DueChip node={node} />
+            <button
+              className={cx('est-chip', !node.est && 'empty')}
+              tabIndex={-1}
+              title="Estimate (E) — shift+←/→ to scroll"
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                openEstMenu([node.id], r.left, r.bottom + 4);
+              }}
+            >
+              {node.est ? fmtEst(node.est) : '＋est'}
+            </button>
+            {!done && node.status !== 'dropped' && !node.smart && (
+              <button className="play" tabIndex={-1} title={running ? 'Pause (⇧Space)' : 'Start (⇧Space)'} onClick={(e) => (e.stopPropagation(), toggleStartItem(node.id))}>
+                {running ? '❚❚' : '▶'}
+              </button>
+            )}
+          </div>
+          <div className="abody">
             <div className="first">
-              {node.smart && <span className="src">{srcIcon[node.smart.source]}</span>}
+              {node.smart && !isPr && <span className="src">{srcIcon[node.smart.source]}</span>}
               {inline(info.first)}
               <Chips node={node} />
-              <DueChip node={node} />
               {node.status === 'dropped' && <span className="chip info">abandoned</span>}
               {!open && info.checks.total > 0 && (
                 <span className="mini" title="Checklist">
@@ -213,82 +261,80 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
                 </div>
               </div>
             )}
-          </>
-        )}
-      </div>
-      <div className="meta">
-        {running ? (
-          <Stopwatch spent={node.spent ?? 0} since={s.current!.since} />
-        ) : node.spent ? (
-          <span className="spent" title="Time spent so far">
-            {fmtSpent(node.spent)}
-          </span>
-        ) : null}
-        <button
-          className={cx('est-chip', !node.est && 'empty')}
-          tabIndex={-1}
-          title="Estimate (E) — shift+←/→ to scroll"
-          onClick={(e) => {
-            e.stopPropagation();
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            openEstMenu([node.id], r.left, r.bottom + 4);
-          }}
-        >
-          {node.est ? fmtEst(node.est) : '＋est'}
-        </button>
-        {node.status !== 'done' && node.status !== 'dropped' && !node.smart && (
-          <button className="play" tabIndex={-1} title={running ? 'Pause (Enter)' : 'Start (Enter)'} onClick={(e) => (e.stopPropagation(), toggleStart(node.id))}>
-            {running ? '❚❚' : '▶'}
-          </button>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-/* ---------- one card (a task segment, a meeting, or an alert) ---------- */
-function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }) {
+/* ---------- one card (an item with its Next rows, a meeting, or an alert) ---------- */
+function CardView({ x, card }: { x: Shared; card: CardM }) {
   const { s, sel, hint, dnd } = x;
   const ref = useRef<HTMLElement>(null);
   useFlip(ref, 'data-fr');
   const cardSel = sel.card === card.key && !sel.row;
   const hasSel = sel.card === card.key;
+  const picked = !!card.task && x.multi.has(card.task.id);
+  // a change the user did not make: highlight the card when it is a meeting, or when the item is hidden inside it
+  const hlIds = hlForCard(s.nodes, s.hl, card);
   const live = card.rows.some((r) => r.node && s.current?.id === r.node.id);
   const titleEdit = s.edit === 'card:' + card.key;
   const movable = !!card.seg && !card.pinned;
   const ins = s.ins?.kind === 'action' ? s.ins : null;
-  const draftHere = ins && ((ins.after && card.rows.some((r) => r.id === ins.after)) || (ins.after === null && ins.seg === card.key));
 
-  const draft = ins && (
-    <div className="arow draft">
-      <span className="check" />
-      <div className="abody">
-        <InlineEdit
-          placeholder={card.kind === 'meeting' ? 'New prep action…' : 'New action…  (⌘⏎ to keep adding)'}
-          onCommit={(t, chain) => {
-            const id = addAction(ins.owner, ins.seg, ins.after, t);
-            set(() => ({ ins: chain ? { ...ins, after: id } : null }));
-            if (!chain) focusArea();
-          }}
-          onCancel={() => (set(() => ({ ins: null })), focusArea())}
-        />
+  /** where the new-item editor shows: above its anchor row, or after the anchor's whole subtree, or at the top */
+  const draftSlot = (): { before?: string; after?: string; top?: boolean; depth: number } | null => {
+    if (!ins) return null;
+    if (ins.before) {
+      const r = card.rows.find((q) => q.id === ins.before);
+      return r ? { before: r.id, depth: r.depth } : null;
+    }
+    if (ins.after) {
+      const i = card.rows.findIndex((q) => q.id === ins.after);
+      if (i < 0) return null;
+      let j = i;
+      while (card.rows[j + 1] && card.rows[j + 1].depth > card.rows[i].depth) j++;
+      return { after: card.rows[j].id, depth: card.rows[i].depth };
+    }
+    return ins.seg === card.key ? { top: true, depth: 0 } : null;
+  };
+  const slot = draftSlot();
+  const draft = (depth: number) =>
+    ins && (
+      <div className="arow draft" style={{ ['--d' as string]: depth } as React.CSSProperties}>
+        <span className="check ghost" />
+        <div className="abody">
+          <InlineEdit
+            key={`${ins.after}|${ins.before}`}
+            chain
+            onCommit={(t, chain) => {
+              const id = addAction(ins.owner, ins.seg, ins.after, t, ins.before);
+              // keep adding: the next one goes right below the one just created
+              set(() => ({ ins: chain ? { kind: 'action' as const, owner: ins.owner, seg: ins.seg, after: id } : null }));
+              if (!chain) focusArea();
+            }}
+            onCancel={() => (set(() => ({ ins: null })), focusArea())}
+          />
+        </div>
       </div>
-    </div>
-  );
+    );
 
   const hcls = hint?.t === 'card' && hint.key === card.key ? `drop-${hint.pos}` : '';
   const title = card.kind === 'meeting' ? null : card.path;
+  const rowDone = card.allDone;
 
   return (
     <section
       ref={ref}
-      className={cx('card', card.kind, card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', live && 'has-live', first && 'first', hcls, x.dragId === card.key && 'dragging')}
+      className={cx('card', card.kind, isLoose(card) && 'loose', card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', picked && !cardSel && 'is-multi', live && 'has-live', hlIds.length > 0 && 'hl', hcls, x.dragId === card.key && 'dragging')}
       data-fc={card.key}
       data-sel={cardSel || undefined}
+      onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
       onContextMenu={(e) => {
         e.preventDefault();
-        pick(card.key, null);
-        openMenu({ t: 'card', key: card.key }, e.clientX, e.clientY);
+        if (!(picked && x.multi.size > 1)) pick(card.key, null);
+        openMenu(picked && x.multi.size > 1 ? { t: 'multi', ids: [...x.multi] } : { t: 'card', key: card.key }, e.clientX, e.clientY);
       }}
       onDragOver={(e) => {
         const d = dnd.current;
@@ -310,11 +356,10 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
         else dropRowSplit(d.id, h.key, h.pos);
       }}
     >
-      {first && <div className="nextlabel">Next up</div>}
-      <header
+      {!isLoose(card) && <header
         className="chead"
         draggable={movable && !titleEdit}
-        onClick={() => pick(card.key, null)}
+        onClick={(e) => x.onSelect(e, card, null)}
         onDoubleClick={() => card.kind === 'task' && toggleCardOpen(card, card.collapsed)}
         onDragStart={(e) => {
           dnd.current = { t: 'card', key: card.key };
@@ -331,6 +376,16 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
         <button className="fold" tabIndex={-1} aria-label={card.collapsed ? 'Expand' : 'Collapse'} onClick={(e) => (e.stopPropagation(), toggleCardOpen(card, card.collapsed))} disabled={card.kind === 'attention'}>
           {card.collapsed ? '▸' : '▾'}
         </button>
+        {card.kind === 'task' && (
+          <button
+            className={cx('check sq hd', rowDone && 'on')}
+            tabIndex={-1}
+            aria-label={rowDone ? 'Mark not done' : 'Mark done'}
+            onClick={(e) => (e.stopPropagation(), toggleDoneNodes(card.task ? [card.task.id] : []))}
+          >
+            {rowDone ? '✓' : ''}
+          </button>
+        )}
         {card.kind === 'meeting' ? (
           <>
             <div className="mtime">
@@ -340,12 +395,7 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
             <div className="mtitle">{card.meeting!.title}</div>
           </>
         ) : (
-          <div className="path">
-            {title!.slice(0, -1).map((p, i) => (
-              <span key={i} className="muted">
-                {p} ›{' '}
-              </span>
-            ))}
+          <div className={cx('path', titleEdit && 'editing')}>
             {titleEdit && card.task ? (
               <InlineEdit
                 multiline={false}
@@ -354,13 +404,20 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
                 onCancel={() => (set(() => ({ edit: null })), focusArea())}
               />
             ) : (
-              <span className="accent">{title![title!.length - 1] ?? '—'}</span>
+              <>
+                {title!.slice(0, -1).map((p, i) => (
+                  <span key={i} className="muted">
+                    {p} ›{' '}
+                  </span>
+                ))}
+                <span className={cx('accent', rowDone && card.rows.length > 0 && 'struck')}>{title![title!.length - 1] ?? '—'}</span>
+              </>
             )}
           </div>
         )}
         <span className="grow" />
         {card.part && card.part.i > 1 && (
-          <span className="part" title={`This task is split across the schedule: part ${card.part.i} of ${card.part.n}. /consolidate brings all actions together.`}>
+          <span className="part" title={`This item is split across the schedule: part ${card.part.i} of ${card.part.n}. /consolidate brings everything together.`}>
             ⑂ {card.part.i}/{card.part.n}
           </span>
         )}
@@ -369,19 +426,19 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
           {card.total > 0 && `${card.done}/${card.total}`}
           {card.est > 0 && ` · ${fmtEst(card.est)}`}
         </span>
-      </header>
+      </header>}
 
       <div className="collapse" data-open={!card.collapsed}>
         <div className="collapse-in">
           <div className="rows">
-            {ins && ins.after === null && draftHere && draft}
+            {slot?.top && draft(0)}
             {card.rows.map((r) => (
               <div key={r.id} className="rowwrap">
+                {slot?.before === r.id && draft(slot.depth)}
                 <RowView x={x} card={card} row={r} />
-                {ins && ins.after === r.id && draft}
+                {slot?.after === r.id && draft(slot.depth)}
               </div>
             ))}
-            {card.rows.length === 0 && !draftHere && <div className="norows">No actions yet — press <kbd>→</kbd> to add one</div>}
           </div>
           {card.kind === 'attention' && (
             <div className="cardfoot">
@@ -405,9 +462,12 @@ function CardView({ x, card, first }: { x: Shared; card: CardM; first: boolean }
 }
 
 /* ---------- the view ---------- */
+const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}`;
+
 export function Next() {
   const s = useS();
-  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.flags, s.clock]);
+  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.flags, s.clock, s.prs]);
+  const nav = useMemo(() => navList(m.cards), [m]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;
   const area = useRef<HTMLDivElement>(null);
@@ -423,67 +483,159 @@ export function Next() {
     area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [sel.card, sel.row]);
 
+  // moving the keyboard cursor onto a yellow highlight counts as having seen it
+  const lastSel = useRef<string | null>(null);
+  useEffect(() => {
+    const k = keyOf(sel.card, sel.row);
+    if (lastSel.current !== null && lastSel.current !== k && card) {
+      const row = sel.row ? card.rows.find((r) => r.id === sel.row) : undefined;
+      dismissHl(row ? hlForRow(s.nodes, s.hl, row) : hlForCard(s.nodes, s.hl, card));
+    }
+    lastSel.current = k;
+  }, [sel.card, sel.row]);
+
+  const live = useMemo(() => s.multi.filter((id) => s.nodes.some((n) => n.id === id)), [s.multi, s.nodes]);
+  const multi = useMemo(() => new Set(live.length > 1 ? live : []), [live]);
+
   const movable = m.cards.filter((c) => c.seg && !c.pinned);
   const lastMovable = movable[movable.length - 1];
-  const x: Shared = { s, sel, hint, setHint, dnd, dragId, setDragId };
+
+  /* ---- selection: click, ⌘/ctrl-click, shift-click, shift+↑/↓ ---- */
+  const itemAt = (c: CardM | null, row: string | null) => (!c ? null : row ? c.rows.find((r) => r.id === row)?.node?.id ?? null : c.task?.id ?? null);
+  const extendTo = (cardKey: string, row: string | null) => {
+    const a = s.anchor ?? keyOf(sel.card, sel.row);
+    const ai = nav.findIndex((e) => keyOf(e.card, e.row) === a);
+    const bi = nav.findIndex((e) => e.card === cardKey && e.row === row);
+    if (ai < 0 || bi < 0) return;
+    const [lo, hi] = ai < bi ? [ai, bi] : [bi, ai];
+    const ids = [...new Set(nav.slice(lo, hi + 1).map((e) => e.item).filter((v): v is string => !!v))];
+    set(() => ({ multi: ids, anchor: a, nsel: { card: cardKey, row } }));
+  };
+  const onSelect = (e: React.MouseEvent, c: CardM, row: string | null) => {
+    if (e.shiftKey) return extendTo(c.key, row);
+    if (e.metaKey || e.ctrlKey) {
+      const it = itemAt(c, row);
+      if (!it) return;
+      const base = live.length > 1 ? live : ([itemAt(card, sel.row)].filter(Boolean) as string[]);
+      const next = base.includes(it) ? base.filter((v) => v !== it) : [...base, it];
+      return set(() => ({ multi: next, anchor: keyOf(c.key, row), nsel: { card: c.key, row } }));
+    }
+    pick(c.key, row);
+  };
+  const x: Shared = { s, sel, multi, hint, setHint, dnd, dragId, setDragId, onSelect };
+
+  /** what a command applies to: the multi-selection, or the one selected item */
+  const targets = (): string[] => {
+    if (live.length > 1) return live;
+    const it = itemAt(card, sel.row);
+    return it ? [it] : [];
+  };
 
   const newTaskParent = (afterSeg: string | null) => {
     const base = m.cards.find((c) => c.key === afterSeg)?.task ?? m.cards.find((c) => c.task)?.task;
-    return base?.parentId ?? s.nodes.find((n) => n.kind === 'project')?.id ?? null;
+    return base ? base.parentId : s.nodes.find((n) => !n.parentId)?.id ?? null;
   };
 
+  /** on a card header, "below" / "above" both mean: the first item inside it (after the calendar row of a meeting) */
+  const insideHeader = () =>
+    set(() => ({ ins: { kind: 'action', owner: card!.ownerId, seg: card!.seg?.id, after: card!.kind === 'meeting' ? card!.rows.find((r) => r.fx)?.id ?? null : null } }));
+  /** Enter: a new item below the selection */
   const insertHere = () => {
     if (!card) return set(() => ({ ins: { kind: 'task', afterSeg: null } }));
     if (sel.row) return set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: sel.row } }));
-    set(() => ({ ins: { kind: 'task', afterSeg: card.seg?.id ?? null } }));
+    insideHeader();
   };
-
+  /** ⇧Enter: a new item above it */
+  const insertAbove = () => {
+    if (!card) return set(() => ({ ins: { kind: 'task', afterSeg: null } }));
+    if (sel.row) return set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: null, before: sel.row! } }));
+    insideHeader();
+  };
   const onKey = (e: React.KeyboardEvent) => {
-    if (isEditable(e.target) || e.altKey) return;
+    if (isEditable(e.target)) return;
     const k = e.key;
+    if (e.altKey && !e.metaKey && !e.ctrlKey && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      // ⌥↑↓ = skip sub-items: only card headers and top-level rows (⇧⌥ extends the selection)
+      e.preventDefault(); e.stopPropagation();
+      const top = (q: { card: string; row: string | null }) => !q.row || m.cards.find((c) => c.key === q.card)?.rows.find((r) => r.id === q.row)?.depth === 0;
+      const dir = k === 'ArrowDown' ? 1 : -1;
+      let j = nav.findIndex((q) => q.card === sel.card && q.row === sel.row) + dir;
+      while (j >= 0 && j < nav.length && !top(nav[j])) j += dir;
+      const nx = nav[j];
+      if (nx) (e.shiftKey ? extendTo(nx.card, nx.row) : pick(nx.card, nx.row));
+      return;
+    }
+    if (e.altKey) return;
     const M = mod(e);
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const ci = card ? m.cards.indexOf(card) : -1;
     const ri = card && sel.row ? card.rows.findIndex((r) => r.id === sel.row) : -1;
-    const rowNode = ri >= 0 ? card!.rows[ri].node : undefined;
-    const rowFx = ri >= 0 ? card!.rows[ri].fx : undefined;
+    const row = ri >= 0 ? card!.rows[ri] : undefined;
+    const rowNode = row?.node;
+    const rowFx = row?.fx;
+    const bulk = live.length > 1;
+    const ids = targets();
+    const rowsOnly = !!sel.row;
 
-    if (M && k === 'Enter') {
+    if (k === 'Enter') {
+      // Enter adds below, ⇧Enter adds above, ⌘⇧Enter starts focus mode
       stop();
-      if (e.shiftKey) {
-        if (rowNode) startFocus(rowNode.id);
+      if (M && e.shiftKey) {
+        if (rowNode) focusItem(rowNode.id);
         else if (card) {
           const r = card.rows.find((q) => q.node && q.node.status !== 'done' && !q.node.smart);
-          r ? startFocus(r.id) : toast('No open actions to focus on');
+          r ? focusItem(r.id) : toast('No open items to focus on');
         }
         return;
       }
-      return insertHere();
+      return e.shiftKey ? insertAbove() : insertHere();
     }
+    if (M && k === ']') return (stop(), indentItems(ids, rowsOnly));
+    if (M && k === '[') return (stop(), outdentItems(ids));
     if (M && (k === 'ArrowUp' || k === 'ArrowDown')) {
       stop();
       const dir = k === 'ArrowUp' ? -1 : 1;
-      if (sel.row) moveRow(sel.row, dir);
+      if (bulk) moveRows(live, dir);
+      else if (sel.row) moveRow(sel.row, dir);
       else if (card?.pinned) toast(card.kind === 'meeting' ? 'Pinned by time — it rises as the meeting approaches' : 'Pinned: needs your attention', 'info');
       else if (card?.seg) moveCard(card.key, dir);
       return;
     }
-    if (e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight') && rowNode) {
+    if (M && k.toLowerCase() === 'a' && card) {
+      // ⌘A: everything in this card
       stop();
-      return cycleEst([rowNode.id], k === 'ArrowRight' ? 1 : -1);
+      const all = card.rows.map((r) => r.node?.id).filter((v): v is string => !!v);
+      return set(() => ({ multi: all, anchor: keyOf(card.key, card.rows[0]?.id ?? null) }));
     }
-    if (M || e.shiftKey) return;
+    if (e.shiftKey && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      stop();
+      const cur = nav.findIndex((q) => q.card === sel.card && q.row === sel.row);
+      const nx = nav[Math.max(0, Math.min(nav.length - 1, cur + (k === 'ArrowDown' ? 1 : -1)))];
+      if (nx) extendTo(nx.card, nx.row);
+      return;
+    }
+    if (e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight') && ids.length) {
+      stop();
+      return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
+    }
+    if (e.shiftKey && k === ' ') {
+      // ⇧Space = start / pause
+      stop();
+      if (rowFx) toast(`(mock) joining ${rowFx.title}`);
+      else if (rowNode) rowNode.smart ? toast(`(mock) opening ${rowNode.title.split('\n')[0]} in browser`) : toggleStartItem(rowNode.id);
+      else if (card) startCard(card);
+      return;
+    }
+    if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
 
     switch (k) {
       case 'ArrowDown':
       case 'ArrowUp': {
         stop();
-        const d = k === 'ArrowDown' ? 1 : -1;
-        if (sel.row && card) pick(card.key, card.rows[Math.max(0, Math.min(card.rows.length - 1, ri + d))].id);
-        else {
-          const c = m.cards[Math.max(0, Math.min(m.cards.length - 1, ci + d))];
-          if (c) pick(c.key, null);
-        }
+        // always the next thing you can see: header → its rows (children too) → next header …
+        const cur = nav.findIndex((q) => q.card === sel.card && q.row === sel.row);
+        const nx = nav[Math.max(0, Math.min(nav.length - 1, cur + (k === 'ArrowDown' ? 1 : -1)))];
+        if (nx) pick(nx.card, nx.row);
         return;
       }
       case 'ArrowRight': {
@@ -493,7 +645,11 @@ export function Next() {
           if (card.collapsed) toggleCardOpen(card, true);
           else if (card.rows.length) pick(card.key, card.rows[0].id);
           else set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: null } }));
-        } else if (rowNode && bodyInfo(rowNode.title).rest.some((l) => l.trim()) && !s.expanded[rowNode.id]) setExpanded(rowNode.id, true);
+        } else if (rowNode) {
+          if (bodyInfo(rowNode.title).rest.some((l) => l.trim()) && !s.expanded[rowNode.id]) setExpanded(rowNode.id, true);
+          else if (row!.kids && rowNode.open === false) toggleOpen(rowNode.id, true);
+          else if (row!.kids) pick(card.key, card.rows[ri + 1].id);
+        }
         return;
       }
       case 'ArrowLeft': {
@@ -501,7 +657,11 @@ export function Next() {
         if (!card) return;
         if (sel.row) {
           if (rowNode && s.expanded[rowNode.id]) setExpanded(rowNode.id, false);
-          else pick(card.key, null);
+          else if (row!.kids && rowNode!.open !== false) toggleOpen(rowNode!.id, false);
+          else if (row!.depth > 0) {
+            // back to the parent row
+            for (let j = ri - 1; j >= 0; j--) if (card.rows[j].depth < row!.depth) return pick(card.key, card.rows[j].id);
+          } else pick(card.key, null);
         } else if (!card.collapsed && card.kind !== 'attention') toggleCardOpen(card, false);
         return;
       }
@@ -514,53 +674,59 @@ export function Next() {
         return;
       }
       case 'Escape':
+        if (bulk) return (stop(), set(() => ({ multi: [], anchor: null })));
         if (sel.row && card) (stop(), pick(card.key, null));
         return;
-      case 'Enter': {
+      case 'r':
+      case 'F2': {
+        // edit
         stop();
-        if (!card) return;
-        if (rowFx) return toast(`(mock) joining ${rowFx.title}`);
-        if (rowNode) return rowNode.smart ? toast(`(mock) opening ${rowNode.title.split('\n')[0]} in browser`) : toggleStart(rowNode.id);
-        return startCard(card);
+        if (rowNode) set(() => ({ edit: rowNode.id }));
+        else if (rowFx) toast('Calendar items are fixed — add items around them instead');
+        else if (card?.task) set(() => ({ edit: 'card:' + card.key }));
+        return;
       }
       case ' ': {
         stop();
+        if (bulk) return toggleDoneNodes(live);
         if (rowNode) toggleDoneNodes([rowNode.id]);
-        else if (card && !sel.row) toggleDoneNodes(card.rows.filter((r) => r.node).map((r) => r.id));
-        return;
-      }
-      case 'r':
-      case 'F2': {
-        stop();
-        if (rowNode) set(() => ({ edit: rowNode.id }));
-        else if (rowFx) toast('Calendar items are fixed — add actions around them instead');
-        else if (card?.task && !sel.row) set(() => ({ edit: 'card:' + card.key }));
+        else if (card && !sel.row) {
+          // on a card: complete just the item itself — what is inside keeps its own state
+          if (card.task) toggleDoneNodes([card.task.id]);
+        }
         return;
       }
       case 'e':
-        if (rowNode) (stop(), openEstMenu([rowNode.id]));
+        if (ids.length) (stop(), openEstMenu(ids));
         return;
       case 'f':
-        if (rowNode) (stop(), startFocus(rowNode.id));
+        if (rowNode) (stop(), focusItem(rowNode.id));
         return;
       case 'Delete':
       case 'Backspace': {
         stop();
+        // Delete takes items out of Next (they stay in the Organizer); ⇧Delete removes them for good
+        const out = (ids: string[], label?: string) => (e.shiftKey ? removeNodes(ids, label) : (unplan(ids), toast(ids.length > 1 ? `${ids.length} items taken out of Next — still in the Organizer` : 'Taken out of Next — still in the Organizer (⇧⌫ deletes for good)', 'info')));
         if (!card) return;
+        if (bulk) {
+          out(live);
+          return pick(m.cards[0]?.key ?? null, null);
+        }
         if (rowNode) {
           const nxt = card.rows[ri + 1]?.id ?? card.rows[ri - 1]?.id ?? null;
-          removeNodes([rowNode.id]);
+          out([rowNode.id]);
           pick(card.key, nxt);
-        } else if (rowFx) toast('The calendar item itself is managed in Outlook');
+        } else if (rowFx) removeMeeting(rowFx.id);
         else if (card.task && !sel.row) {
           const nxt = (m.cards[ci + 1] ?? m.cards[ci - 1])?.key ?? null;
-          removeNodes([card.task.id], 'Delete task');
+          out([card.task.id], 'Delete');
           pick(nxt, null);
-        } else if (card.kind === 'meeting') toast('Calendar items are managed in Outlook');
+        } else if (card.kind === 'meeting') removeMeeting(card.meeting!.id);
         return;
       }
       case '/':
         stop();
+        if (bulk) return openMenu({ t: 'multi', ids: live }, undefined, undefined, { slash: true });
         return openMenu(sel.row ? { t: 'row', id: sel.row } : card ? { t: 'card', key: card.key } : null, undefined, undefined, { slash: true });
     }
   };
@@ -574,54 +740,55 @@ export function Next() {
           const i = m.cards.findIndex((c) => c.key === draftTask.afterSeg);
           return i >= 0 ? i : m.cards.length - 1;
         })();
+  /** nothing to anchor to: a new top-level item (no header, no card of its own) */
   const taskDraft = draftTask && (
-    <div className="card draft" key="draft-task">
-      <header className="chead">
-        <div className="path">
+    <div className="card loose draft" key="draft-task">
+      <div className="arow draft">
+        <span className="check ghost" />
+        <div className="abody">
           <InlineEdit
-            multiline={false}
-            placeholder="New task…  (Enter, then add its first action)"
-            onCommit={(t) => {
-              const r = addTaskCard(newTaskParent(draftTask.afterSeg), t, draftTask.afterSeg);
-              set(() => ({ ins: { kind: 'action', owner: r.id, seg: r.seg, after: null } }));
+            chain
+            onCommit={(t, chain) => {
+              const loose = m.cards.find(isLoose);
+              const last = loose?.rows.filter((r) => r.depth === 0).pop()?.id ?? null;
+              const id = addAction(ROOT, loose?.seg?.id, last, t);
+              set(() => ({ ins: chain ? { kind: 'action', owner: ROOT, seg: loose?.seg?.id ?? 's_' + ROOT, after: id } : null }));
+              if (!chain) focusArea();
             }}
             onCancel={() => (set(() => ({ ins: null })), focusArea())}
           />
         </div>
-      </header>
+      </div>
     </div>
   );
 
   return (
     <div className="next view">
-      <div className="thead">
-        <div>
-          <div className="h1">Next</div>
-          <div className="sub">
-            {fmt(s.clock)} · {m.done}/{m.total} done
-          </div>
-        </div>
-        <div className="hbtns">
-          <button className="btn" title="New task (⌘⏎)" onClick={() => (set(() => ({ ins: { kind: 'task', afterSeg: card?.seg?.id ?? null } })), area.current?.focus())}>
-            ＋ Task
-          </button>
-          <button className="btn ai" disabled={!!s.aiBusy} onClick={planToday} title="AI: plan today">
-            ✨ Plan
-          </button>
-        </div>
-      </div>
-      {m.total > 0 && (
-        <div className="progress">
-          <i style={{ width: `${(m.done / m.total) * 100}%` }} />
-        </div>
-      )}
-
       <div
         className="cards kbd-area"
         data-kbd-area
         tabIndex={0}
         ref={area}
         onKeyDown={onKey}
+        onMouseDown={(e) => (e.shiftKey || e.metaKey || e.ctrlKey) && !isEditable(e.target) && e.preventDefault()}
+        onCopy={(e) => {
+          const ids = targets();
+          if (isEditable(e.target) || !ids.length) return;
+          const tree = treeOf(s.nodes, ids, (id) => isDone(s.nodes, id));
+          e.preventDefault();
+          e.clipboardData.setData('text/plain', toMarkdown(tree));
+          toast(`Copied ${countItems(tree)} item${countItems(tree) > 1 ? 's' : ''} as markdown`, 'info');
+        }}
+        onPaste={(e) => {
+          if (isEditable(e.target)) return;
+          const tree = parseMarkdown(e.clipboardData.getData('text/plain'));
+          if (!tree.length) return;
+          e.preventDefault();
+          const next = { owner: card?.ownerId ?? ROOT, seg: card?.seg?.id };
+          const node = card && sel.row ? card.rows.find((r) => r.id === sel.row)?.node : undefined;
+          // below the selected item; on a header or the calendar row: into that card
+          pasteItems(tree, node ? { parentId: node.parentId, afterId: node.id, next } : { parentId: !card || card.ownerId === ROOT ? null : card.ownerId, afterId: null, next });
+        }}
         aria-label="Next — arrows to navigate, ? for shortcuts"
         onDragOver={(e) => {
           if (dnd.current && lastMovable && !e.defaultPrevented) {
@@ -642,21 +809,22 @@ export function Next() {
         {m.cards.length === 0 && !draftTask && (
           <div className="empty">
             <div className="big">All clear 🎉</div>
-            <p>Nothing queued. Press <kbd>⌘⏎</kbd> to add a task, ✨ Plan, or pick from the Organizer.</p>
+            <p>Nothing queued. Press <kbd>⏎</kbd> to add an item, or ask AI to plan with <kbd>⌘/</kbd>.</p>
           </div>
         )}
         {draftAt === -1 && taskDraft}
         {m.cards.map((c, i) => (
           <div key={c.key} className="cardwrap">
-            <CardView x={x} card={c} first={i === 0} />
+            <CardView x={x} card={c} />
             {draftAt === i && taskDraft}
           </div>
         ))}
         <div className={cx('endzone', hint?.t === 'end' && 'over')} />
       </div>
 
+      {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
       <div className="keys">
-        <kbd>↑↓</kbd> cards · <kbd>→</kbd> actions · <kbd>←</kbd> back · <kbd>⏎</kbd> start · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧←→</kbd> estimate · <kbd>/</kbd> commands · <kbd>?</kbd> all
+        <kbd>↑↓</kbd> move · <kbd>→</kbd> in · <kbd>←</kbd> out · <kbd>⏎</kbd> new below · <kbd>⇧⏎</kbd> above · <kbd>F2</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>⌫</kbd> out of Next · <kbd>⇧⌫</kbd> delete · <kbd>/</kbd> commands · <kbd>?</kbd> all
       </div>
     </div>
   );

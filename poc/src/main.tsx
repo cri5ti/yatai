@@ -4,7 +4,7 @@ import './tokens.css';
 import './styles.css';
 import { Desktop } from './Desktop';
 import { Controls } from './Controls';
-import { get, useS } from './store';
+import { DENSITIES, SCALES, get, useS } from './store';
 import { closeCapture, openAi, closeAi, openCapture, redo, setClock, setTab, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod } from './kbd';
 
@@ -14,6 +14,14 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = s.dark ? 'dark' : 'light';
   }, [s.dark]);
+
+  // scale + density are plain CSS variables
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(SCALES[s.scale] ?? 1));
+    document.documentElement.style.setProperty('--dens', String(DENSITIES[s.density] ?? 1));
+    // the layout just changed shape without anything "moving": let the animation snapshots catch up
+    requestAnimationFrame(() => window.dispatchEvent(new Event('flip-resync')));
+  }, [s.scale, s.density]);
 
   // mock clock
   useEffect(() => {

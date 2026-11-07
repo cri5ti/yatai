@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { quietFlip } from './flip';
 import { useS } from './store';
 import type { Layout, State, Tab } from './store';
 import { Next } from './Next';
@@ -7,15 +8,87 @@ import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
 import { AiPop } from './AiPop';
-import { capture, closeCapture, dismissToast, redo, setLayout, setTab, toggleHelp, toggleHidden, undo } from './actions';
+import { capture, closeCapture, setBounds, dismissToast, openDrawer, redo, setDensity, setLayout, setScale, setTab, toggleHelp, toggleHidden, undo } from './actions';
+import { CALENDAR, DENSITIES, SCALES } from './store';
+import { Drawer } from './Drawer';
+import { GhIcon } from './Pr';
 import { fmt, meetingsFor } from './model';
 
-export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.layout);
+/** the Organizer is the full-width app: from the thin dock it expands (animated) to fill the screen */
+export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'organizer' && s.layout === 'dock' ? 'max' : s.layout);
+
+const MIN_W = 320;
+const MIN_H = 280;
+type Dir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+const DIRS: Record<string, Dir[]> = { dock: ['w'], float: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'], max: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] };
+
+/** drag an edge/corner to resize (dock: its left edge) and the title bar to move (float / max).
+ *  Works on the DOM while dragging (no re-render per pixel), then saves the rect; double-click an edge resets it. */
+function useWindowDrag(win: React.RefObject<HTMLDivElement>, key: 'dock' | 'float' | 'max' | null) {
+  return (kind: Dir | 'move') => (e: React.PointerEvent) => {
+    const el = win.current;
+    const host = el?.offsetParent as HTMLElement | null;
+    if (!el || !host || !key || e.button !== 0) return;
+    if (kind === 'move' && ((e.target as HTMLElement).closest('button, .tabs') || key === 'dock')) return;
+    e.preventDefault();
+    const pw = host.clientWidth;
+    const ph = host.clientHeight;
+    const r0 = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+    const p0 = { x: e.clientX, y: e.clientY };
+    let r = { ...r0 };
+    el.classList.add('resizing', kind === 'move' ? 'moving' : 'resizing');
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    const apply = (ev: PointerEvent) => {
+      const dx = ev.clientX - p0.x;
+      const dy = ev.clientY - p0.y;
+      let { x, y, w, h } = r0;
+      if (kind === 'move') {
+        x = clamp(x + dx, 0, pw - w);
+        y = clamp(y + dy, 0, ph - h);
+      } else {
+        if (kind.includes('e')) w = clamp(r0.w + dx, MIN_W, pw - r0.x);
+        if (kind.includes('s')) h = clamp(r0.h + dy, MIN_H, ph - r0.y);
+        if (kind.includes('w')) {
+          const right = r0.x + r0.w;
+          w = clamp(r0.w - dx, MIN_W, key === 'dock' ? pw : right);
+          x = right - w;
+        }
+        if (kind.includes('n')) {
+          const bottom = r0.y + r0.h;
+          h = clamp(r0.h - dy, MIN_H, bottom);
+          y = bottom - h;
+        }
+      }
+      r = { x, y, w, h };
+      if (key === 'dock') document.documentElement.style.setProperty('--dock-w', `${w}px`);
+      else Object.assign(el.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', apply);
+      window.removeEventListener('pointerup', up);
+      el.classList.remove('resizing', 'moving');
+      quietFlip(500);
+      setBounds(key, r);
+    };
+    window.addEventListener('pointermove', apply);
+    window.addEventListener('pointerup', up);
+  };
+}
 
 /* ---------- the yatai window ---------- */
 function Win() {
   const s = useS();
   const layout = effLayout(s);
+  const winRef = useRef<HTMLDivElement>(null);
+  const key = layout === 'dock' || layout === 'float' || layout === 'max' ? layout : null;
+  const bnd = key ? s.bounds[key] : undefined;
+  const drag = useWindowDrag(winRef, key);
+  useLayoutEffect(() => {
+    // the dock width lives in a CSS variable (the toasts keep clear of it too)
+    if (key === 'dock' && bnd) document.documentElement.style.setProperty('--dock-w', `${bnd.w}px`);
+    else document.documentElement.style.removeProperty('--dock-w');
+  }, [key, bnd?.w]);
+  const style: React.CSSProperties | undefined = bnd && key && key !== 'dock' ? { left: bnd.x, top: bnd.y, width: bnd.w, height: bnd.h } : undefined;
   const pill = layout === 'pill';
   const endedFocus = !!s.focus?.ended;
   const cycle: Layout[] = ['dock', 'float', 'max', 'pill'];
@@ -26,9 +99,10 @@ function Win() {
   ];
 
   return (
-    <div className={`win layout-${layout} ${endedFocus ? 'ended' : ''} ${s.hidden ? 'hidden' : ''}`}>
+    <div ref={winRef} style={style} className={`win layout-${layout} ${endedFocus ? 'ended' : ''} ${s.hidden ? 'hidden' : ''}`}>
+      {key && DIRS[key].map((d) => <div key={d} className={`rz rz-${d}`} data-rz={d} onPointerDown={drag(d)} onDoubleClick={() => setBounds(key, null)} title="Drag to resize (double-click resets)" />)}
       {!pill && (
-        <div className="titlebar">
+        <div className="titlebar" onPointerDown={drag('move')} onDoubleClick={(e) => key && !(e.target as HTMLElement).closest('button') && setBounds(key, null)}>
           <nav className="tabs" role="tablist" aria-label="Views">
             {tabs.map((t, i) => (
               <button
@@ -75,6 +149,41 @@ function Win() {
       <div className="content">
         {pill ? <Focus /> : s.tab === 'next' ? <Next /> : s.tab === 'inbox' ? <Inbox /> : <Organizer />}
       </div>
+      {!pill && (
+        <div className="uibar" role="toolbar" aria-label="Sources and display">
+          <div className="ugrp drawers" role="group" aria-label="Sources">
+            <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Outlook — bring meetings in" onClick={() => openDrawer('outlook')}>
+              <span aria-hidden>📅</span> Outlook
+            </button>
+            <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
+              <GhIcon /> GitHub
+            </button>
+            <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — bring work items in" onClick={() => openDrawer('devops')}>
+              <span aria-hidden>◈</span> DevOps
+            </button>
+          </div>
+          <span className="grow" />
+          <div className="ugrp" role="group" aria-label="Scale">
+            {SCALES.map((v, i) => (
+              <button key={v} className={s.scale === i ? 'on' : ''} aria-pressed={s.scale === i} title={`Scale ${Math.round(v * 100)}%`} aria-label={`Scale ${Math.round(v * 100)}%`} onClick={() => setScale(i)}>
+                {Math.round(v * 100)}
+              </button>
+            ))}
+          </div>
+          <div className="ugrp" role="group" aria-label="Density">
+            {DENSITIES.map((_, i) => (
+              <button key={i} className={s.density === i ? 'on' : ''} aria-pressed={s.density === i} title={['Tight', 'Normal', 'Roomy'][i] + ' rows'} aria-label={['Tight', 'Normal', 'Roomy'][i] + ' rows'} onClick={() => setDensity(i)}>
+                <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden>
+                  {[0, 1, 2].map((k) => (
+                    <rect key={k} x="0" y={[0.5, 3.5, 6.5][k] + (i - 1) * (k - 1) * -1.2} width="12" height="1.4" rx=".7" fill="currentColor" />
+                  ))}
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {!pill && <Drawer />}
       {s.aiBusy && <div className="aibusy">✨ {s.aiBusy}</div>}
     </div>
   );
@@ -83,7 +192,7 @@ function Win() {
 /* ---------- fake desktop apps (decorative, data-driven) ---------- */
 function OutlookWin() {
   const s = useS();
-  const ms = meetingsFor(s);
+  const ms = meetingsFor({ meetings: CALENDAR, flags: s.flags, clock: s.clock }); // Outlook itself: everything, whatever yatai shows
   return (
     <div className="app outlook">
       <div className="app-title">📅 Outlook — Calendar</div>
@@ -126,7 +235,6 @@ function Capture() {
       <div className="cp-label">Quick capture → Inbox</div>
       <input
         ref={ref}
-        placeholder="What's on your mind?"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -148,7 +256,7 @@ const HELP: [string, [string, string][]][] = [
     [
       ['⌘1 ⌘2 ⌘3', 'Next · Inbox · Organizer (Alt+1/2/3 also works in a browser)'],
       ['↑ ↓ ← →', 'Navigate everything'],
-      ['⌘⏎', 'Create a new thing right here (⏎ or Esc on a blank field cancels)'],
+      ['⏎  ·  ⇧⏎', 'Add a new item below · above the selection (⏎ again keeps adding; ⏎ or Esc on a blank field stops)'],
       ['⌘↑ ⌘↓', 'Reorder (animated) — or drag'],
       ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
       ['/  or right-click', 'Commands: /consolidate /abandon /due /reschedule /tomorrow /estimate /duplicate /ai'],
@@ -161,12 +269,15 @@ const HELP: [string, [string, string][]][] = [
     'Next',
     [
       ['↑ ↓', 'Move across tasks · → goes into its actions · ← back to the task'],
-      ['⏎', 'Start the action (on a task: its first action) — starts a stopwatch, moves it to the top'],
+      ['⇧Space', 'Start / pause the action (on a task: its first action) — stopwatch, moves it to the top'],
+      ['F2  or R', 'Edit (⇧⏎ inside the editor for a new line)'],
+      ['Space', 'Complete just this item — its children keep their own state'],
+      ['↑ / ↓', 'Always the next item you can see — children included'],
+      ['⇧↑ ⇧↓ · ⇧click · ⌘click', 'Multi-select, then Space / ⌘[ ⌘] / ⌘↑↓ / ⌫ act on all of them'],
       ['⌘⇧⏎  or F', 'Start in focus mode'],
       ['Space', 'Toggle done (just a marker — nothing disappears)'],
       ['→ / ←', 'On an action: expand / collapse its notes · on a task: expand / collapse the task'],
       ['⌘↑ ⌘↓ on an action', 'Reorder inside the task; past the edge it splits out into its own card'],
-      ['R / F2', 'Edit (⇧⏎ for a new line)'],
       ['E', 'Estimate picker: 1=5m 2=15m 3=30m 4=1h 5=2h 6=4h 8=8h'],
     ],
   ],
@@ -175,7 +286,7 @@ const HELP: [string, [string, string][]][] = [
     [
       ['A  N  ⇧N', 'Organizer: add child · sibling · project'],
       ['T', 'Organizer: put in / take out of Next'],
-      ['⏎ · A · S', 'Inbox: file into… · accept AI suggestion · suggest'],
+      ['F · A · S', 'Inbox: file into… · accept AI suggestion · suggest (⇧S all)'],
     ],
   ],
 ];

@@ -1,4 +1,4 @@
-import type { Node, State } from './store';
+import type { Node, PrStatus, State } from './store';
 import { childrenOf, nextActions, nextModel, pathOf } from './model';
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -17,7 +17,7 @@ export function aiSuggest(text: string, nodes: Node[]) {
       return { parentId: id, reason: `${reason} · you filed 3 similar items there` };
     }
   }
-  const fallback = nodes.find((n) => n.id === 'p_me') ?? nodes.find((n) => n.kind === 'project');
+  const fallback = nodes.find((n) => n.id === 'p_me') ?? nodes.find((n) => !n.parentId);
   return fallback ? { parentId: fallback.id, reason: 'Low confidence — no similar items found' } : null;
 }
 
@@ -54,9 +54,9 @@ export const aiEstimate = (title: string) => {
 /** pick up to 4 not-yet-today open actions, preferring neglected + estimated ones */
 export function aiPlan(s: State): string[] {
   const cand = s.nodes
-    .filter((n) => n.kind === 'action' && !n.today && n.status === 'todo' && !n.smart)
+    .filter((n) => !s.nodes.some((c) => c.parentId === n.id) && n.parentId && !n.today && n.status === 'todo' && !n.smart)
     .sort((a, b) => (a.lastRun ?? 0) - (b.lastRun ?? 0) || (a.est ?? 99) - (b.est ?? 99));
-  const already = s.nodes.filter((n) => n.today && n.status !== 'done' && n.kind === 'action').length;
+  const already = s.nodes.filter((n) => n.today && n.status !== 'done').length;
   return cand.slice(0, Math.max(0, 5 - already)).map((n) => n.id);
 }
 
@@ -98,3 +98,54 @@ export function aiReply(q: string, ctx: string | undefined, s: State): AiReply {
     text: `(mock) I looked at ${about}. I can *break it down*, *estimate it*, *plan your day* or *summarize progress* — just ask.`,
   };
 }
+
+/* ---------- the "sources" behind the bottom drawers (all fake) ---------- */
+export interface GhEntry {
+  org: string;
+  repo: string;
+  num: string;
+  title: string;
+  status: PrStatus;
+  comments?: number;
+  note: string;
+}
+export const GH: Record<string, GhEntry[]> = {
+  assigned: [
+    { org: 'acme', repo: 'api', num: '502', title: 'Rate limiter for the token endpoint', status: 'review', note: 'requested by Priya · 1h' },
+    { org: 'acme', repo: 'web', num: '1188', title: 'Fix flaky date picker', status: 'feedback', comments: 2, note: 'requested by Sam · 3h' },
+    { org: 'acme', repo: 'infra', num: '77', title: 'Bump node to 22', status: 'ready', note: 'requested by Lee · 1d' },
+  ],
+  mine: [
+    { org: 'acme', repo: 'api', num: '482', title: 'Auth token refactor', status: 'review', note: 'opened 3d ago' },
+    { org: 'acme', repo: 'web', num: '1203', title: 'Claude: migrate tests to vitest', status: 'draft', note: 'opened 1d ago' },
+    { org: 'acme', repo: 'api', num: '470', title: 'Remove legacy staff endpoints', status: 'merged', note: 'merged 2d ago' },
+    { org: 'acme', repo: 'docs', num: '31', title: 'Document the staff extraction plan', status: 'failing', note: 'opened 5h ago' },
+  ],
+  mentions: [
+    { org: 'acme', repo: 'web', num: '1190', title: 'Redesign settings page', status: 'review', note: 'Sam mentioned you · 2h' },
+    { org: 'acme', repo: 'api', num: '498', title: 'Payroll rounding bug', status: 'feedback', comments: 5, note: 'Priya mentioned you · 6h' },
+    { org: 'acme', repo: 'infra', num: '71', title: 'Retire the old staging cluster', status: 'closed', note: 'Lee mentioned you · 2d' },
+  ],
+};
+export interface AdoEntry {
+  id: string;
+  title: string;
+  type: 'Bug' | 'Task' | 'Story';
+  state: string;
+  note: string;
+}
+export const ADO: Record<string, AdoEntry[]> = {
+  mentions: [
+    { id: '18301', title: 'Staff export times out for large tenants', type: 'Bug', state: 'Active', note: 'Priya mentioned you · 1h' },
+    { id: '18288', title: 'Clarify the extraction acceptance criteria', type: 'Story', state: 'New', note: 'Sam mentioned you · 1d' },
+  ],
+  mine: [
+    { id: '18233', title: 'Flaky integration test', type: 'Bug', state: 'Active', note: 'assigned to you' },
+    { id: '18310', title: 'Add an audit log for payroll changes', type: 'Task', state: 'New', note: 'assigned to you' },
+    { id: '18277', title: 'Upgrade the build agents', type: 'Task', state: 'Resolved', note: 'assigned to you' },
+  ],
+  created: [
+    { id: '18190', title: 'Investigate sqlite-vec for embeddings', type: 'Story', state: 'Active', note: 'created by you · 1w' },
+    { id: '18204', title: 'Remove dead feature flags', type: 'Task', state: 'New', note: 'created by you · 4d' },
+  ],
+};

@@ -1,6 +1,6 @@
 import { get, set, uid } from './store';
 import type { MenuItem, Node, Target } from './store';
-import { nextModel } from './model';
+import { nextModel, plain } from './model';
 import type { CardM } from './model';
 import { EST_KEYS } from './kbd';
 import { breadcrumb } from './mock';
@@ -37,53 +37,63 @@ const meetingMoves = (id: string): MenuItem[] => [
 
 const edit = (id: string) => set(() => ({ edit: id, menu: null }));
 
-function actionItems(n: Node): MenuItem[] {
-  const running = get().current?.id === n.id;
-  const ids = [n.id];
-  return [
-    { id: 'start', label: running ? 'Pause' : 'Start', cmd: 'start', keys: '⏎', icon: running ? '❚❚' : '▶', run: () => A.toggleStart(n.id) },
-    { id: 'focus', label: 'Start in focus mode', cmd: 'focus', keys: '⌘⇧⏎', icon: '◎', run: () => A.startFocus(n.id) },
-    { id: 'done', label: n.status === 'done' ? 'Mark not done' : 'Mark done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes(ids) },
-    { id: 'edit', label: 'Edit text', cmd: 'edit', keys: 'R', icon: '✎', run: () => edit(n.id) },
-    { id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems(ids) },
-    { id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems(ids) },
-    { id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(ids, 1) },
-    { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },
-    { id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate(n.id) },
-    n.today
-      ? { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(ids) }
-      : { id: 'plan', label: 'Add to Next', cmd: 'plan', keys: 'T', icon: '★', run: () => A.toggleToday(n.id) },
-    { id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon(ids) },
-    { id: 'delete', label: 'Delete', cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, run: () => A.removeNodes(ids) },
-    { id: 'ai', label: 'Ask AI about this', cmd: 'ai', keys: '⌘/', icon: '✨', run: () => A.openAi(n.id) },
-  ];
-}
-
 interface Ctx {
-  card?: CardM;
-  organizer?: boolean;
+  card?: CardM; // set when the menu is for something in the Next view
+  row?: boolean; // ...and it is a row rather than the card header
 }
 
-function containerItems(n: Node, c: Ctx): MenuItem[] {
+/** one menu for every item, at any level: what is offered depends on whether it has children, not on a "type" */
+function itemMenu(n: Node, c: Ctx): MenuItem[] {
   const nodes = get().nodes;
-  const leaves = A.leafIds(nodes, n.id);
+  const kids = nodes.some((x) => x.parentId === n.id);
+  const running = get().current?.id === n.id;
+  const all = [...A.subtreeIds(nodes, [n.id])];
+  const leaves = nodes.filter((x) => all.includes(x.id) && !nodes.some((y) => y.parentId === x.id)).map((x) => x.id);
   const parts = c.card?.part?.n ?? 1;
+  const rowsOnly = !!c.row;
   const items: MenuItem[] = [
-    { id: 'start', label: 'Start first action', cmd: 'start', keys: '⏎', icon: '▶', run: () => A.startFirst(n.id) },
-    { id: 'focus', label: 'Start in focus mode', cmd: 'focus', keys: '⌘⇧⏎', icon: '◎', run: () => (A.startFirst(n.id), get().current && A.startFocus(get().current!.id)) },
-    { id: 'done', label: 'Mark all done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes(leaves) },
-    { id: 'edit', label: 'Rename', cmd: 'rename', keys: 'R', icon: '✎', run: () => edit(c.card ? 'card:' + c.card.key : n.id) },
+    kids
+      ? { id: 'start', label: 'Start first action', cmd: 'start', keys: '⇧Space', icon: '▶', run: () => A.startFirst(n.id) }
+      : { id: 'start', label: running ? 'Pause' : 'Start', cmd: 'start', keys: '⇧Space', icon: running ? '❚❚' : '▶', run: () => A.toggleStart(n.id) },
+    { id: 'focus', label: 'Start in focus mode', cmd: 'focus', keys: '⌘⇧⏎', icon: '◎', run: () => (kids ? (A.startFirst(n.id), get().current && A.startFocus(get().current!.id)) : A.startFocus(n.id)) },
+    { id: 'done', label: A.isDone(nodes, n.id) ? 'Mark not done' : kids ? 'Mark all done' : 'Mark done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes([n.id]) },
+    { id: 'edit', label: 'Edit', cmd: 'edit', keys: 'F2', icon: '✎', run: () => edit(c.card && !c.row ? 'card:' + c.card.key : n.id) },
   ];
-  if (n.kind === 'task')
+  if (c.card && !c.row)
     items.push({
       id: 'newaction',
-      label: 'New action here',
+      label: 'New item inside',
+      cmd: 'new',
+      keys: '→',
+      icon: '＋',
+      run: () => set(() => ({ menu: null, nsel: { card: c.card!.key, row: null }, ins: { kind: 'action', owner: n.id, seg: c.card!.seg?.id, after: lastRow(c.card) } })),
+    });
+  else if (c.card)
+    items.push({
+      id: 'newaction',
+      label: 'New item below',
       cmd: 'new',
       keys: '⌘⏎',
       icon: '＋',
-      run: () => set(() => ({ menu: null, ins: { kind: 'action', owner: n.id, seg: c.card?.seg?.id, after: lastRow(c.card) ?? A_lastChild(n.id) }, ...(c.card ? { nsel: { card: c.card.key, row: null } } : {}) })),
+      run: () => set(() => ({ menu: null, ins: { kind: 'action', owner: c.card!.ownerId, seg: c.card!.seg?.id, after: n.id } })),
     });
-  if (c.card && n.kind === 'task')
+  if (c.card && c.row)
+    items.push({ id: 'newabove', label: 'New item above', cmd: 'above', keys: '⇧⏎', icon: '＋', run: () => set(() => ({ menu: null, ins: { kind: 'action', owner: c.card!.ownerId, seg: c.card!.seg?.id, after: null, before: n.id } })) });
+  if (!c.card) {
+    items.push({ id: 'newabove', label: 'New item above', cmd: 'above', keys: '⇧⏎', icon: '＋', run: () => set(() => ({ menu: null, ins: { kind: 'node', parentId: n.parentId, afterId: null, beforeId: n.id } })) });
+    items.push({ id: 'newbelow', label: 'New item below', cmd: 'new', keys: '⏎', icon: '＋', run: () => set(() => ({ menu: null, ins: { kind: 'node', parentId: n.parentId, afterId: n.id } })) });
+    items.push({
+      id: 'newchild',
+      label: 'New sub-item',
+      cmd: 'child',
+      keys: 'A',
+      icon: '↳',
+      run: () => set(() => ({ menu: null, ins: { kind: 'node', parentId: n.id, afterId: A_lastChild(n.id) ?? n.id } })),
+    });
+  }
+  items.push({ id: 'indent', label: 'Indent (into the item above)', cmd: 'indent', keys: '⌘]', icon: '⇥', run: () => A.indentItems([n.id], rowsOnly) });
+  items.push({ id: 'outdent', label: 'Outdent (up a level)', cmd: 'outdent', keys: '⌘[', icon: '⇤', run: () => A.outdentItems([n.id]) });
+  if (c.card && !c.row && c.card.kind === 'task')
     items.push({
       id: 'consolidate',
       label: 'Consolidate',
@@ -93,35 +103,51 @@ function containerItems(n: Node, c: Ctx): MenuItem[] {
       tip: parts < 2 ? 'Consolidate all your actions here (this task is not split)' : 'Consolidate all your actions here',
       run: () => A.consolidate(c.card!.key),
     });
-  if (n.kind === 'task') {
-    items.push({ id: 'breakdown', label: 'Break down with AI', cmd: 'breakdown', keys: 'B', icon: '✨', run: () => A.breakDown(n.id) });
-    items.push({ id: 'estai', label: 'Estimate with AI', cmd: 'estimate', icon: '✨', run: () => A.estimate(n.id) });
-  }
-  if (c.card)
+  items.push({ id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems([n.id]) });
+  items.push({ id: 'breakdown', label: 'Break down with AI', cmd: 'breakdown', keys: 'B', icon: '✨', run: () => A.breakDown(n.id) });
+  if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });
+  if (c.card && !c.row)
     items.push({ id: 'fold', label: c.card.collapsed ? 'Expand' : 'Collapse', cmd: 'collapse', keys: c.card.collapsed ? '→' : '←', icon: '▾', run: () => A.toggleCardOpen(c.card!, c.card!.collapsed) });
-  if (n.kind !== 'project') {
-    items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(leaves, 1) });
-    items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(leaves) });
-    items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
-    items.push(
-      n.today
-        ? { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(leaves) }
-        : { id: 'plan', label: 'Add to Next', cmd: 'plan', keys: 'T', icon: '★', run: () => A.toggleToday(n.id) },
-    );
-  }
-  items.push({ id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate(n.id) });
-  items.push({ id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon(leaves) });
+  items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
+  items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo([n.id], 1) });
+  items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems([n.id]) });
+  const inNext = kids ? leaves.some((l) => nodes.find((x) => x.id === l)!.today) : n.today;
+  items.push(
+    inNext
+      ? { id: 'unplan', label: 'Remove from Next', cmd: 'remove', keys: 'T', icon: '⊖', run: () => A.unplan([n.id]) }
+      : { id: 'plan', label: 'Add to Next', cmd: 'plan', keys: 'T', icon: '★', run: () => A.toggleToday(n.id) },
+  );
+  items.push({ id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate([n.id]) });
+  items.push({ id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon([n.id]) });
   items.push({ id: 'delete', label: 'Delete', cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, run: () => A.removeNodes([n.id]) });
   items.push({ id: 'ai', label: 'Ask AI about this', cmd: 'ai', keys: '⌘/', icon: '✨', run: () => A.openAi(n.id) });
   return items;
 }
-const lastRow = (c?: CardM) => (c && c.rows.length ? c.rows[c.rows.length - 1].id : null);
+const lastRow = (c?: CardM) => (c && c.rows.length ? c.rows.filter((r) => r.depth === 0).slice(-1)[0]?.id ?? null : null);
 const A_lastChild = (id: string) => [...get().nodes].reverse().find((n) => n.parentId === id)?.id ?? null;
+
+/** the menu for a multi-selection: the bulk-capable subset */
+function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
+  return [
+    { id: 'done', label: `Mark ${ids.length} done / not done`, cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes(ids) },
+    { id: 'indent', label: 'Indent', cmd: 'indent', keys: '⌘]', icon: '⇥', run: () => A.indentItems(ids, rowsOnly) },
+    { id: 'outdent', label: 'Outdent', cmd: 'outdent', keys: '⌘[', icon: '⇤', run: () => A.outdentItems(ids) },
+    { id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems(ids) },
+    { id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems(ids) },
+    { id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(ids, 1) },
+    { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },
+    { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => ids.forEach((id) => A.toggleToday(id)) },
+    { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(ids) },
+    { id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate(ids) },
+    { id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon(ids) },
+    { id: 'delete', label: `Delete ${ids.length} items`, cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, run: () => A.removeNodes(ids) },
+  ];
+}
 
 function meetingItems(c: CardM): MenuItem[] {
   const m = c.meeting!;
   return [
-    { id: 'join', label: 'Join', cmd: 'start', keys: '⏎', icon: '📅', run: () => A.toast(`(mock) joining ${m.title}`) },
+    { id: 'join', label: 'Join', cmd: 'start', keys: '⇧Space', icon: '📅', run: () => A.toast(`(mock) joining ${m.title}`) },
     {
       id: 'newaction',
       label: 'New prep action',
@@ -132,6 +158,7 @@ function meetingItems(c: CardM): MenuItem[] {
     },
     { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: meetingMoves(m.id) },
     { id: 'fold', label: c.collapsed ? 'Expand' : 'Collapse', cmd: 'collapse', icon: '▾', run: () => A.toggleCardOpen(c, c.collapsed) },
+    { id: 'delete', label: 'Delete meeting', cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, tip: 'Removes it from yatai only — bring it back any time from the Outlook drawer', run: () => A.removeMeeting(m.id) },
     { id: 'ai', label: 'Ask AI about this', cmd: 'ai', keys: '⌘/', icon: '✨', run: () => A.openAi(m.id) },
   ];
 }
@@ -145,46 +172,45 @@ function inboxItems(id: string): MenuItem[] {
     const sg = it.suggestion;
     items.push({ id: 'accept', label: `Accept: ${breadcrumb(s.nodes, sg.parentId)}`, cmd: 'accept', keys: 'A', icon: '✨', tip: sg.reason, run: () => A.fileInbox(id, sg.parentId) });
   }
-  items.push({ id: 'file', label: 'File into…', cmd: 'file', keys: '⏎', icon: '→', sub: fileTargets(id) });
+  items.push({ id: 'file', label: 'File into…', cmd: 'file', keys: 'F', icon: '→', sub: fileTargets(id) });
   items.push({ id: 'suggest', label: 'Suggest with AI', cmd: 'suggest', keys: 'S', icon: '✨', run: () => A.suggestInbox([id]) });
-  items.push({ id: 'edit', label: 'Edit', cmd: 'edit', keys: 'R', icon: '✎', run: () => edit(id) });
+  items.push({ id: 'edit', label: 'Edit', cmd: 'edit', keys: 'F2', icon: '✎', run: () => edit(id) });
   items.push({ id: 'discard', label: 'Discard', cmd: 'discard', keys: '⌫', icon: '🗑', danger: true, run: () => A.dropInbox(id) });
   items.push({ id: 'ai', label: 'Ask AI about this', cmd: 'ai', keys: '⌘/', icon: '✨', run: () => A.openAi() });
   return items;
 }
 export const fileTargets = (inboxId: string): MenuItem[] =>
   get()
-    .nodes.filter((n) => n.kind !== 'action')
+    .nodes.filter((n) => !n.parentId || get().nodes.some((p) => p.id === n.parentId))
     .map((n) => ({
       id: 'f' + n.id,
       label: breadcrumb(get().nodes, n.id),
       cmd: breadcrumb(get().nodes, n.id).toLowerCase(),
-      tip: n.kind === 'project' ? 'Becomes a new task' : 'Becomes a new action',
-      icon: n.kind === 'project' ? '▣' : '◧',
+      tip: 'Becomes a new item inside',
+      icon: '↳',
       run: () => A.fileInbox(inboxId, n.id),
     }));
 
 function build(t: Target): { title: string; items: MenuItem[] } | null {
   const s = get();
   if (t.t === 'inbox') return { title: 'Inbox item', items: inboxItems(t.id) };
+  if (t.t === 'multi') return { title: `${t.ids.length} items selected`, items: bulkMenu(t.ids, s.tab === 'next') };
   if (t.t === 'node') {
     const n = s.nodes.find((x) => x.id === t.id);
-    if (!n) return null;
-    return { title: n.title.split('\n')[0], items: n.kind === 'action' ? actionItems(n) : containerItems(n, { organizer: true }) };
+    return n ? { title: plain(n.title.split('\n')[0]), items: itemMenu(n, {}) } : null;
   }
   if (t.t === 'row') {
-    const m = nextModel(s);
-    const c = m.cards.find((x) => x.rows.some((r) => r.id === t.id));
+    const c = nextModel(s).cards.find((x) => x.rows.some((r) => r.id === t.id));
     const r = c?.rows.find((x) => x.id === t.id);
     if (!c || !r) return null;
     if (r.fx) return { title: r.fx.title, items: meetingItems(c) };
-    return { title: r.node!.title.split('\n')[0], items: actionItems(r.node!) };
+    return { title: plain(r.node!.title.split('\n')[0]), items: itemMenu(r.node!, { card: c, row: true }) };
   }
   const c = nextModel(s).cards.find((x) => x.key === t.key);
   if (!c) return null;
   if (c.kind === 'meeting') return { title: c.meeting!.title, items: meetingItems(c) };
   if (!c.task) return null;
-  return { title: c.task.title, items: containerItems(c.task, { card: c }) };
+  return { title: plain(c.task.title.split('\n')[0]), items: itemMenu(c.task, { card: c }) };
 }
 
 function anchor() {

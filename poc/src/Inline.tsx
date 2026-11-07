@@ -1,23 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Inline editor used everywhere things are created or renamed on the spot.
- *  Enter            commit (blank => cancel, so creating can be aborted)
+ * Inline editor used everywhere things are created or edited on the spot.
+ *  Enter            commit (blank => cancel, so creating can be aborted). When `chain` is set (creating),
+ *                   Enter also opens the next new item right after; ⌘/Ctrl+Enter then just commits.
  *  Shift+Enter      newline
- *  ⌘/Ctrl+Enter     commit and chain: create the next one right after
  *  Esc              cancel
  */
 export function InlineEdit({
   initial = '',
-  placeholder = 'Type…  (Enter to save · Esc to cancel)',
   multiline = true,
+  chain = false,
   onCommit,
   onCancel,
   className = '',
 }: {
   initial?: string;
-  placeholder?: string;
   multiline?: boolean;
+  chain?: boolean;
   onCommit: (text: string, chain: boolean) => void;
   onCancel: () => void;
   className?: string;
@@ -58,7 +58,6 @@ export function InlineEdit({
       rows={1}
       className={`inline-edit ${className}`}
       value={val}
-      placeholder={placeholder}
       spellCheck={false}
       onChange={(e) => setVal(multiline ? e.target.value : e.target.value.replace(/\n/g, ' '))}
       onClick={(e) => e.stopPropagation()}
@@ -69,7 +68,7 @@ export function InlineEdit({
         if (e.key === 'Enter') {
           if (e.shiftKey && multiline) return; // newline
           e.preventDefault();
-          finish(e.metaKey || e.ctrlKey);
+          finish(chain ? !(e.metaKey || e.ctrlKey) : e.metaKey || e.ctrlKey);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           cancel();

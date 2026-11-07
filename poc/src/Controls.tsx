@@ -1,9 +1,10 @@
 import { useS, set, resetAll } from './store';
-import type { Flags, Layout } from './store';
+import type { Flags, Layout, PrStatus } from './store';
 import {
-  addInboxSamples, jumpToNextMeeting, openCapture, redo, setClock, setFlag, setLayout, toggleHidden, undo,
+  addInboxSamples, setPrComments, setPrStatus, jumpToNextMeeting, openCapture, redo, setClock, setFlag, setLayout, toggleHidden, undo,
 } from './actions';
-import { fmt } from './model';
+import { fmt, plain, prLinks } from './model';
+import { DEFAULT_COMMENTS, PR_STATUSES } from './Pr';
 
 const layouts: { id: Layout; label: string; hint: string }[] = [
   { id: 'dock', label: 'Dock', hint: 'thin sidebar' },
@@ -13,9 +14,6 @@ const layouts: { id: Layout; label: string; hint: string }[] = [
 ];
 
 const scenarios: { k: keyof Flags; label: string; group: string }[] = [
-  { k: 'prBuildFailing', label: 'PR: build fails', group: 'GitHub PR #482' },
-  { k: 'prNewComments', label: 'PR: new comments', group: 'GitHub PR #482' },
-  { k: 'prApproved', label: 'PR: approved', group: 'GitHub PR #482' },
   { k: 'pipelineFailed', label: 'Pipeline: deploy failed', group: 'DevOps' },
   { k: 'workItemChanged', label: 'Work item: state changed', group: 'DevOps' },
   { k: 'aiNeedsFeedback', label: 'Claude: needs feedback', group: 'AI sessions' },
@@ -26,6 +24,9 @@ const scenarios: { k: keyof Flags; label: string; group: string }[] = [
 export function Controls() {
   const s = useS();
   const groups = [...new Set(scenarios.map((x) => x.group))];
+  const found = new Map<string, string[]>();
+  for (const n of s.nodes) for (const l of prLinks(n.title)) found.set(l.key, [...(found.get(l.key) ?? []), plain(n.title.split('\n')[0]).slice(0, 40)]);
+  const prs = [...found].map(([key, items]) => ({ key, items }));
   return (
     <aside className="controls">
       <h2>yatai · UX POC</h2>
@@ -64,6 +65,27 @@ export function Controls() {
             <option value={20}>20 min / sec</option>
           </select>
         </label>
+      </section>
+
+      <section>
+        <h3>GitHub pull requests</h3>
+        <p className="note">Every PR url found in your items. Pick a status to simulate GitHub changing it.</p>
+        {prs.map((p) => (
+          <label key={p.key} className="prrow">
+            <span title={p.items.join(' · ')}>{p.key.replace(/^[^/]+\//, '')}</span>
+            {(s.prs[p.key] ?? 'review') === 'feedback' && (
+              <input className="prn" type="number" min={1} max={99} title="Unresolved comments" value={s.prc[p.key] ?? DEFAULT_COMMENTS} onChange={(e) => setPrComments(p.key, Math.max(1, +e.target.value || 1))} />
+            )}
+            <select value={s.prs[p.key] ?? 'review'} onChange={(e) => setPrStatus(p.key, e.target.value as PrStatus)}>
+              {PR_STATUSES.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        {!prs.length && <p className="note">No PR links yet — paste a github.com/…/pull/123 url into any item.</p>}
       </section>
 
       <section>

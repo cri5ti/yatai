@@ -1,16 +1,17 @@
 import { useSyncExternalStore } from 'react';
 
-export type Kind = 'project' | 'task' | 'action';
 export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
+/** what the (mocked) GitHub connector reports for a pull request */
+export type PrStatus = 'draft' | 'review' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export type DrawerKind = 'outlook' | 'github' | 'devops';
 export type Layout = 'dock' | 'float' | 'max' | 'pill';
 export type Tab = 'next' | 'inbox' | 'organizer';
 
 export interface Node {
   id: string;
-  parentId: string | null; // project/task id — or a meeting id for "prep" style actions
-  kind: Kind;
-  title: string; // actions may be multi-line markdown; line 1 is the headline
+  parentId: string | null; // any item — or a meeting id for "prep" style items. Everything is just an item.
+  title: string; // may be multi-line markdown; line 1 is the headline
   status: Status;
   today: boolean; // "in Next"
   open: boolean; // expanded in Organizer / not collapsed in Next
@@ -49,8 +50,9 @@ export interface Meeting {
  */
 export interface Seg {
   id: string;
-  owner: string; // task id or meeting id
-  items: string[];
+  owner: string; // item id, meeting id, or ROOT; the card header
+  items: string[]; // the rows directly under the owner that are in Next (their Next-children nest under them)
+  keep?: boolean; // an explicitly created, still-empty card
 }
 
 export interface Current {
@@ -87,7 +89,7 @@ export interface Toast {
 }
 
 /* ---------- menus / ai / inline creation (UI state, not undoable) ---------- */
-export type Target = { t: 'card'; key: string } | { t: 'row'; id: string } | { t: 'node'; id: string } | { t: 'inbox'; id: string };
+export type Target = { t: 'card'; key: string } | { t: 'row'; id: string } | { t: 'node'; id: string } | { t: 'inbox'; id: string } | { t: 'multi'; ids: string[] };
 
 export interface MenuItem {
   id: string;
@@ -125,9 +127,9 @@ export interface AiState {
 }
 
 export type Ins =
-  | { kind: 'action'; owner: string; seg?: string; after: string | null }
+  | { kind: 'action'; owner: string; seg?: string; after: string | null; before?: string } // before: insert above this row
   | { kind: 'task'; afterSeg: string | null }
-  | { kind: 'node'; nodeKind: Kind; parentId: string | null; afterId: string | null };
+  | { kind: 'node'; parentId: string | null; afterId: string | null; beforeId?: string };
 
 export interface Nsel {
   card: string | null;
@@ -159,11 +161,20 @@ export interface State extends Doc {
   hidden: boolean;
   capture: boolean;
   dark: boolean;
+  prs: Record<string, PrStatus>; // 'org/repo#123' -> status
+  prc: Record<string, number>; // 'org/repo#123' -> unresolved review comments
+  drawer: { kind: DrawerKind; tab: string; sel: number } | null; // Outlook / GitHub / DevOps pop-up
+  hl: Record<string, true>; // yellow highlights: changes the user did not make, cleared only by hovering them
+  bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number }>>; // user-resized window rects (dock: only w)
+  scale: number; // index into SCALES
+  density: number; // index into DENSITIES
   showApps: boolean;
   aiDelay: number;
   sel: string | null; // organizer selection
   nsel: Nsel; // next selection
   isel: string | null; // inbox selection
+  multi: string[]; // multi-selection (item ids), empty when a single item is selected
+  anchor: string | null; // where a shift-range started
   expanded: Record<string, boolean>; // action text expanded
   edit: string | null; // id being renamed ('card:<key>' for a card title)
   ins: Ins | null; // inline "create here" draft
@@ -176,15 +187,18 @@ export interface State extends Doc {
   future: Hist[];
 }
 
+/** UI scale (zoom) and row density (vertical padding multiplier) steps */
+export const SCALES = [0.85, 1, 1.15, 1.3];
+export const DENSITIES = [0.5, 1, 1.6];
+
 export const uid = () => Math.random().toString(36).slice(2, 9);
 const DAY = 86_400_000;
 
 function seedNodes(): Node[] {
   const now = Date.now();
-  const mk = (id: string, parentId: string | null, kind: Kind, title: string, extra: Partial<Node> = {}): Node => ({
+  const mk = (id: string, parentId: string | null, title: string, extra: Partial<Node> = {}): Node => ({
     id,
     parentId,
-    kind,
     title,
     status: 'todo',
     today: false,
@@ -194,37 +208,39 @@ function seedNodes(): Node[] {
     ...extra,
   });
   return [
-    mk('p_rd', null, 'project', 'R&D'),
-    mk('t_staff', 'p_rd', 'task', 'Extract staff', { modified: now - DAY, today: true }),
+    mk('p_rd', null, 'R&D'),
+    mk('t_staff', 'p_rd', 'Extract staff', { modified: now - DAY }),
     mk(
       'a_staff1',
       't_staff',
-      'action',
       'Audit staff module dependencies\nCheck who imports `StaffService`, focus on:\n- [x] payroll helper\n- [ ] reporting jobs\n- [ ] **legacy** admin endpoints\nNotes: https://wiki.example.com/staff-extraction',
       { today: true, est: 30, lastRun: now - 3 * DAY },
     ),
-    mk('a_staff2', 't_staff', 'action', 'Draft extraction interface\n*Keep it small* — only what callers need today.', { today: true, est: 45 }),
-    mk('a_staff3', 't_staff', 'action', 'Move StaffService into new package', { est: 90 }),
-    mk('t_vec', 'p_rd', 'task', 'Spike: vector search', { open: false }),
-    mk('a_vec1', 't_vec', 'action', 'Compare sqlite-vec vs pgvector', { est: 60 }),
-    mk('a_vec2', 't_vec', 'action', 'Prototype similarity query'),
+    // items nest to any depth
+    mk('a_staff1a', 'a_staff1', 'List callers of PayrollHelper', { today: true, est: 10 }),
+    mk('a_staff1b', 'a_staff1', 'Check the nightly job', { today: true }),
+    mk('a_staff2', 't_staff', 'Draft extraction interface\n*Keep it small* — only what callers need today.', { today: true, est: 45 }),
+    mk('a_staff3', 't_staff', 'Move StaffService into new package', { est: 90 }),
+    mk('t_vec', 'p_rd', 'Spike: vector search', { open: false }),
+    mk('a_vec1', 't_vec', 'Compare sqlite-vec vs pgvector', { est: 60 }),
+    mk('a_vec2', 't_vec', 'Prototype similarity query'),
 
-    mk('p_plat', null, 'project', 'Platform'),
-    mk('t_rel', 'p_plat', 'task', 'Release 2.4', { today: true }),
-    mk('a_pr', 't_rel', 'action', 'PR #482 — auth token refactor', { today: true, smart: { source: 'pr' }, status: 'waiting' }),
-    mk('a_pipe', 't_rel', 'action', 'Deploy 2.4 to prod', { today: true, smart: { source: 'pipeline' }, status: 'waiting' }),
-    mk('a_wi', 't_rel', 'action', 'WI 18233 — flaky integration test', { smart: { source: 'workitem' }, status: 'waiting' }),
-    mk('t_ai', 'p_plat', 'task', 'Test migration', { today: true }),
-    mk('a_claude', 't_ai', 'action', 'Claude: migrate tests to vitest', { today: true, smart: { source: 'ai' }, status: 'waiting' }),
-    mk('a_review', 't_ai', 'action', "Review Claude's diff", { est: 20 }),
+    mk('p_plat', null, 'Platform'),
+    mk('t_rel', 'p_plat', 'Release 2.4'),
+    mk('a_pr', 't_rel', 'https://github.com/acme/api/pull/482 Auth token refactor', { today: true }),
+    mk('a_pipe', 't_rel', 'Deploy 2.4 to prod', { today: true, smart: { source: 'pipeline' }, status: 'waiting' }),
+    mk('a_wi', 't_rel', 'WI 18233 — flaky integration test', { smart: { source: 'workitem' }, status: 'waiting' }),
+    mk('t_ai', 'p_plat', 'Test migration'),
+    mk('a_claude', 't_ai', 'Claude: migrate tests to vitest', { today: true, smart: { source: 'ai' }, status: 'waiting' }),
+    mk('a_review', 't_ai', "Review Claude's diff\nhttps://github.com/acme/web/pull/1203", { est: 20 }),
 
-    mk('p_me', null, 'project', 'Personal', { open: false }),
-    mk('t_tax', 'p_me', 'task', 'Taxes 2026'),
-    mk('a_tax1', 't_tax', 'action', 'Gather receipts', { est: 25 }),
-    mk('a_tax2', 't_tax', 'action', 'Book accountant', { est: 10 }),
+    mk('p_me', null, 'Personal', { open: false }),
+    mk('t_tax', 'p_me', 'Taxes 2026'),
+    mk('a_tax1', 't_tax', 'Gather receipts', { est: 25 }),
+    mk('a_tax2', 't_tax', 'Book accountant', { est: 10 }),
 
-    // an action living inside a meeting ("prep")
-    mk('a_prep', 'm3', 'action', 'Prep: skim last 1:1 notes', { today: true, est: 10 }),
+    // an item living inside a meeting ("prep")
+    mk('a_prep', 'm3', 'Prep: skim last 1:1 notes', { today: true, est: 10 }),
   ];
 }
 
@@ -247,6 +263,14 @@ export const seedMeetings = (): Meeting[] => [
   { id: 'm1', title: 'Team standup', start: 9 * 60 + 30, durationMin: 15, where: 'Teams' },
   { id: 'm2', title: 'Design review', start: 14 * 60, movedTo: 11 * 60 + 30, durationMin: 45, where: 'Room 4.12' },
   { id: 'm3', title: '1:1 with Sam', start: 16 * 60, durationMin: 30, where: 'Teams' },
+];
+
+/** everything on the (mocked) Outlook calendar today — yatai only shows the ones you have brought in */
+export const CALENDAR: Meeting[] = [
+  ...seedMeetings(),
+  { id: 'm4', title: 'Sprint planning', start: 10 * 60 + 30, durationMin: 60, where: 'Teams' },
+  { id: 'm5', title: 'Lunch & learn', start: 12 * 60 + 30, durationMin: 45, where: 'Cafeteria' },
+  { id: 'm6', title: 'Dentist', start: 17 * 60 + 30, durationMin: 60, where: 'Off-site' },
 ];
 
 export const defaultFlags = (): Flags => ({
@@ -278,11 +302,20 @@ export function initialState(): State {
     hidden: false,
     capture: false,
     dark: false,
+    prs: { 'acme/api#482': 'review', 'acme/web#1203': 'draft' },
+    prc: {},
+    drawer: null,
+    hl: {},
+    bounds: {},
+    scale: 1,
+    density: 1,
     showApps: true,
     aiDelay: 900,
     sel: 'p_rd',
     nsel: { card: null, row: null },
     isel: null,
+    multi: [],
+    anchor: null,
     expanded: {},
     edit: null,
     ins: null,
@@ -296,8 +329,8 @@ export function initialState(): State {
   };
 }
 
-const KEY = 'yatai-poc-v2';
-const transient = (s: State) => ({ ...s, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, help: false, edit: null, ins: null, past: [], future: [] });
+const KEY = 'yatai-poc-v3';
+const transient = (s: State) => ({ ...s, drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, help: false, edit: null, ins: null, multi: [], anchor: null, past: [], future: [] });
 
 function load(): State {
   try {

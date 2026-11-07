@@ -70,7 +70,6 @@ function MenuInner({ menu }: { menu: MenuState }) {
           ref={input}
           className="menu-input"
           value={q}
-          placeholder={stack.length > 1 ? 'Filter…  (or press the number)' : 'Type a command…  /consolidate  /due  /tomorrow'}
           spellCheck={false}
           onChange={(e) => (setQ(e.target.value), setHi(0))}
           onKeyDown={(e) => {

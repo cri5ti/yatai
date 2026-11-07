@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useS } from './store';
 import { endFocus, extendFocus, focusElapsedMin, leaveFocus, pauseFocus, startFocus } from './actions';
-import { fmt, meetingsFor, nextActions, pathOf } from './model';
+import { fmt, meetingsFor, nextActions, pathOf, plain } from './model';
 import { isEditable } from './kbd';
 
 const mmss = (min: number) => {
@@ -53,7 +53,7 @@ export function Focus() {
       <div className="pill idle kbd-area" data-kbd-area tabIndex={0} ref={box} onKeyDown={onKey}>
         <div className="pill-main">
           <div className="pill-label">Next up</div>
-          <div className="pill-title">{next ? next.title.split('\n')[0] : 'Nothing queued'}</div>
+          <div className="pill-title">{next ? plain(next.title.split('\n')[0]) : 'Nothing queued'}</div>
         </div>
         {next && (
           <button className="btn primary" onClick={() => startFocus(next.id)}>
@@ -65,7 +65,7 @@ export function Focus() {
   }
 
   const node = s.nodes.find((n) => n.id === f.nodeId);
-  const title = node?.title.split('\n')[0];
+  const title = node ? plain(node.title.split('\n')[0]) : undefined;
   const total = f.durationMin + f.extra;
   const el = focusElapsedMin(f);
   const left = total - el;
@@ -100,7 +100,7 @@ export function Focus() {
             <div className="ended-q">Switch to…</div>
             {nexts.map((n, i) => (
               <button key={n.id} className="btn wide" onClick={() => leaveFocus({ done: true, next: n.id })}>
-                <kbd>{i + 1}</kbd> ✓ done, then ▶ {n.title.split('\n')[0]}
+                <kbd>{i + 1}</kbd> ✓ done, then ▶ {plain(n.title.split('\n')[0])}
               </button>
             ))}
           </>

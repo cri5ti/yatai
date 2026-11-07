@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { prMatch } from './model';
+import { PrRef } from './Pr';
 
 /* Basic markdown: **bold**, *italic*, `code`, urls, - lists, 1. lists, - [ ] checkboxes */
 
@@ -7,7 +9,7 @@ const INLINE_SRC =
 
 const short = (u: string) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 
-export function inline(text: string, kp = 'i'): ReactNode[] {
+export function inline(text: string, kp = 'i', prIcon = true): ReactNode[] {
   const re = new RegExp(INLINE_SRC, 'g');
   const out: ReactNode[] = [];
   let last = 0;
@@ -18,14 +20,17 @@ export function inline(text: string, kp = 'i'): ReactNode[] {
     const t = m[0];
     const key = `${kp}${i++}`;
     if (t.startsWith('`')) out.push(<code key={key}>{t.slice(1, -1)}</code>);
-    else if (t.startsWith('**') || t.startsWith('__')) out.push(<strong key={key}>{inline(t.slice(2, -2), key)}</strong>);
-    else if (t.startsWith('http'))
+    else if (t.startsWith('**') || t.startsWith('__')) out.push(<strong key={key}>{inline(t.slice(2, -2), key, prIcon)}</strong>);
+    else if (t.startsWith('http') && prMatch(t)) {
+      const pm = prMatch(t)!;
+      out.push(<PrRef key={key} url={t} org={pm[1]} repo={pm[2]} num={pm[3]} icon={prIcon} />);
+    } else if (t.startsWith('http'))
       out.push(
         <a key={key} href={t} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
           {short(t)}
         </a>,
       );
-    else out.push(<em key={key}>{inline(t.slice(1, -1), key)}</em>);
+    else out.push(<em key={key}>{inline(t.slice(1, -1), key, prIcon)}</em>);
     last = m.index + t.length;
   }
   if (last < text.length) out.push(text.slice(last));

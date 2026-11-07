@@ -59,7 +59,6 @@ export function AiPop() {
           ref={input}
           className="ai-input"
           value={q}
-          placeholder={ai.msgs.length ? 'Reply…' : 'Ask anything — “plan my day”, “break this down”, “how long will this take?”'}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();

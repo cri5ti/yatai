@@ -64,7 +64,10 @@
   --surface: #ffffff;
   --surface-2: #f0f2f7;
   --surface-3: #e6e9f2;
-  --border: #e2e5ee;
+  --border: #e6e8f0;
+  --border-strong: #c3c8d6;
+  --hover: rgba(70, 80, 120, 0.08);
+  --appt: #e3effb; /* Outlook-style appointment blue */
   --text: #1b1f2a;
   --text-muted: #7a8194;
   --accent: #5b5bd6;
@@ -81,6 +84,9 @@
   --good-soft: #def5e7;
   --info: #5b6478;
   --info-soft: #eceef4;
+  --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #8250df; --gh-closed: #82071e;
+  --hl: #fff2a0; /* yellow: something changed that you did not change */
+  --hl-bar: #d9a400;
   --live: #e0457b; /* the started action */
   --live-soft: rgba(224, 69, 123, 0.1);
   --shadow-pop: 0 10px 40px rgba(20, 24, 50, 0.25);
@@ -100,7 +106,10 @@
   --surface: #1d2029;
   --surface-2: #262a36;
   --surface-3: #30354a;
-  --border: #323746;
+  --border: #2c3140;
+  --border-strong: #4a5066;
+  --hover: rgba(255, 255, 255, 0.07);
+  --appt: #1b2b42;
   --text: #e7e9f1;
   --text-muted: #8b92a8;
   --accent: #8b8bff;
@@ -117,6 +126,9 @@
   --good-soft: #15321f;
   --info: #a0a8c0;
   --info-soft: #2b3040;
+  --gh-draft: #8b949e; --gh-review: #4493f8; --gh-feedback: #f0883e; --gh-failing: #ff7b72; --gh-ready: #3fb950; --gh-merged: #ab7df8; --gh-closed: #e5534b;
+  --hl: #4d4100;
+  --hl-bar: #e6b800;
   --live: #ff7aa8;
   --live-soft: rgba(255, 122, 168, 0.12);
   --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.55);

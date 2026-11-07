@@ -1,9 +1,13 @@
-import { commit, docOf, get, seedInbox, set, uid } from './store';
-import type { Current, Flags, FocusState, Kind, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
+import { countItems } from './clip';
+import type { ClipItem } from './clip';
+import { CALENDAR, DENSITIES, SCALES, commit, docOf, get, seedInbox, set, uid } from './store';
+import type { Current, Doc, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
-import { FX, fmt, isoDay, meetingsFor, nextModel, reconcilePlan, startable } from './model';
+import { DEFAULT_COMMENTS, prLabel } from './Pr';
+import { FX, ROOT, doneOf, fmt, plain, prLinks, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
+import { quietFlip } from './flip';
 
 /* ---------- toasts ---------- */
 export function toast(text: string, tone: Toast['tone'] = 'info') {
@@ -14,8 +18,15 @@ export function toast(text: string, tone: Toast['tone'] = 'info') {
 export const dismissToast = (id: string) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 
 /* ---------- navigation / window ---------- */
-export const setTab = (tab: Tab) => set(() => ({ tab, hidden: false, menu: null, edit: null, ins: null }));
+export const setTab = (tab: Tab) => set(() => ({ tab, hidden: false, menu: null, edit: null, ins: null, multi: [], anchor: null }));
 export const setLayout = (layout: Layout) => set(() => ({ layout, hidden: false }));
+export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: number; w: number; h: number } | null) =>
+  set((s) => {
+    const b = { ...s.bounds };
+    if (r) b[layout] = r;
+    else delete b[layout];
+    return { bounds: b };
+  });
 export const toggleHidden = () => set((s) => ({ hidden: !s.hidden }));
 export const openCapture = () => set(() => ({ capture: true }));
 export const closeCapture = () => set(() => ({ capture: false }));
@@ -23,29 +34,119 @@ export const closeMenu = () => {
   set(() => ({ menu: null }));
   focusArea();
 };
+export const setScale = (i: number) => (quietFlip(), set(() => ({ scale: Math.max(0, Math.min(SCALES.length - 1, i)) })));
+export const setDensity = (i: number) => (quietFlip(), set(() => ({ density: Math.max(0, Math.min(DENSITIES.length - 1, i)) })));
+/* ---------- highlights: changes the user did not make ---------- */
+/** mark things yellow until the mouse passes over them */
+export function highlight(ids: string[]) {
+  if (!ids.length) return;
+  set((s) => ({ hl: { ...s.hl, ...Object.fromEntries(ids.map((id) => [id, true as const])) } }));
+}
+export function dismissHl(ids: string[]) {
+  const hl = get().hl;
+  if (!ids.some((id) => hl[id])) return;
+  set((s) => {
+    const next = { ...s.hl };
+    ids.forEach((id) => delete next[id]);
+    return { hl: next };
+  });
+}
+
+/** the mocked GitHub connector reports a new status for a PR */
+export function setPrStatus(key: string, status: PrStatus) {
+  const prev = get().prs[key] ?? 'review';
+  if (prev === status) return;
+  set((s) => ({ prs: { ...s.prs, [key]: status } }));
+  highlight(get().nodes.filter((n) => prLinks(n.title).some((l) => l.key === key)).map((n) => n.id));
+  const tone = status === 'failing' ? 'bad' : status === 'feedback' ? 'warn' : status === 'ready' || status === 'merged' ? 'good' : 'info';
+  toast(`${key.replace(/^[^/]+\//, '')}: ${prLabel(status)}`, tone);
+}
+
+export function setPrComments(key: string, n: number) {
+  if ((get().prc[key] ?? DEFAULT_COMMENTS) === n) return;
+  set((s) => ({ prc: { ...s.prc, [key]: n } }));
+  highlight(get().nodes.filter((x) => prLinks(x.title).some((l) => l.key === key)).map((x) => x.id));
+}
+
+/* ---------- meetings: delete here, bring back from the Outlook drawer ---------- */
+export function removeMeeting(id: string) {
+  const m = get().meetings.find((x) => x.id === id);
+  if (!m) return;
+  commit('Delete meeting', (s) => {
+    // only the meeting goes: whatever was inside it stays in Next as top-level items
+    return {
+      meetings: s.meetings.filter((x) => x.id !== id),
+      nodes: s.nodes.map((n) => (n.parentId === id ? { ...n, parentId: null, today: true } : n)),
+      plan: s.plan.filter((sg) => sg.owner !== id),
+      multi: [],
+    };
+  });
+  toast(`${m.title} removed — bring it back from the Outlook drawer`, 'info');
+}
+export function bringMeeting(id: string) {
+  const m = CALENDAR.find((x) => x.id === id);
+  if (!m || get().meetings.some((x) => x.id === id)) return;
+  commit('Bring in meeting', (s) => ({ meetings: [...s.meetings, { ...m }] }));
+  toast(`${m.title} is back in Next`, 'good');
+}
+
+/* ---------- the Outlook / GitHub / DevOps drawers ---------- */
+export const openDrawer = (kind: DrawerKind) =>
+  set((s) => ({ drawer: s.drawer?.kind === kind ? null : { kind, tab: kind === 'outlook' ? 'today' : kind === 'github' ? 'assigned' : 'mentions', sel: 0 }, menu: null }));
+export const closeDrawer = () => {
+  set(() => ({ drawer: null }));
+  focusArea();
+};
+export const setDrawerTab = (tab: string) => set((s) => (s.drawer ? { drawer: { ...s.drawer, tab, sel: 0 } } : {}));
+export const setDrawerSel = (sel: number) => set((s) => (s.drawer ? { drawer: { ...s.drawer, sel } } : {}));
+
+/** pull something from a source into yatai: straight into Next, or into the Inbox to triage later */
+export function bringIn(spec: { title: string; smart?: Node['smart']; pr?: { key: string; status: PrStatus; comments?: number } }, to: 'next' | 'inbox') {
+  if (to === 'inbox') {
+    capture(spec.title);
+    return toast('Added to the Inbox', 'good');
+  }
+  const node = mk(null, spec.title, { today: true, smart: spec.smart, status: spec.smart ? 'waiting' : 'todo' });
+  commit('Bring in', (s) => ({
+    nodes: [...s.nodes, node],
+    prs: spec.pr && !s.prs[spec.pr.key] ? { ...s.prs, [spec.pr.key]: spec.pr.status } : s.prs,
+    prc: spec.pr?.comments != null && s.prc[spec.pr.key] == null ? { ...s.prc, [spec.pr.key]: spec.pr.comments } : s.prc,
+    nsel: { card: 's_' + ROOT, row: node.id },
+    multi: [],
+  }));
+  toast('Added to Next', 'good');
+}
+
 export const toggleHelp = () => set((s) => ({ help: !s.help }));
-export const pick = (card: string | null, row: string | null) => set(() => ({ nsel: { card, row } }));
+export const pick = (card: string | null, row: string | null) => set(() => ({ nsel: { card, row }, multi: [], anchor: null }));
+export const setMulti = (ids: string[], anchor: string | null) => set(() => ({ multi: ids, anchor }));
 export const setExpanded = (id: string, v: boolean) => set((s) => ({ expanded: { ...s.expanded, [id]: v } }));
 
 /* ---------- undo / redo ---------- */
+/** items an undo/redo brings back are highlighted: they may reappear where the user is not looking */
+function appeared(next: Doc) {
+  const have = new Set(get().nodes.map((n) => n.id));
+  highlight(next.nodes.filter((n) => !have.has(n.id)).map((n) => n.id));
+}
 export function undo() {
   const e = get().past.at(-1);
   if (!e) return toast('Nothing to undo');
+  appeared(e.doc);
   set((s) => ({ ...e.doc, past: s.past.slice(0, -1), future: [{ label: e.label, doc: docOf(s) }, ...s.future] }));
   toast(`Undid: ${e.label}`);
 }
 export function redo() {
   const e = get().future[0];
   if (!e) return toast('Nothing to redo');
+  appeared(e.doc);
   set((s) => ({ ...e.doc, future: s.future.slice(1), past: [...s.past, { label: e.label, doc: docOf(s) }] }));
   toast(`Redid: ${e.label}`);
 }
 
-/* ---------- node helpers (pure) ---------- */
-const mk = (kind: Kind, parentId: string | null, title: string, extra: Partial<Node> = {}): Node => ({
+/* ---------- item helpers (pure) ---------- */
+const mk = (parentId: string | null, title: string, extra: Partial<Node> = {}): Node => ({
   id: uid(),
   parentId,
-  kind,
   title,
   status: 'todo',
   today: false,
@@ -64,22 +165,66 @@ export function subtree(nodes: Node[], id: string): Set<string> {
   }
   return ids;
 }
+export const subtreeIds = (nodes: Node[], ids: string[]) => {
+  const out = new Set<string>();
+  ids.forEach((id) => subtree(nodes, id).forEach((x) => out.add(x)));
+  return out;
+};
+/** index of the last node of id's subtree */
+const subtreeEnd = (nodes: Node[], id: string) => {
+  const sub = subtree(nodes, id);
+  let idx = -1;
+  nodes.forEach((n, i) => {
+    if (sub.has(n.id)) idx = i;
+  });
+  return idx;
+};
 /** insert after `afterId` and its whole subtree (keeps sibling order intact) */
 function insertAfter(nodes: Node[], node: Node, afterId?: string | null): Node[] {
   const out = [...nodes];
-  let idx = -1;
-  if (afterId) {
-    const sub = subtree(nodes, afterId);
-    nodes.forEach((n, i) => {
-      if (sub.has(n.id)) idx = i;
-    });
-  }
+  const idx = afterId ? subtreeEnd(nodes, afterId) : -1;
   if (idx < 0) out.push(node);
   else out.splice(idx + 1, 0, node);
   return out;
 }
+/** insert immediately above `beforeId` */
+function insertBefore(nodes: Node[], node: Node, beforeId: string): Node[] {
+  const out = [...nodes];
+  const idx = out.findIndex((n) => n.id === beforeId);
+  if (idx < 0) out.push(node);
+  else out.splice(idx, 0, node);
+  return out;
+}
 const lastChild = (nodes: Node[], pid: string) => [...nodes].reverse().find((n) => n.parentId === pid)?.id ?? null;
 const openIt = (nodes: Node[], id: string | null) => nodes.map((n) => (n.id === id && !n.open ? { ...n, open: true } : n));
+
+/** move a subtree: under `parentId`, before / after a sibling, or at the end of the parent's children */
+type Place = { before: string } | { after: string } | { end: true };
+function relocate(nodes: Node[], id: string, parentId: string | null, at: Place): Node[] {
+  const sub = subtree(nodes, id);
+  const moved = nodes.filter((n) => sub.has(n.id)).map((n) => (n.id === id ? { ...n, parentId, modified: Date.now() } : n));
+  const rest = nodes.filter((n) => !sub.has(n.id));
+  let idx: number;
+  if ('before' in at) idx = rest.findIndex((n) => n.id === at.before);
+  else if ('after' in at) idx = subtreeEnd(rest, at.after) + 1;
+  else idx = parentId ? subtreeEnd(rest, parentId) + 1 : rest.length;
+  rest.splice(idx < 0 ? rest.length : idx, 0, ...moved);
+  return rest;
+}
+/** selected items that do not have a selected ancestor, in tree order */
+function selectionTops(nodes: Node[], ids: string[]) {
+  const sel = new Set(ids);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const hasSelAncestor = (n: Node) => {
+    let p = n.parentId ? byId.get(n.parentId) : undefined;
+    while (p) {
+      if (sel.has(p.id)) return true;
+      p = p.parentId ? byId.get(p.parentId) : undefined;
+    }
+    return false;
+  };
+  return nodes.filter((n) => sel.has(n.id) && !hasSelAncestor(n));
+}
 
 function stopCurrent(nodes: Node[], cur: Current | null, at: number): Node[] {
   if (!cur) return nodes;
@@ -90,7 +235,7 @@ function stopCurrent(nodes: Node[], cur: Current | null, at: number): Node[] {
 
 export const planOf = (s: State) => reconcilePlan(s.plan, s.nodes, s.meetings);
 
-/* ---------- generic node ops ---------- */
+/* ---------- generic item ops ---------- */
 export function patchNodes(label: string, ids: string[], p: Partial<Node> | ((n: Node) => Partial<Node>)) {
   if (!ids.length) return;
   const t = new Set(ids);
@@ -99,17 +244,16 @@ export function patchNodes(label: string, ids: string[], p: Partial<Node> | ((n:
   }));
 }
 
-export function addNode(kind: Kind, parentId: string | null, title: string, afterId?: string | null, extra: Partial<Node> = {}, label?: string): string {
-  const node = mk(kind, parentId, title, extra);
-  commit(label ?? `Add ${kind}`, (s) => ({ nodes: openIt(insertAfter(s.nodes, node, afterId), parentId), sel: node.id }));
+export function addNode(parentId: string | null, title: string, afterId?: string | null, extra: Partial<Node> = {}, label = 'Add item', beforeId?: string): string {
+  const node = mk(parentId, title, extra);
+  commit(label, (s) => ({ nodes: openIt(beforeId ? insertBefore(s.nodes, node, beforeId) : insertAfter(s.nodes, node, afterId), parentId), sel: node.id, multi: [] }));
   return node.id;
 }
 
 export function removeNodes(ids: string[], label = 'Delete') {
   commit(label, (s) => {
-    const kill = new Set<string>();
-    ids.forEach((id) => subtree(s.nodes, id).forEach((x) => kill.add(x)));
-    return { nodes: s.nodes.filter((n) => !kill.has(n.id)), current: s.current && kill.has(s.current.id) ? null : s.current };
+    const kill = subtreeIds(s.nodes, ids);
+    return { nodes: s.nodes.filter((n) => !kill.has(n.id)), current: s.current && kill.has(s.current.id) ? null : s.current, multi: [], anchor: null };
   });
 }
 
@@ -136,31 +280,39 @@ export function setStatus(ids: string[], status: Status, label: string) {
     return { nodes: nodes.map((n) => (t.has(n.id) ? { ...n, status, modified: Date.now() } : n)), current };
   });
 }
-/** done / not done is only a visual marker: nothing disappears */
-export function toggleDoneNodes(ids: string[]) {
-  const ns = get().nodes.filter((n) => ids.includes(n.id));
-  if (!ns.length) return;
-  const allDone = ns.every((n) => n.status === 'done');
-  setStatus(ids, allDone ? 'todo' : 'done', allDone ? 'Mark not done' : 'Mark done');
-}
-/** ids a "done"/"estimate"… command applies to for a container: the node and its actions (never projects) */
-export const leafIds = (nodes: Node[], id: string) => {
-  const sub = subtree(nodes, id);
-  return nodes.filter((n) => sub.has(n.id) && n.kind !== 'project').map((n) => n.id);
-};
-export const actionIdsUnder = (nodes: Node[], id: string) => {
-  const sub = subtree(nodes, id);
-  return nodes.filter((n) => sub.has(n.id) && n.kind === 'action').map((n) => n.id);
+/** an item shows as done when it is marked done itself — or when it has children and every leaf under it is done */
+export const isDone = (nodes: Node[], id: string) => {
+  const n = nodes.find((x) => x.id === id);
+  return !!n && (n.status === 'done' || (hasKids(nodes, id) && doneOf(nodes, id)));
 };
 
-export function toggleToday(id: string) {
-  const n = get().nodes.find((x) => x.id === id);
-  if (!n || n.kind === 'project') return;
-  const on = !n.today;
-  const ids = n.kind === 'task' ? [id, ...actionIdsUnder(get().nodes, id).filter((a) => get().nodes.find((x) => x.id === a)!.status !== 'done')] : [id];
-  patchNodes(on ? 'Add to Next' : 'Remove from Next', ids, { today: on, later: undefined });
+/**
+ * done / not done is only a visual marker — nothing disappears. It applies to exactly the items given:
+ * completing a parent never touches its children (they keep whatever state they had).
+ */
+export function toggleDoneNodes(ids: string[]) {
+  const nodes = get().nodes;
+  const known = ids.filter((id) => nodes.some((n) => n.id === id && n.status !== 'dropped'));
+  if (!known.length) return;
+  const allDone = known.every((id) => isDone(nodes, id));
+  // un-completing can only clear what was marked on the item itself (a parent whose children are all done stays done)
+  const targets = allDone ? known.filter((id) => nodes.find((n) => n.id === id)!.status === 'done') : known.filter((id) => !isDone(nodes, id));
+  setStatus(targets, allDone ? 'todo' : 'done', allDone ? 'Mark not done' : 'Mark done');
 }
-export const unplan = (ids: string[]) => patchNodes('Remove from Next', ids, { today: false });
+
+export function toggleToday(id: string) {
+  const nodes = get().nodes;
+  const n = nodes.find((x) => x.id === id);
+  if (!n) return;
+  if (!hasKids(nodes, id)) return patchNodes(n.today ? 'Remove from Next' : 'Add to Next', [id], { today: !n.today, later: n.today ? n.later : undefined });
+  const open = leavesOf(nodes, id).filter((l) => l.status !== 'done');
+  if (open.every((l) => l.today)) return unplan([id]); // the whole hierarchy goes, parent included
+  patchNodes('Add to Next', open.map((l) => l.id), { today: true, later: undefined });
+}
+/** take items (with everything beneath them) out of Next; they stay in the Organizer */
+export const unplan = (ids: string[]) => {
+  patchNodes('Remove from Next', [...subtreeIds(get().nodes, ids)], { today: false });
+};
 
 export const toggleOpen = (id: string, open: boolean) => set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, open } : n)) }));
 export function toggleCardOpen(c: CardM, open: boolean) {
@@ -173,139 +325,208 @@ export const cycleEst = (ids: string[], dir: 1 | -1) => patchNodes('Estimate', i
 export const setDue = (ids: string[], days: number | null) =>
   patchNodes(days == null ? 'Clear due date' : 'Set due date', ids, { due: days == null ? undefined : isoDay(days) });
 export function deferTo(ids: string[], days: number) {
-  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, ids, { today: false, later: days });
+  const nodes = get().nodes;
+  const all = new Set<string>();
+  ids.forEach((id) => leavesOf(nodes, id).forEach((l) => all.add(l.id)));
+  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, [...all], { today: false, later: days });
   toast(days === 1 ? 'Moved to tomorrow' : `Rescheduled to ${days} days from now`, 'good');
 }
 export const abandon = (ids: string[]) => {
-  setStatus(ids, 'dropped', 'Abandon');
+  setStatus([...subtreeIds(get().nodes, ids)], 'dropped', 'Abandon');
   toast('Abandoned — still visible, struck out', 'info');
 };
 
-export function duplicate(id: string) {
+export function duplicate(ids: string[]) {
   commit('Duplicate', (s) => {
-    const src = s.nodes.find((n) => n.id === id);
-    if (!src) return null;
-    const ids = subtree(s.nodes, id);
-    const map = new Map<string, string>();
-    const copies = s.nodes
-      .filter((n) => ids.has(n.id))
-      .map((n) => {
-        const nid = uid();
-        map.set(n.id, nid);
-        return { ...n, id: nid, status: (n.smart ? 'waiting' : 'todo') as Status, spent: undefined, lastRun: undefined, created: Date.now(), modified: Date.now() };
+    const tops = selectionTops(s.nodes, ids);
+    if (!tops.length) return null;
+    let nodes = s.nodes;
+    let plan = planOf(s);
+    let last: string | null = null;
+    for (const src of tops) {
+      const sub = subtree(nodes, src.id);
+      const map = new Map<string, string>();
+      const copies = nodes
+        .filter((n) => sub.has(n.id))
+        .map((n) => {
+          const nid = uid();
+          map.set(n.id, nid);
+          return { ...n, id: nid, status: (n.smart ? 'waiting' : 'todo') as Status, spent: undefined, lastRun: undefined, created: Date.now(), modified: Date.now() };
+        });
+      copies.forEach((c) => {
+        if (c.parentId && map.has(c.parentId)) c.parentId = map.get(c.parentId)!;
       });
-    copies.forEach((c) => {
-      if (c.parentId && map.has(c.parentId)) c.parentId = map.get(c.parentId)!;
-    });
-    let last = -1;
-    s.nodes.forEach((n, i) => {
-      if (ids.has(n.id)) last = i;
-    });
-    const nodes = [...s.nodes];
-    nodes.splice(last + 1, 0, ...copies);
-    const copyId = map.get(id)!;
-    // keep the copy right after the original inside Next
-    let plan = planOf({ ...s, nodes });
-    if (src.kind === 'action') {
-      plan = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== copyId) }));
-      const si = plan.findIndex((sg) => sg.items.includes(id));
+      const at = subtreeEnd(nodes, src.id);
+      nodes = [...nodes.slice(0, at + 1), ...copies, ...nodes.slice(at + 1)];
+      const copyId = map.get(src.id)!;
+      last = copyId;
+      // keep the copy right after the original inside Next
+      plan = planOf({ ...s, nodes, plan }).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== copyId) }));
+      const si = segOf(plan, src.id);
       if (si >= 0) {
         const items = [...plan[si].items];
-        items.splice(items.indexOf(id) + 1, 0, copyId);
+        items.splice(items.indexOf(src.id) + 1, 0, copyId);
         plan[si] = { ...plan[si], items };
-      } else plan = planOf({ ...s, nodes });
+      }
     }
-    const segId = plan.find((sg) => sg.items.includes(copyId))?.id ?? null;
-    return { nodes, plan, sel: copyId, nsel: src.kind === 'action' ? { card: segId, row: copyId } : s.nsel };
+    return { nodes, plan, sel: last, multi: [] };
   });
 }
 
-/* ---------- organizer tree ops ---------- */
-/** swap node with previous/next sibling (moving whole subtrees) */
-export function reorder(id: string, dir: -1 | 1) {
-  commit('Reorder', (s) => {
-    const me = s.nodes.find((n) => n.id === id);
-    if (!me) return null;
-    const sibs = s.nodes.filter((n) => n.parentId === me.parentId);
-    const other = sibs[sibs.findIndex((n) => n.id === id) + dir];
-    if (!other) return null;
-    const a = subtree(s.nodes, dir === -1 ? other.id : id);
-    const b = subtree(s.nodes, dir === -1 ? id : other.id);
-    const first = s.nodes.findIndex((n) => a.has(n.id));
-    const rest = s.nodes.filter((n) => !a.has(n.id) && !b.has(n.id));
-    const A = s.nodes.filter((n) => a.has(n.id));
-    const B = s.nodes.filter((n) => b.has(n.id));
-    rest.splice(first, 0, ...B, ...A);
-    return { nodes: rest };
+/* ---------- hierarchy: indent / outdent / move / reorder (any item, any depth) ---------- */
+/**
+ * ⌘]: each selected item becomes the last child of the sibling just above it
+ * (skipping selected siblings, so a block indents together). `rowsOnly` restricts that sibling to items in Next.
+ */
+export function indentItems(ids: string[], rowsOnly = false) {
+  const done = commit('Indent', (s) => {
+    const sel = new Set(ids);
+    let nodes = s.nodes;
+    let moved = 0;
+    const cards = rowsOnly ? nextModel(s).cards : [];
+    for (const x of selectionTops(s.nodes, ids)) {
+      let parent: Node | undefined;
+      const card = cards.find((c) => c.rows.some((r) => r.id === x.id));
+      if (card) {
+        // in Next the neighbour is whatever is displayed right above (moving rows only reorders the plan, not the tree)
+        const rows = card.rows;
+        const ri = rows.findIndex((r) => r.id === x.id);
+        for (let j = ri - 1; j >= 0 && rows[j].depth >= rows[ri].depth; j--) {
+          if (rows[j].depth === rows[ri].depth && rows[j].node && !sel.has(rows[j].id)) {
+            parent = rows[j].node;
+            break;
+          }
+        }
+      } else {
+        const sibs = nodes.filter((n) => n.parentId === x.parentId);
+        let i = sibs.findIndex((n) => n.id === x.id) - 1;
+        while (i >= 0 && (sel.has(sibs[i].id) || (rowsOnly && !sibs[i].today))) i--;
+        parent = sibs[i];
+      }
+      if (!parent) continue;
+      nodes = openIt(relocate(nodes, x.id, parent.id, { end: true }), parent.id);
+      moved++;
+    }
+    return moved ? { nodes } : null;
   });
+  if (!done) toast('Nothing above to indent under');
 }
 
-export const canParent = (kind: Kind, parent: Node | null) =>
-  (kind === 'project' && parent === null) || (kind === 'task' && parent?.kind === 'project') || (kind === 'action' && parent?.kind === 'task');
+/** ⌘[: each selected item becomes the next sibling of its parent */
+export function outdentItems(ids: string[]) {
+  const done = commit('Outdent', (s) => {
+    let nodes = s.nodes;
+    const placedAfter = new Map<string, string>();
+    const after2: [string, string][] = [];
+    let moved = 0;
+    for (const x of selectionTops(s.nodes, ids)) {
+      const cur = nodes.find((n) => n.id === x.id)!;
+      const parent = nodes.find((n) => n.id === cur.parentId);
+      if (!parent) continue; // already at the top level (or inside a calendar item)
+      const after = placedAfter.get(parent.id) ?? parent.id;
+      nodes = relocate(nodes, x.id, parent.parentId, { after });
+      placedAfter.set(parent.id, x.id);
+      moved++;
+      if (cur.today) after2.push([x.id, after]);
+    }
+    if (!moved) return null;
+    // in Next the item stays where it was on screen: right below its former parent (or the previous one moved out)
+    let plan = planOf({ ...s, nodes });
+    for (const [id, ref] of after2) {
+      const ti = plan.findIndex((sg) => sg.items.includes(id));
+      const ri = plan.findIndex((sg) => sg.items.includes(ref));
+      if (ti < 0 || ri < 0) continue;
+      plan = plan.map((sg, j) => (j === ti ? { ...sg, items: sg.items.filter((v) => v !== id) } : sg));
+      plan = plan.map((sg, j) => (j === ri ? { ...sg, items: [...sg.items.slice(0, sg.items.indexOf(ref) + 1), id, ...sg.items.slice(sg.items.indexOf(ref) + 1)] } : sg));
+    }
+    return { nodes, plan };
+  });
+  if (!done) toast('Already at the top level');
+}
 
-/** move subtree under `parentId`, before sibling `beforeId` (null = at the end) */
+/** move a block of siblings up/down one step (neighbours that are themselves selected are skipped over) */
+export function reorderItems(ids: string[], dir: -1 | 1, rowsOnly = false) {
+  return commit('Reorder', (s) => {
+    const sel = new Set(ids);
+    let nodes = s.nodes;
+    let moved = 0;
+    const tops = selectionTops(s.nodes, ids);
+    for (const x of dir === 1 ? [...tops].reverse() : tops) {
+      const sibs = nodes.filter((n) => n.parentId === x.parentId);
+      let i = sibs.findIndex((n) => n.id === x.id) + dir;
+      while (sibs[i] && rowsOnly && !sibs[i].today && !sel.has(sibs[i].id)) i += dir;
+      const nb = sibs[i];
+      if (!nb || sel.has(nb.id)) continue;
+      nodes = relocate(nodes, x.id, x.parentId, dir === -1 ? { before: nb.id } : { after: nb.id });
+      moved++;
+    }
+    return moved ? { nodes } : null;
+  });
+}
+export const reorder = (id: string, dir: -1 | 1) => reorderItems([id], dir);
+
+/** drag & drop in the organizer: any item can go under any other (never into itself) */
 export function moveNode(id: string, parentId: string | null, beforeId: string | null) {
   commit('Move', (s) => {
-    const me = s.nodes.find((n) => n.id === id);
-    if (!me || id === beforeId) return null;
-    const sub = subtree(s.nodes, id);
-    if (parentId && sub.has(parentId)) return null;
-    const moved = s.nodes.filter((n) => sub.has(n.id)).map((n) => (n.id === id ? { ...n, parentId, modified: Date.now() } : n));
-    const rest = s.nodes.filter((n) => !sub.has(n.id));
-    let at: number;
-    if (beforeId) at = rest.findIndex((n) => n.id === beforeId);
-    else {
-      const anchor = parentId ?? null;
-      if (anchor) {
-        const sb = subtree(rest, anchor);
-        at = -1;
-        rest.forEach((n, i) => {
-          if (sb.has(n.id)) at = i;
-        });
-        at += 1;
-      } else at = rest.length;
-    }
-    rest.splice(at < 0 ? rest.length : at, 0, ...moved);
-    return { nodes: openIt(rest, parentId), sel: id };
+    if (!s.nodes.some((n) => n.id === id) || id === beforeId) return null;
+    if (parentId && subtree(s.nodes, id).has(parentId)) return null;
+    return { nodes: openIt(relocate(s.nodes, id, parentId, beforeId ? { before: beforeId } : { end: true }), parentId), sel: id, multi: [] };
   });
 }
 
 /* ---------- Next: plan (cards / splits) ops ---------- */
 const segOf = (plan: Seg[], itemId: string) => plan.findIndex((sg) => sg.items.includes(itemId));
 const withItems = (plan: Seg[], i: number, items: string[]) => plan.map((sg, j) => (j === i ? { ...sg, items } : sg));
+/** the Next row directly under a card header that this (possibly nested) row belongs to */
+function rootRowOf(nodes: Node[], plan: Seg[], id: string): string {
+  let cur: string = id;
+  for (let i = 0; i < 50; i++) {
+    if (segOf(plan, cur) >= 0) return cur;
+    const p = nodes.find((n) => n.id === cur)?.parentId;
+    if (!p) break;
+    cur = p;
+  }
+  return id;
+}
 
-export function addAction(ownerId: string, segId: string | undefined, afterId: string | null, text: string): string {
-  const node = mk('action', ownerId, text, { today: true });
-  commit('Add action', (s) => {
-    const sib =
-      afterId && s.nodes.some((n) => n.id === afterId && n.parentId === ownerId)
-        ? afterId
-        : lastChild(s.nodes, ownerId) ?? (s.nodes.some((n) => n.id === ownerId) ? ownerId : null);
-    const nodes = openIt(insertAfter(s.nodes, node, sib), ownerId);
+/** new row below `afterId` / above `beforeId` (as their sibling, at any depth) or, with neither, at the top of the card */
+export function addAction(ownerId: string, segId: string | undefined, afterId: string | null, text: string, beforeId?: string): string {
+  const all = get().nodes;
+  const anchor = all.find((n) => n.id === (beforeId ?? afterId));
+  const parentId = anchor ? anchor.parentId : ownerId === ROOT ? null : ownerId;
+  const node = mk(parentId, text, { today: true });
+  commit('Add item', (s) => {
+    const sib = afterId && anchor ? anchor.id : (parentId && lastChild(s.nodes, parentId)) || parentId;
+    const nodes = openIt(beforeId && anchor ? insertBefore(s.nodes, node, beforeId) : insertAfter(s.nodes, node, sib), parentId);
     const meetings = s.meetings.map((m) => (m.id === ownerId ? { ...m, open: true } : m));
-    let plan = planOf({ ...s, nodes, meetings }).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== node.id) }));
-    const ti = afterId ? segOf(plan, afterId) : plan.findIndex((sg) => sg.id === segId);
-    if (ti >= 0) {
-      const items = [...plan[ti].items];
-      items.splice(afterId ? items.indexOf(afterId) + 1 : 0, 0, node.id);
-      plan = withItems(plan, ti, items);
-    } else plan = planOf({ ...s, nodes, meetings });
-    const card = plan.find((sg) => sg.items.includes(node.id))?.id ?? null;
-    return { nodes, meetings, plan, nsel: { card, row: node.id } };
+    const base = planOf({ ...s, nodes, meetings });
+    let plan = base.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== node.id) }));
+    if (base.some((sg) => sg.items.includes(node.id))) {
+      // a top-level row of the card: slot it in beside its neighbour (or first)
+      const ref = beforeId ?? afterId;
+      const ti = ref && segOf(plan, ref) >= 0 ? segOf(plan, ref) : plan.findIndex((sg) => sg.id === segId);
+      if (ti >= 0) {
+        const items = [...plan[ti].items];
+        const at = ref && items.includes(ref) ? items.indexOf(ref) + (beforeId ? 0 : 1) : 0;
+        items.splice(at, 0, node.id);
+        plan = withItems(plan, ti, items);
+      } else plan = base;
+    } else plan = base; // nested under a row: the tree order is enough
+    const card = plan.find((sg) => sg.items.includes(rootRowOf(nodes, plan, node.id)))?.id ?? null;
+    return { nodes, meetings, plan, nsel: { card, row: node.id }, multi: [] };
   });
   return node.id;
 }
 
 export function addTaskCard(parentId: string | null, title: string, afterSeg: string | null): { id: string; seg: string } {
-  const node = mk('task', parentId, title, { today: true });
-  commit('Add task', (s) => {
+  const node = mk(parentId, title);
+  commit('Add item', (s) => {
     const nodes = openIt(insertAfter(s.nodes, node, parentId ? lastChild(s.nodes, parentId) ?? parentId : null), parentId);
-    const full = planOf({ ...s, nodes });
-    const seg = full.find((sg) => sg.owner === node.id)!;
-    const plan = full.filter((sg) => sg.id !== seg.id);
+    const seg: Seg = { id: 's_' + node.id, owner: node.id, items: [], keep: true };
+    const plan = planOf({ ...s, nodes });
     const at = afterSeg ? plan.findIndex((sg) => sg.id === afterSeg) : -1;
     plan.splice(afterSeg === null ? 0 : at < 0 ? plan.length : at + 1, 0, seg);
-    return { nodes, plan, nsel: { card: seg.id, row: null } };
+    return { nodes, plan, nsel: { card: seg.id, row: null }, multi: [] };
   });
   return { id: node.id, seg: 's_' + node.id };
 }
@@ -330,8 +551,9 @@ function moveSegPatch(s: State, plan: Seg[], segId: string, dir: -1 | 1): Partia
 
 export const moveCard = (key: string, dir: -1 | 1) => commit('Reorder', (s) => moveSegPatch(s, planOf(s), key, dir));
 
-/** ⌘↑/↓ on an action: reorder inside its card; past the edge it splits out of the card (or moves the card if alone) */
+/** ⌘↑/↓ on a row: reorder inside its card; past the edge it splits out of the card (or moves the card if alone) */
 export function moveRow(id: string, dir: -1 | 1) {
+  if (!id.startsWith(FX) && segOf(planOf(get()), id) < 0) return reorderItems([id], dir, true); // nested row: tree order among its Next siblings
   commit('Reorder', (s) => {
     const plan = planOf(s);
     const si = segOf(plan, id);
@@ -353,6 +575,31 @@ export function moveRow(id: string, dir: -1 | 1) {
     }
     return moveSegPatch(s, plan, sg.id, dir);
   });
+}
+
+/** ⌘↑/↓ on a multi-selection of rows: the block moves one step */
+export function moveRows(ids: string[], dir: -1 | 1) {
+  const plan = planOf(get());
+  const tops = ids.filter((id) => segOf(plan, id) >= 0);
+  if (tops.length === ids.length) {
+    const si = segOf(plan, tops[0]);
+    if (!tops.every((id) => segOf(plan, id) === si)) return toast('Select rows from one card to move them together');
+    commit('Reorder', (s) => {
+      const p = planOf(s);
+      const items = [...p[si].items];
+      const sel = new Set(tops);
+      const order = dir === 1 ? [...items.keys()].reverse() : [...items.keys()];
+      let moved = 0;
+      for (const i of order) {
+        const j = i + dir;
+        if (sel.has(items[i]) && items[j] !== undefined && !sel.has(items[j])) {
+          [items[i], items[j]] = [items[j], items[i]];
+          moved++;
+        }
+      }
+      return moved ? { plan: withItems(p, si, items) } : null;
+    });
+  } else reorderItems(ids, dir, true);
 }
 
 export function dropRowInSeg(id: string, targetRowId: string, pos: 'before' | 'after') {
@@ -415,17 +662,22 @@ export function consolidate(segId: string) {
 /* ---------- start / stopwatch / focus ---------- */
 export function startAction(id: string) {
   const n = get().nodes.find((x) => x.id === id);
-  if (!n || n.kind !== 'action') return;
+  if (!n) return;
   if (n.smart) return toast(`(mock) opening ${n.title.split('\n')[0]} in browser`);
   commit('Start', (s) => {
     const at = Date.now();
     let nodes = stopCurrent(s.nodes, s.current, at);
     nodes = nodes.map((x) => (x.id === id ? { ...x, status: 'doing', lastRun: at, today: true, later: undefined, modified: at } : x));
-    // starting moves the action — and its card — to the top of the stack
+    // reveal it: a started item must be visible, so open any collapsed parents above it
+    const anc = new Set<string>();
+    for (let p = nodes.find((x) => x.id === id)?.parentId; p; p = nodes.find((x) => x.id === p)?.parentId ?? null) anc.add(p);
+    nodes = nodes.map((x) => (anc.has(x.id) && !x.open ? { ...x, open: true } : x));
+    // starting moves the row — and its card — to the top of the stack
     let plan = planOf({ ...s, nodes });
-    const si = segOf(plan, id);
+    const root = rootRowOf(nodes, plan, id);
+    const si = segOf(plan, root);
     if (si >= 0) {
-      const seg = { ...plan[si], items: [id, ...plan[si].items.filter((x) => x !== id)] };
+      const seg = { ...plan[si], items: [root, ...plan[si].items.filter((x) => x !== root)] };
       plan = [seg, ...plan.filter((_, j) => j !== si)];
     }
     return {
@@ -433,6 +685,7 @@ export function startAction(id: string) {
       plan,
       current: { id, since: at },
       nsel: { card: plan[0]?.id ?? null, row: id },
+      multi: [],
       expanded: { ...s.expanded, [id]: true },
     };
   });
@@ -444,17 +697,31 @@ export function toggleStart(id: string) {
   if (get().current?.id === id) stopAction();
   else startAction(id);
 }
+/** shift+space on any item: start it, or — if it has children — its first open leaf */
+export function toggleStartItem(id: string) {
+  const cur = get().current;
+  if (cur && subtree(get().nodes, id).has(cur.id)) return stopAction(); // the running leaf is inside: pause it
+  if (hasKids(get().nodes, id)) startFirst(id);
+  else toggleStart(id);
+}
+export function focusItem(id: string) {
+  if (hasKids(get().nodes, id)) {
+    startFirst(id);
+    const c = get().current;
+    if (c) startFocus(c.id);
+  } else startFocus(id);
+}
 /** enter on a task / project / card: start its first open action */
 export function startFirst(nodeId: string) {
   const s = get();
   const sub = subtree(s.nodes, nodeId);
-  const n = s.nodes.find((x) => sub.has(x.id) && startable(x));
+  const n = s.nodes.find((x) => sub.has(x.id) && startable(x, s.nodes));
   if (n) startAction(n.id);
   else toast('No open actions to start here');
 }
 export function startCard(c: CardM) {
   if (c.kind === 'attention') return toast(`(mock) opening ${c.rows[0].node!.title.split('\n')[0]} in browser`);
-  const r = c.rows.find((x) => x.node && startable(x.node));
+  const r = c.rows.find((x) => x.node && startable(x.node, get().nodes));
   if (r) return startAction(r.id);
   if (c.kind === 'meeting') return toast(`(mock) joining ${c.meeting!.title}`);
   toast('No open actions to start here');
@@ -514,6 +781,57 @@ export function capture(text: string) {
   if (!text) return;
   commit('Capture', (s) => ({ inbox: [{ id: uid(), text, created: Date.now() }, ...s.inbox] }));
 }
+/** add an inbox item right below `afterId` (null = at the top) or right above `beforeId` */
+export function captureAt(text: string, afterId: string | null, beforeId?: string): string {
+  const it = { id: uid(), text: text.trim(), created: Date.now() };
+  commit('Capture', (s) => {
+    const inbox = [...s.inbox];
+    const bi = beforeId ? inbox.findIndex((x) => x.id === beforeId) : -1;
+    const ai = afterId ? inbox.findIndex((x) => x.id === afterId) : -1;
+    inbox.splice(bi >= 0 ? bi : ai >= 0 ? ai + 1 : 0, 0, it);
+    return { inbox, isel: it.id };
+  });
+  return it.id;
+}
+export function dropInboxMany(ids: string[]) {
+  commit(ids.length > 1 ? `Discard ${ids.length} inbox items` : 'Discard inbox item', (s) => ({ inbox: s.inbox.filter((i) => !ids.includes(i.id)) }));
+}
+export function reorderInboxMany(ids: string[], dir: -1 | 1) {
+  commit('Reorder inbox', (s) => {
+    const inbox = [...s.inbox];
+    const order = dir < 0 ? inbox.map((_, i) => i) : inbox.map((_, i) => inbox.length - 1 - i);
+    let moved = false;
+    for (const i of order) {
+      const j = i + dir;
+      if (!ids.includes(inbox[i].id) || j < 0 || j >= inbox.length || ids.includes(inbox[j].id)) continue;
+      [inbox[i], inbox[j]] = [inbox[j], inbox[i]];
+      moved = true;
+    }
+    return moved ? { inbox } : null;
+  });
+}
+/** file inbox items as new items under `parentId` (before `beforeId`, else at the end) — what dropping on the organizer does */
+export function fileInboxTo(ids: string[], parentId: string | null, beforeId: string | null) {
+  const items = get().inbox.filter((i) => ids.includes(i.id));
+  if (!items.length) return;
+  let first = '';
+  commit(items.length > 1 ? `File ${items.length} items` : `File "${items[0].text.slice(0, 24)}"`, (s) => {
+    let nodes = s.nodes;
+    let last: string | null = null;
+    for (const it of items) {
+      const node = mk(parentId, it.text);
+      first = first || node.id;
+      if (beforeId) nodes = insertBefore(nodes, node, beforeId);
+      else nodes = insertAfter(nodes, node, last ?? (parentId ? lastChild(nodes, parentId) ?? parentId : [...nodes].reverse().find((n) => !n.parentId)?.id ?? null));
+      last = node.id;
+    }
+    nodes = openIt(nodes, parentId);
+    const idx = s.inbox.findIndex((i) => ids.includes(i.id));
+    const rest = s.inbox.filter((i) => !ids.includes(i.id));
+    return { nodes, inbox: rest, sel: first, multi: [], isel: rest[Math.min(idx, rest.length - 1)]?.id ?? null };
+  });
+  toast(items.length > 1 ? `Filed ${items.length} items` : 'Filed', 'good');
+}
 export function dropInbox(id: string) {
   commit('Discard inbox item', (s) => ({ inbox: s.inbox.filter((i) => i.id !== id) }));
 }
@@ -531,20 +849,19 @@ export function reorderInbox(id: string, dir: -1 | 1) {
   });
 }
 
-/** file an inbox item: onto a project => new task; onto a task => new action */
+/** file an inbox item: it becomes a new child item of whatever you drop it on */
 export function fileInbox(itemId: string, targetId: string) {
   const item = get().inbox.find((i) => i.id === itemId);
   const target = get().nodes.find((n) => n.id === targetId);
   if (!item || !target) return;
-  const kind: Kind = target.kind === 'project' ? 'task' : 'action';
-  const node = mk(kind, target.id, item.text);
+  const node = mk(target.id, item.text);
   commit(`File "${item.text.slice(0, 24)}"`, (s) => {
     const nodes = openIt(insertAfter(s.nodes, node, lastChild(s.nodes, target.id) ?? target.id), target.id);
     const idx = s.inbox.findIndex((i) => i.id === itemId);
     const next = s.inbox[idx + 1] ?? s.inbox[idx - 1];
     return { nodes, inbox: s.inbox.filter((i) => i.id !== itemId), sel: target.id, isel: next?.id ?? null };
   });
-  toast(`Filed under ${target.title}`, 'good');
+  toast(`Filed under ${target.title.split('\n')[0]}`, 'good');
 }
 
 export async function suggestInbox(ids?: string[]) {
@@ -562,31 +879,35 @@ export const clearSuggestion = (id: string) => set((s) => ({ inbox: s.inbox.map(
 /* ---------- AI (mocked) ---------- */
 export async function breakDown(taskId: string) {
   const t = get().nodes.find((n) => n.id === taskId);
-  if (!t || t.kind === 'project') return;
+  if (!t) return;
   set(() => ({ aiBusy: `Breaking down "${t.title.split('\n')[0]}"…` }));
   await sleep(get().aiDelay);
-  const steps = aiBreakdown(t.title.split('\n')[0]);
+  const steps = aiBreakdown(plain(t.title.split('\n')[0]));
+  const made: string[] = [];
   commit('AI breakdown', (s) => {
+    const inNext = t.today || leavesOf(s.nodes, taskId).some((l) => l.today);
     let nodes = s.nodes;
     let after = lastChild(nodes, taskId) ?? taskId;
     for (const st of steps) {
-      const node = mk('action', taskId, st.title, { est: st.est, today: t.today });
+      const node = mk(taskId, st.title, { est: st.est, today: inNext });
+      made.push(node.id);
       nodes = insertAfter(nodes, node, after);
       after = node.id;
     }
     return { nodes: openIt(nodes, taskId), sel: taskId };
   });
   set(() => ({ aiBusy: null }));
-  toast(`Added ${steps.length} actions to "${t.title.split('\n')[0]}"`, 'good');
+  highlight(made);
+  toast(`Added ${steps.length} items to "${t.title.split('\n')[0]}"`, 'good');
 }
 
 export async function estimate(id: string) {
   set(() => ({ aiBusy: 'Estimating effort…' }));
   await sleep(get().aiDelay);
-  const ids = actionIdsUnder(get().nodes, id).filter((a) => !get().nodes.find((n) => n.id === a)!.est);
+  const ids = leavesOf(get().nodes, id).filter((l) => !l.est).map((l) => l.id);
   patchNodes('AI estimate', ids, (n) => ({ est: aiEstimate(n.title) }));
   set(() => ({ aiBusy: null }));
-  toast(ids.length ? `Estimated ${ids.length} action(s) from similar past work` : 'Nothing to estimate', ids.length ? 'good' : 'info');
+  toast(ids.length ? `Estimated ${ids.length} item(s) from similar past work` : 'Nothing to estimate', ids.length ? 'good' : 'info');
 }
 
 export async function planToday() {
@@ -598,6 +919,7 @@ export async function planToday() {
     return { nodes: s.nodes.map((n) => (ids.includes(n.id) ? { ...n, today: true } : n)) };
   });
   set(() => ({ aiBusy: null }));
+  highlight(ids);
   toast(ids.length ? `Added ${ids.length} actions to Next (fits around your meetings)` : 'Next already looks full', 'good');
 }
 
@@ -606,7 +928,7 @@ export function openAi(ctxId?: string) {
   const s = get();
   const node = ctxId ? s.nodes.find((n) => n.id === ctxId) : undefined;
   const meeting = ctxId ? s.meetings.find((m) => m.id === ctxId) : undefined;
-  const ctx = node ? node.title.split('\n')[0] : meeting?.title;
+  const ctx = node ? plain(node.title.split('\n')[0]) : meeting?.title;
   set(() => ({ ai: { ctx, ctxId, msgs: [], busy: false }, menu: null }));
 }
 export function closeAi() {
@@ -624,7 +946,7 @@ export async function askAi(text: string) {
   const r = aiReply(text, s.ai.ctx, s);
   const chips: { label: string; run: () => void }[] = [];
   if (r.intent === 'plan') chips.push({ label: '✨ Plan my day', run: () => planToday() });
-  if (r.intent === 'breakdown' && s.ai.ctxId && s.nodes.some((n) => n.id === s.ai!.ctxId && n.kind !== 'project'))
+  if (r.intent === 'breakdown' && s.ai.ctxId && s.nodes.some((n) => n.id === s.ai!.ctxId))
     chips.push({ label: '✨ Add as actions', run: () => breakDown(s.ai!.ctxId!) });
   set((st) => ({ ai: st.ai && { ...st.ai, busy: false, msgs: [...st.ai.msgs, { id: uid(), role: 'ai', text: r.text, chips: chips.length ? chips : undefined }] } }));
 }
@@ -641,8 +963,16 @@ const flagToasts: Partial<Record<keyof Flags, { text: string; tone: Toast['tone'
   meetingMoved: { text: 'Design review moved to 11:30 (was 14:00)', tone: 'warn' },
 };
 
+const flagTargets: Partial<Record<keyof Flags, string[]>> = {
+  pipelineFailed: ['a_pipe'],
+  workItemChanged: ['a_wi'],
+  aiNeedsFeedback: ['a_claude'],
+  aiDone: ['a_claude'],
+  meetingMoved: ['m2'],
+};
 export function setFlag(k: keyof Flags, v: boolean) {
   set((s) => ({ flags: { ...s.flags, [k]: v } }));
+  if (v) highlight(flagTargets[k] ?? []);
   if (v && flagToasts[k]) toast(flagToasts[k]!.text, flagToasts[k]!.tone);
 }
 
@@ -664,4 +994,59 @@ export function jumpToNextMeeting(beforeMin = 10) {
 
 export function addInboxSamples() {
   commit('Add inbox samples', (s) => ({ inbox: [...seedInbox().slice(0, 3), ...s.inbox] }));
+}
+
+
+/* ---------- paste (markdown list → items) ---------- */
+export function pasteItems(tree: ClipItem[], at: { parentId: string | null; afterId: string | null; next?: { owner: string; seg?: string } }) {
+  if (!tree.length) return;
+  const today = !!at.next;
+  const made: Node[] = [];
+  const tops: Node[] = [];
+  const build = (items: ClipItem[], parentId: string | null, top: boolean) =>
+    items.forEach((it) => {
+      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo' });
+      made.push(n);
+      if (top) tops.push(n);
+      build(it.kids, n.id, false);
+    });
+  build(tree, at.parentId, true);
+  commit(`Paste ${made.length} item${made.length > 1 ? 's' : ''}`, (s) => {
+    let nodes = s.nodes;
+    let after: string | null = at.afterId ?? (at.parentId ? lastChild(nodes, at.parentId) ?? at.parentId : null);
+    for (const n of made) {
+      nodes = insertAfter(nodes, n, after);
+      after = n.id;
+    }
+    nodes = openIt(nodes, at.parentId);
+    const out: Partial<typeof s> = { nodes, multi: tops.length > 1 ? tops.map((n) => n.id) : [], anchor: tops.length > 1 ? tops[0].id : null, sel: tops[0].id };
+    if (at.next) {
+      const meetings = s.meetings.map((m) => (m.id === at.next!.owner ? { ...m, open: true } : m));
+      const base = planOf({ ...s, nodes, meetings });
+      const slot = tops.filter((n) => base.some((sg) => sg.items.includes(n.id))).map((n) => n.id);
+      let plan = base.map((sg) => ({ ...sg, items: sg.items.filter((x) => !slot.includes(x)) }));
+      const ref = at.afterId;
+      const ti = ref && segOf(plan, ref) >= 0 ? segOf(plan, ref) : plan.findIndex((sg) => sg.id === at.next!.seg);
+      if (slot.length && ti >= 0) {
+        const items = [...plan[ti].items];
+        items.splice(ref && items.includes(ref) ? items.indexOf(ref) + 1 : 0, 0, ...slot);
+        plan = withItems(plan, ti, items);
+      } else plan = base;
+      const card = plan.find((sg) => sg.items.includes(rootRowOf(nodes, plan, tops[0].id)))?.id ?? null;
+      Object.assign(out, { meetings, plan, nsel: { card, row: tops[0].id } });
+    }
+    return out;
+  });
+  toast(`Pasted ${countItems(tree)} item${countItems(tree) > 1 ? 's' : ''}`, 'good');
+}
+export function captureMany(texts: string[], afterId: string | null) {
+  if (!texts.length) return;
+  const its = texts.map((text) => ({ id: uid(), text: text.trim(), created: Date.now() }));
+  commit(`Paste ${its.length} item${its.length > 1 ? 's' : ''}`, (s) => {
+    const inbox = [...s.inbox];
+    const ai = afterId ? inbox.findIndex((x) => x.id === afterId) : -1;
+    inbox.splice(ai + 1, 0, ...its);
+    return { inbox, isel: its[0].id };
+  });
+  toast(`Pasted ${its.length} item${its.length > 1 ? 's' : ''}`, 'good');
 }
