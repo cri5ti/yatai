@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { get, useS } from './store';
+import { effLayout, get, useS } from './store';
 import type { Layout, State, Tab } from './store';
 import { Next } from './Next';
 import { Inbox } from './Inbox';
@@ -13,11 +13,10 @@ import { Drawer } from './Drawer';
 import { GhIcon } from './Pr';
 import { Settings } from './Settings';
 import { DevPanel } from './Controls';
+import { Help } from './Help';
 import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setVisible, startDrag, windowRect } from './platform';
 import type { Edge } from './platform';
 
-/** the Organizer is the full-width app: from the thin dock it expands (animated) to fill the screen */
-export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'organizer' && s.layout === 'dock' ? 'max' : s.layout);
 
 const DIRS: Record<string, Edge[]> = { dock: ['w'], float: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'], max: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] };
 
@@ -211,86 +210,6 @@ function Capture() {
         }}
       />
       <div className="cp-hint">Enter to save · Esc to cancel</div>
-    </div>
-  );
-}
-
-const HELP: [string, [string, string][]][] = [
-  [
-    'Everywhere',
-    [
-      ['⌥Space', 'Quick capture into the Inbox — from any app'],
-      ['⌥Y', 'Show / hide yatai — from any app (or click the tray icon)'],
-      ['⌘1 ⌘2 ⌘3', 'Next · Inbox · Organizer'],
-      ['⌘,', 'Settings (AI key and model)'],
-      ['↑ ↓ ← →', 'Navigate everything'],
-      ['⏎  ·  ⇧⏎', 'Add a new item below · above the selection (⏎ again keeps adding; ⏎ or Esc on a blank field stops)'],
-      ['⌘↑ ⌘↓', 'Reorder (animated) — or drag'],
-      ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
-      ['/  or right-click', 'Commands: /consolidate /abandon /due /reschedule /tomorrow /estimate /duplicate /ai'],
-      ['−  +', 'Collapse / expand everything'],
-      ['⌘Z  ⌘⇧Z', 'Undo / redo — every change goes through the undo manager'],
-      ['⌘/', 'Ask AI — its changes come back as a purple proposal'],
-      ['⌘⏎  ·  ⌘⌫', 'Accept · reject the AI proposal'],
-      ['?', 'This sheet'],
-    ],
-  ],
-  [
-    'Next',
-    [
-      ['↑ ↓', 'Move across tasks · → goes into its actions · ← back to the task'],
-      ['⇧Space', 'Start / pause the action (on a task: its first action) — stopwatch, moves it to the top'],
-      ['F2  or R', 'Edit (⇧⏎ inside the editor for a new line)'],
-      ['Space', 'Complete just this item — its children keep their own state'],
-      ['↑ / ↓', 'Always the next item you can see — children included'],
-      ['⇧↑ ⇧↓ · ⇧click · ⌘click', 'Multi-select, then Space / ⌘[ ⌘] / ⌘↑↓ / ⌫ act on all of them'],
-      ['⌘⇧⏎  or F', 'Start in focus mode'],
-      ['Space', 'Toggle done (just a marker — nothing disappears)'],
-      ['→ / ←', 'On an action: expand / collapse its notes · on a task: expand / collapse the task'],
-      ['⌘↑ ⌘↓ on an action', 'Reorder inside the task; past the edge it splits out into its own card'],
-      ['Drag a sub-item out', 'Splits it into its own card, its parent repeated as the header — drag it back onto the parent (or /consolidate) to merge'],
-      ['E', 'Estimate picker: 1=5m 2=15m 3=30m 4=1h 5=2h 6=4h 8=8h'],
-    ],
-  ],
-  [
-    'Organizer · Inbox',
-    [
-      ['A  N  ⇧N', 'Organizer: add child · sibling · project'],
-      ['T', 'Organizer: put in / take out of Next'],
-      ['F · A · S', 'Inbox: file into… · accept AI suggestion · suggest (⇧S all)'],
-    ],
-  ],
-];
-
-function Help() {
-  const s = useS();
-  if (!s.help) return null;
-  return (
-    <div className="ai-veil" onMouseDown={toggleHelp}>
-      <div
-        className="help"
-        role="dialog"
-        aria-label="Keyboard shortcuts"
-        tabIndex={-1}
-        ref={(el) => el?.focus()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' || e.key === '?') (e.preventDefault(), e.stopPropagation(), toggleHelp());
-        }}
-      >
-        <h3>Keyboard shortcuts</h3>
-        {HELP.map(([group, rows]) => (
-          <div key={group}>
-            <div className="lh">{group}</div>
-            {rows.map(([k, d]) => (
-              <div key={k} className="hrow">
-                <kbd>{k}</kbd>
-                <span>{d}</span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

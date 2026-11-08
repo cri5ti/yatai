@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { set, useS } from './store';
-import { closeSettings, toast } from './actions';
-import { refreshAiKey } from './ai';
+import { useS } from './store';
+import { act } from './act';
 import { aiKeyStatus, aiSetKey, isTauri } from './platform';
 import type { KeyStatus } from './platform';
 
@@ -22,23 +21,23 @@ export function Settings() {
   if (!s.settingsOpen) return null;
 
   const cfg = s.settings;
-  const patch = (p: Partial<typeof cfg>) => set((x) => ({ settings: { ...x.settings, ...p } }));
+  const patch = (p: Partial<typeof cfg>) => act.patchUi({ settings: { ...cfg, ...p } });
   const saveKey = async (k: string) => {
     setBusy(true);
     try {
       setSt(await aiSetKey(k));
       setKey('');
-      await refreshAiKey();
-      toast(k ? 'API key saved to the keychain' : 'API key removed', 'good');
+      act.refreshAi();
+      act.toast(k ? 'API key saved to the keychain' : 'API key removed', 'good');
     } catch (e) {
-      toast(`Keychain: ${String(e)}`, 'bad');
+      act.toast(`Keychain: ${String(e)}`, 'bad');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="ai-veil" onMouseDown={closeSettings}>
+    <div className="ai-veil" onMouseDown={() => act.closeSettings()}>
       <div
         className="help settings"
         role="dialog"
@@ -47,7 +46,7 @@ export function Settings() {
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Escape') (e.preventDefault(), closeSettings());
+          if (e.key === 'Escape') (e.preventDefault(), act.closeSettings());
         }}
       >
         <h3>Settings</h3>
@@ -98,7 +97,7 @@ export function Settings() {
           <input value={cfg.baseUrl} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
         </label>
         <div className="set-foot">
-          <button className="btn" onClick={closeSettings}>
+          <button className="btn" onClick={() => act.closeSettings()}>
             Done
           </button>
         </div>

@@ -1,9 +1,9 @@
 import { countItems } from './clip';
 import type { ClipItem } from './clip';
 import { CALENDAR, DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
-import { AI_CFG, chatTurn, noteToModel, resetConvo, stopTurn } from './ai';
+import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
 import { acceptProposal, rejectProposal } from './proposal';
-import type { Current, Doc, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
+import type { Chip, Current, Doc, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { DEFAULT_COMMENTS, prLabel } from './Pr';
 import { FX, ROOT, doneOf, fmt, plain, prLinks, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
@@ -1032,13 +1032,15 @@ export async function askAi(text: string) {
   const s = get();
   if (!s.ai) return;
   const r = aiReply(text, s.ai.ctx, s);
-  const chips: { label: string; run: () => void }[] = [];
-  if (r.intent === 'plan') chips.push({ label: '✨ Plan my day', run: () => planToday() });
-  if (r.intent === 'breakdown' && s.ai.ctxId && s.nodes.some((n) => n.id === s.ai!.ctxId))
-    chips.push({ label: '✨ Add as actions', run: () => breakDown(s.ai!.ctxId!) });
+  const chips: Chip[] = [];
+  if (r.intent === 'plan') chips.push({ label: '✨ Plan my day', run: 'plan' });
+  if (r.intent === 'breakdown' && s.ai.ctxId && s.nodes.some((n) => n.id === s.ai!.ctxId)) chips.push({ label: '✨ Add as actions', run: 'breakdown', id: s.ai.ctxId });
   const text2 = `${r.text}\n\n_(mocked — add an OpenAI API key in Settings, ⌘, — for the real assistant)_`;
   set((st) => ({ ai: st.ai && { ...st.ai, busy: false, msgs: [...st.ai.msgs, { id: uid(), role: 'ai', text: text2, chips: chips.length ? chips : undefined }] } }));
 }
+
+/** a chip under an AI reply was clicked */
+export const runChip = (c: Chip) => (c.run === 'plan' ? planToday() : breakDown(c.id));
 
 /** ⌘⏎ / ⌘⌫ — the AI's proposal becomes one undo step, or goes away */
 export function acceptAi() {
@@ -1145,6 +1147,9 @@ export const closeSettings = () => {
   set(() => ({ settingsOpen: false }));
   focusArea();
 };
+/** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
+export const patchUi = (p: Partial<State>) => set(() => p);
+export const refreshAi = () => refreshAiKey();
 export const toggleDev = () => set((s) => ({ dev: !s.dev, hidden: false }));
 export const setDemo = (demo: boolean) => set(() => ({ demo }));
 export function loadDemo() {

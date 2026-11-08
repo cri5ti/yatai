@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { CALENDAR, useS } from './store';
 import type { DrawerKind, State } from './store';
 import { ADO, GH } from './mock';
-import { bringIn, bringMeeting, closeDrawer, setDemo, setDrawerSel, setDrawerTab, toast } from './actions';
+import { act } from './act';
 import { fmt, meetingsFor, prLinks } from './model';
 import { GhIcon, PrState } from './Pr';
 import { cx } from './kbd';
@@ -65,7 +65,7 @@ function entriesFor(s: State, kind: DrawerKind, tab: string): Entry[] {
       have: s.meetings.some((x) => x.id === m.id),
       dim: m.state === 'done',
       canInbox: false,
-      add: () => bringMeeting(m.id),
+      add: () => act.bringMeeting(m.id),
     }));
   }
   if (kind === 'github') {
@@ -86,7 +86,7 @@ function entriesFor(s: State, kind: DrawerKind, tab: string): Entry[] {
         sub: `${g.org} · ${g.note}`,
         have: s.nodes.some((n) => prLinks(n.title).some((l) => l.key === key)),
         canInbox: true,
-        add: (to) => bringIn({ title: `${url} ${g.title}`, pr: { key, status: g.status, comments: g.comments } }, to),
+        add: (to) => act.bringIn({ title: `${url} ${g.title}`, pr: { key, status: g.status, comments: g.comments } }, to),
       };
     });
   }
@@ -97,7 +97,7 @@ function entriesFor(s: State, kind: DrawerKind, tab: string): Entry[] {
     sub: `${w.type} · ${w.state} · ${w.note}`,
     have: s.nodes.some((n) => n.title.includes(`WI ${w.id}`)),
     canInbox: true,
-    add: (to) => bringIn({ title: `WI ${w.id} — ${w.title}`, smart: { source: 'workitem' } }, to),
+    add: (to) => act.bringIn({ title: `WI ${w.id} — ${w.title}`, smart: { source: 'workitem' } }, to),
   }));
 }
 
@@ -123,19 +123,19 @@ export function Drawer() {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const k = e.key;
-    if (k === 'Escape') (stop(), closeDrawer());
-    else if (k === 'ArrowDown') (stop(), setDrawerSel(Math.min(entries.length - 1, sel + 1)));
-    else if (k === 'ArrowUp') (stop(), setDrawerSel(Math.max(0, sel - 1)));
+    if (k === 'Escape') (stop(), act.closeDrawer());
+    else if (k === 'ArrowDown') (stop(), act.setDrawerSel(Math.min(entries.length - 1, sel + 1)));
+    else if (k === 'ArrowUp') (stop(), act.setDrawerSel(Math.max(0, sel - 1)));
     else if ((k === 'ArrowRight' || k === 'ArrowLeft') && tabs.length > 1) {
       stop();
       const i = tabs.findIndex((t) => t.id === d.tab);
-      setDrawerTab(tabs[(i + (k === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id);
+      act.setDrawerTab(tabs[(i + (k === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id);
     } else if (k === 'Enter' && cur) {
       stop();
-      cur.have ? toast('Already in yatai') : cur.add('next');
+      cur.have ? act.toast('Already in yatai') : cur.add('next');
     } else if ((k === 'i' || k === 'I') && cur?.canInbox) {
       stop();
-      cur.have ? toast('Already in yatai') : cur.add('inbox');
+      cur.have ? act.toast('Already in yatai') : cur.add('inbox');
     }
   };
 
@@ -145,12 +145,12 @@ export function Drawer() {
         <span className="dtitle">{TITLES[d.kind]}</span>
         <div className="dtabs" role="tablist">
           {tabs.map((t) => (
-            <button key={t.id} role="tab" aria-selected={d.tab === t.id} className={d.tab === t.id ? 'on' : ''} onClick={() => setDrawerTab(t.id)}>
+            <button key={t.id} role="tab" aria-selected={d.tab === t.id} className={d.tab === t.id ? 'on' : ''} onClick={() => act.setDrawerTab(t.id)}>
               {t.label}
             </button>
           ))}
         </div>
-        <button className="x" aria-label="Close" title="Close (Esc)" onClick={closeDrawer}>
+        <button className="x" aria-label="Close" title="Close (Esc)" onClick={() => act.closeDrawer()}>
           ✕
         </button>
       </div>
@@ -159,7 +159,7 @@ export function Drawer() {
           <div className="dempty">
             {PENDING[d.kind]}
             <br />
-            <button className="btn sm" onClick={() => setDemo(true)}>
+            <button className="btn sm" onClick={() => act.setDemo(true)}>
               Use demo data
             </button>
           </div>
@@ -167,7 +167,7 @@ export function Drawer() {
           entries.length === 0 && <div className="dempty">Nothing here.</div>
         )}
         {entries.map((en, i) => (
-          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>
+          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>
             {en.lead}
             <div className="dmain">
               <div className="dt">{en.title}</div>

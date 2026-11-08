@@ -12,15 +12,14 @@ import { STATUSES, describe, mintIds, propose, viewOf } from './proposal';
 import { aiKeyStatus, aiPost, isTauri, WEB_AI } from './platform';
 
 /** whether there is a key (asked once at startup, and again after Settings changes it) */
-let keyOk = false;
 export async function refreshAiKey() {
-  keyOk = (await aiKeyStatus().catch(() => ({ configured: false }))).configured;
-  set(() => ({})); // re-render whatever shows the model / "mock"
+  const aiKey = (await aiKeyStatus().catch(() => ({ configured: false }))).configured;
+  set(() => ({ aiKey }));
 }
 /** what the assistant runs on: settings in the app, app/.env in a browser */
 export const AI_CFG = {
   get configured() {
-    return keyOk;
+    return get().aiKey;
   },
   get model() {
     return isTauri ? get().settings.model || 'gpt-4.1-mini' : WEB_AI.model;

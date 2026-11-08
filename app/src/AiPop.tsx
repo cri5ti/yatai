@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useS } from './store';
-import { acceptAi, askAi, closeAi, openAi, rejectAi } from './actions';
+import { act } from './act';
 import { AI_CFG } from './ai';
 import { describe, useView } from './proposal';
 import { inline } from './md';
@@ -18,14 +18,14 @@ export function ProposalBar({ inPop = false }: { inPop?: boolean }) {
       </span>
       <span className="grow" />
       {!inPop && (
-        <button className="btn sm ghost" onClick={() => openAi()} title="Back to the conversation (⌘/)">
+        <button className="btn sm ghost" onClick={() => act.openAi()} title="Back to the conversation (⌘/)">
           Chat
         </button>
       )}
-      <button className="btn sm ghost" onClick={rejectAi} title="Reject (⌘⌫)">
+      <button className="btn sm ghost" onClick={() => act.rejectAi()} title="Reject (⌘⌫)">
         Reject <kbd>⌘⌫</kbd>
       </button>
-      <button className="btn sm prop" onClick={acceptAi} title="Accept (⌘⏎)">
+      <button className="btn sm prop" onClick={() => act.acceptAi()} title="Accept (⌘⏎)">
         Accept <kbd>⌘⏎</kbd>
       </button>
     </div>
@@ -60,7 +60,7 @@ export function AiPop() {
 
   const send = () => {
     if (!q.trim() || ai.busy) return;
-    askAi(q);
+    act.askAi(q);
     setQ('');
   };
   // clickable next steps: what the AI suggested in its latest answer, or openers before the first one
@@ -74,7 +74,7 @@ export function AiPop() {
   };
 
   return (
-    <div className={cx('ai-veil', docked && 'docked')} onMouseDown={docked ? undefined : closeAi}>
+    <div className={cx('ai-veil', docked && 'docked')} onMouseDown={docked ? undefined : () => act.closeAi()}>
       <div className="ai-pop" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Ask AI">
         <div className="ai-head">
           <span>✨ Ask AI</span>
@@ -95,7 +95,7 @@ export function AiPop() {
                 {m.chips && (
                   <div className="ai-chips">
                     {m.chips.map((c) => (
-                      <button key={c.label} className="btn sm ai" onClick={c.run}>
+                      <button key={c.label} className="btn sm ai" onClick={() => act.runChip(c)}>
                         {c.label}
                       </button>
                     ))}
@@ -117,7 +117,7 @@ export function AiPop() {
         {next.length > 0 && (
           <div className="ai-sugg" ref={sugg} role="group" aria-label="Suggested next steps (↑ from the input)">
             {next.map((t) => (
-              <button key={t} className="ai-chip" onClick={() => (askAi(t), input.current?.focus())} onKeyDown={chipKey} title="Send this">
+              <button key={t} className="ai-chip" onClick={() => (act.askAi(t), input.current?.focus())} onKeyDown={chipKey} title="Send this">
                 {t}
               </button>
             ))}
@@ -132,7 +132,7 @@ export function AiPop() {
           onKeyDown={(e) => {
             if (e.metaKey || e.ctrlKey) return; // ⌘⏎ / ⌘⌫ are handled globally while a proposal is pending
             e.stopPropagation();
-            if (e.key === 'Escape') (e.preventDefault(), closeAi());
+            if (e.key === 'Escape') (e.preventDefault(), act.closeAi());
             else if (e.key === 'Enter') (e.preventDefault(), send());
             else if (e.key === 'ArrowUp' && !q) (e.preventDefault(), (sugg.current?.querySelector('button') as HTMLElement | null)?.focus());
           }}

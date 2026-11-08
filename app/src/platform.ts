@@ -7,6 +7,8 @@ import type { Layout } from './store';
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** macOS resizes frameless windows natively (and has no resize-drag API); elsewhere the edges are ours */
 export const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent);
+/** this page is a popup window (popup.html: settings, help, the AI chat, the drawers, the developer panel) */
+export const inPopup = isTauri && typeof location !== 'undefined' && location.pathname.endsWith('/popup.html');
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 let _invoke: Invoke | null = null;

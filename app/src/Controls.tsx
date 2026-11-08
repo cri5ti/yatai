@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useS, set } from './store';
+import { useS } from './store';
 import type { Flags, Layout, PrStatus } from './store';
-import {
-  addInboxSamples, followRealClock, loadDemo, setDemo, setPrComments, setPrStatus, jumpToNextMeeting, openCapture, redo, setClockManual, setFlag, setLayout, startEmpty, toggleDev, toggleHidden, undo,
-} from './actions';
+import { act } from './act';
 import { dbPath } from './persist';
 import { isTauri, showCapture } from './platform';
 import { fmt, plain, prLinks } from './model';
@@ -34,10 +32,10 @@ export function DevPanel() {
   for (const n of s.nodes) for (const l of prLinks(n.title)) found.set(l.key, [...(found.get(l.key) ?? []), plain(n.title.split('\n')[0]).slice(0, 40)]);
   const prs = [...found].map(([key, items]) => ({ key, items }));
   return (
-    <aside className="controls devpanel" onKeyDown={(e) => e.key === 'Escape' && toggleDev()}>
+    <aside className="controls devpanel" onKeyDown={(e) => e.key === 'Escape' && act.toggleDev()}>
       <div className="dev-head">
         <h2>Developer</h2>
-        <button aria-label="Close" title="Close (⌘⇧D)" onClick={toggleDev}>
+        <button aria-label="Close" title="Close (⌘⇧D)" onClick={() => act.toggleDev()}>
           ✕
         </button>
       </div>
@@ -46,11 +44,11 @@ export function DevPanel() {
       <section>
         <h3>Data</h3>
         <label className="check-row">
-          <input type="checkbox" checked={s.demo} onChange={(e) => setDemo(e.target.checked)} /> Demo connectors (mocked Outlook / GitHub / DevOps)
+          <input type="checkbox" checked={s.demo} onChange={(e) => act.setDemo(e.target.checked)} /> Demo connectors (mocked Outlook / GitHub / DevOps)
         </label>
         <div className="btnrow">
-          <button onClick={loadDemo}>Load demo data</button>
-          <button className="danger" onClick={startEmpty}>
+          <button onClick={() => act.loadDemo()}>Load demo data</button>
+          <button className="danger" onClick={() => act.startEmpty()}>
             Start empty
           </button>
         </div>
@@ -61,29 +59,29 @@ export function DevPanel() {
         <h3>Window layout</h3>
         <div className="seg">
           {layouts.map((l) => (
-            <button key={l.id} className={s.layout === l.id ? 'on' : ''} onClick={() => setLayout(l.id)} title={l.hint}>
+            <button key={l.id} className={s.layout === l.id ? 'on' : ''} onClick={() => act.setLayout(l.id)} title={l.hint}>
               {l.label}
             </button>
           ))}
         </div>
         <div className="btnrow">
-          <button onClick={toggleHidden}>{s.hidden ? 'Show window' : 'Hide to tray'}</button>
-          <button onClick={() => (isTauri ? showCapture() : openCapture())}>Quick capture</button>
+          <button onClick={() => act.toggleHidden()}>{s.hidden ? 'Show window' : 'Hide to tray'}</button>
+          <button onClick={() => (isTauri ? showCapture() : act.openCapture())}>Quick capture</button>
         </div>
       </section>
 
       <section>
         <h3>Clock · {fmt(s.clock)} {s.clockManual || s.clockSpeed ? '(simulated)' : '(real time)'}</h3>
-        <input type="range" min={7 * 60} max={19 * 60} step={1} value={Math.round(s.clock)} onChange={(e) => setClockManual(+e.target.value)} />
+        <input type="range" min={7 * 60} max={19 * 60} step={1} value={Math.round(s.clock)} onChange={(e) => act.setClockManual(+e.target.value)} />
         <div className="btnrow">
-          <button onClick={() => (set(() => ({ clockManual: true })), jumpToNextMeeting(10))}>Jump: 10 min before next meeting</button>
-          <button disabled={!s.clockManual && !s.clockSpeed} onClick={followRealClock}>
+          <button onClick={() => (act.patchUi({ clockManual: true }), act.jumpToNextMeeting(10))}>Jump: 10 min before next meeting</button>
+          <button disabled={!s.clockManual && !s.clockSpeed} onClick={() => act.followRealClock()}>
             Real time
           </button>
         </div>
         <label className="inline">
           Auto-advance
-          <select value={s.clockSpeed} onChange={(e) => (+e.target.value ? set(() => ({ clockSpeed: +e.target.value, clockManual: true })) : set(() => ({ clockSpeed: 0 })))}>
+          <select value={s.clockSpeed} onChange={(e) => (+e.target.value ? act.patchUi({ clockSpeed: +e.target.value, clockManual: true }) : act.patchUi({ clockSpeed: 0 }))}>
             <option value={0}>paused</option>
             <option value={1}>1 min / sec</option>
             <option value={5}>5 min / sec</option>
@@ -99,9 +97,9 @@ export function DevPanel() {
           <label key={p.key} className="prrow">
             <span title={p.items.join(' · ')}>{p.key.replace(/^[^/]+\//, '')}</span>
             {(s.prs[p.key] ?? 'review') === 'feedback' && (
-              <input className="prn" type="number" min={1} max={99} title="Unresolved comments" value={s.prc[p.key] ?? DEFAULT_COMMENTS} onChange={(e) => setPrComments(p.key, Math.max(1, +e.target.value || 1))} />
+              <input className="prn" type="number" min={1} max={99} title="Unresolved comments" value={s.prc[p.key] ?? DEFAULT_COMMENTS} onChange={(e) => act.setPrComments(p.key, Math.max(1, +e.target.value || 1))} />
             )}
-            <select value={s.prs[p.key] ?? 'review'} onChange={(e) => setPrStatus(p.key, e.target.value as PrStatus)}>
+            <select value={s.prs[p.key] ?? 'review'} onChange={(e) => act.setPrStatus(p.key, e.target.value as PrStatus)}>
               {PR_STATUSES.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.label}
@@ -122,7 +120,7 @@ export function DevPanel() {
               .filter((x) => x.group === g)
               .map((x) => (
                 <label key={x.k} className="check-row">
-                  <input type="checkbox" checked={s.flags[x.k]} onChange={(e) => setFlag(x.k, e.target.checked)} />
+                  <input type="checkbox" checked={s.flags[x.k]} onChange={(e) => act.setFlag(x.k, e.target.checked)} />
                   {x.label}
                 </label>
               ))}
@@ -134,7 +132,7 @@ export function DevPanel() {
         <h3>Focus &amp; AI</h3>
         <label className="inline">
           Focus timer speed
-          <select value={s.focusSpeed} onChange={(e) => set(() => ({ focusSpeed: +e.target.value }))}>
+          <select value={s.focusSpeed} onChange={(e) => act.patchUi({ focusSpeed: +e.target.value })}>
             <option value={1}>real time</option>
             <option value={30}>30× (25 min ≈ 50 s)</option>
             <option value={150}>150× (25 min ≈ 10 s)</option>
@@ -142,21 +140,21 @@ export function DevPanel() {
         </label>
         <label className="inline">
           AI latency {s.aiDelay} ms
-          <input type="range" min={0} max={3000} step={100} value={s.aiDelay} onChange={(e) => set(() => ({ aiDelay: +e.target.value }))} />
+          <input type="range" min={0} max={3000} step={100} value={s.aiDelay} onChange={(e) => act.patchUi({ aiDelay: +e.target.value })} />
         </label>
       </section>
 
       <section>
         <h3>Display &amp; history</h3>
         <label className="check-row">
-          <input type="checkbox" checked={s.dark} onChange={(e) => set(() => ({ dark: e.target.checked }))} /> Dark mode
+          <input type="checkbox" checked={s.dark} onChange={(e) => act.patchUi({ dark: e.target.checked })} /> Dark mode
         </label>
         <div className="btnrow">
-          <button onClick={addInboxSamples}>+ Inbox samples</button>
-          <button onClick={undo} disabled={!s.past.length}>
+          <button onClick={() => act.addInboxSamples()}>+ Inbox samples</button>
+          <button onClick={() => act.undo()} disabled={!s.past.length}>
             ↶ Undo ({s.past.length})
           </button>
-          <button onClick={redo} disabled={!s.future.length}>
+          <button onClick={() => act.redo()} disabled={!s.future.length}>
             ↷ Redo ({s.future.length})
           </button>
         </div>

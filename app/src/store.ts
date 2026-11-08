@@ -120,10 +120,12 @@ export interface AiMsg {
   id: string;
   role: 'user' | 'ai' | 'note';
   text: string;
-  chips?: { label: string; run: () => void }[];
+  chips?: Chip[];
   suggest?: string[]; // follow-ups the AI proposes: clicking one sends it
   error?: boolean;
 }
+/** a one-click follow-up under an AI reply (plain data: the popup window sends it back to the main window) */
+export type Chip = { label: string; run: 'plan' } | { label: string; run: 'breakdown'; id: string };
 export interface AiState {
   ctx?: string;
   ctxId?: string;
@@ -189,6 +191,7 @@ export interface State extends Doc {
   dev: boolean; // developer panel open
   settings: Settings;
   settingsOpen: boolean;
+  aiKey: boolean; // an OpenAI key is configured (asked at startup and after Settings changes it; not saved)
   layout: Layout;
   prevLayout: Layout;
   tab: Tab;
@@ -348,6 +351,7 @@ export function initialState(): State {
     dev: false,
     settings: { ...DEFAULT_SETTINGS },
     settingsOpen: false,
+    aiKey: false,
     layout: 'dock',
     prevLayout: 'dock',
     tab: 'next',
@@ -383,6 +387,9 @@ export function initialState(): State {
     future: [],
   };
 }
+
+/** the layout the window actually has: focus mode is the pill, the Organizer from the dock opens large */
+export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'organizer' && s.layout === 'dock' ? 'max' : s.layout);
 
 /** state that is not saved: it starts fresh every launch */
 export const TRANSIENT = {
