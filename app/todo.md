@@ -63,6 +63,7 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
 - [ ] **Outlook** (published ICS feed; Graph needs an admin to approve `Calendars.Read` in the work tenant, so it is parked)
   - [ ] Settings → Accounts → Calendar link: paste the ICS link (Outlook on the web → Settings → Calendar → Shared calendars → Publish a calendar) → "Connected as <calendar> · N meetings today"
   - [ ] today's meetings (times in your local zone, recurring ones, none of the all-day ones) match Outlook; a meeting brought into Next follows a move (highlight + toast) and a cancellation / removal
+  - [ ] Outlook drawer tabs: Today (bring in with ⏎) · Tomorrow · Next 5 days (read-only: weekday + time, "do it on the day" if you try to add)
   - [ ] note the feed lags behind Outlook (it is a published copy): measure how long a change takes to show up
   - [ ] if some recurring meeting is wrong or on the wrong day, send me that VEVENT (without attendees) so the parser can be fixed
   - [ ] Windows: never run yet (see above); the link fetch is plain https from Rust

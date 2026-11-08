@@ -47,6 +47,7 @@ export interface Entry {
   snap?: Snapshot; // seeds the snapshot of the new item
   smart?: string; // brought in as a smart item of this source ('workitem'); PRs are just links
   dim?: boolean;
+  readonly?: boolean; // can be looked at but not brought in (tomorrow's meetings)
   canInbox: boolean;
 }
 

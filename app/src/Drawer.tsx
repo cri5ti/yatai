@@ -17,6 +17,7 @@ interface Row {
   sub: string;
   have: boolean; // already in yatai
   dim?: boolean;
+  readonly?: boolean;
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
 }
@@ -62,15 +63,16 @@ const rowOf = (en: PluginEntry, s: State): Row => ({
   sub: en.sub,
   have: s.nodes.some((n) => refsOf(n).includes(en.ref)),
   dim: en.dim,
+  readonly: en.readonly,
   canInbox: en.canInbox,
-  add: (to) => act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to),
+  add: (to) => (en.readonly ? act.toast('Only today’s meetings can be brought in: do it on the day') : act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to)),
 });
 
 function rowsFor(s: State, kind: string, tab: string): Row[] {
   const p = pluginById(kind);
   const impl = p && implFor(p, s);
   if (!p || !impl) return [];
-  if (kind === 'outlook') {
+  if (kind === 'outlook' && tab === 'today') {
     // a calendar plugin lists today's agenda
     const mine = new Map(s.meetings.map((m) => [m.id, m]));
     return (s.agenda[kind] ?? allAgenda(s))
@@ -178,7 +180,7 @@ export function Drawer() {
           </div>
         ) : ls?.error ? (
           <div className="dempty">{ls.error}</div>
-        ) : !ls && d.kind !== 'outlook' ? (
+        ) : !ls && !(d.kind === 'outlook' && d.tab === 'today') ? (
           <div className="dempty">Loading…</div>
         ) : (
           entries.length === 0 && (
@@ -188,7 +190,7 @@ export function Drawer() {
           )
         )}
         {entries.map((en, i) => (
-          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>
+          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && !en.readonly && en.add('next')}>
             {en.lead}
             <div className="dmain">
               <div className="dt">{en.title}</div>
@@ -196,7 +198,7 @@ export function Drawer() {
             </div>
             {en.have ? (
               <span className="dhave">✓ in yatai</span>
-            ) : (
+            ) : en.readonly ? null : (
               <span className="dgo">
                 <button className="btn sm" tabIndex={-1} title="Add to Next (⏎)" onClick={(e) => (e.stopPropagation(), en.add('next'))}>
                   ＋ Next

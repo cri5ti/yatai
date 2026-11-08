@@ -3,13 +3,23 @@ import { pluginGetSecretUrl, pluginSecretSet, pluginSecretStatus } from '../../p
 import { isTauri } from '../../platform';
 import { AuthError } from '../types';
 import type { Impl, Plugin } from '../types';
+import { TABS, entriesFor } from './days';
 import { meetingsOn, parseIcs } from './ics';
+import type { Calendar } from './ics';
 import { mock } from './mock';
 
 const ID = 'outlook';
 const localTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-async function load() {
+let cached: { at: number; cal: Calendar } | null = null;
+/** the feed, at most once every 30 s (the agenda and a drawer tab ask in the same cycle) */
+async function load(): Promise<Calendar> {
+  if (cached && Date.now() - cached.at < 30_000) return cached.cal;
+  const cal = await fetchCalendar();
+  cached = { at: Date.now(), cal };
+  return cal;
+}
+async function fetchCalendar() {
   const r = await pluginGetSecretUrl(ID);
   if (r.status === 404 || r.status === 410) throw new AuthError('The published calendar link no longer works: publish it again and paste the new link');
   if (r.status < 200 || r.status >= 300) throw new Error(`The calendar link answered ${r.status}`);
@@ -19,7 +29,11 @@ async function load() {
 
 /** Outlook through its "publish a calendar" feed: read-only, no sign-in, no admin. The feed is slow to reflect changes. */
 const live: Impl = {
-  lists: [{ id: 'today', label: 'Today’s agenda' }],
+  lists: TABS,
+  async list(id) {
+    const cal = await load();
+    return entriesFor(id, today(), (day) => meetingsOn(cal, day, localTz()));
+  },
   async agenda(day) {
     return meetingsOn(await load(), day, localTz());
   },
@@ -48,6 +62,7 @@ export const outlook: Plugin = {
         throw new Error('That is not a link');
       }
       if (u.protocol !== 'https:') throw new Error('The link must start with https://');
+      cached = null;
       await pluginSecretSet(ID, u.hostname, url.trim());
       try {
         return await this.who();
