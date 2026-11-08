@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { set, useS } from './store';
+import { set } from './store';
+import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday,
+  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { childrenOf, depthOf, fmtEst, hlSubtree, laterLabel, plain, relTime } from './model';
@@ -38,7 +39,7 @@ const TABLE_AT = 880; // px: below this the organizer is a list, above it the sa
 
 /** Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room). */
 export function Organizer({ embedded = false }: { embedded?: boolean }) {
-  const s = useS();
+  const { s, marks } = useView();
   const rows = useMemo(() => visibleRows(s.nodes), [s.nodes]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
@@ -162,6 +163,9 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       stop();
       return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
     }
+    // − / + : collapse / expand everything
+    if (!M && (k === '-' || k === '_')) return (stop(), openAllTree(false));
+    if (!M && (k === '+' || k === '=')) return (stop(), openAllTree(true));
     if (M || (e.shiftKey && k !== 'N')) return;
 
     if (k === 'ArrowDown' || k === 'ArrowUp') {
@@ -325,13 +329,17 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           const hlIds = s.hl[n.id] ? [n.id] : kids && !n.open ? hlSubtree(s.nodes, s.hl, n.id) : [];
           const done = isDone(s.nodes, n.id);
           const h = hint?.id === n.id ? hint.zone : null;
+          const pm = marks?.[n.id];
+          const pk = (k: string) => pm?.kind === 'change' && k in pm.prev;
+          // a proposed change hidden under a collapsed parent shows on the parent
+          const propHidden = !!marks && kids && !n.open && [...subtree(s.nodes, n.id)].some((id) => id !== n.id && marks[id]);
           return (
             <div
               key={n.id}
               data-fr={n.id}
               data-sel={selected || undefined}
               style={{ ['--d' as string]: depth } as React.CSSProperties}
-              className={cx('orow', depth === 0 && 'top', kids && 'has-kids', selected && 'is-sel', picked && !selected && 'is-multi', done && 'done', n.status === 'dropped' && 'dropped', isRun && 'live', hlIds.length > 0 && 'hl', dragId === n.id && 'dragging', h && `drop-${h}`)}
+              className={cx('orow', depth === 0 && 'top', kids && 'has-kids', selected && 'is-sel', picked && !selected && 'is-multi', done && 'done', n.status === 'dropped' && 'dropped', isRun && 'live', hlIds.length > 0 && 'hl', (pm || propHidden) && 'prop', pm && `prop-${pm.kind}`, pk('today') && 'prop-add', dragId === n.id && 'dragging', h && `drop-${h}`)}
               onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
               draggable={!editing}
               onClick={(e) => onRowClick(e, n.id)}
@@ -396,8 +404,9 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                 />
               ) : (
                 <>
-                  <span className="c-title ttl">
+                  <span className={cx('c-title ttl', pk('title') && 'pk')}>
                     {inline(n.title.split('\n')[0])}
+                    {pm?.kind === 'add' && <span className="propchip">new</span>}
                     {n.title.includes('\n') && <span className="mini">⋯</span>}
                     <Chips node={n} />
                     {!wide && <DueChip node={n} />}
@@ -405,16 +414,16 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                   {isRun && <span className="pulse-dot" title="Running" />}
                   {wide ? (
                     <>
-                      <span className="c-m">{fmtEst(n.est)}</span>
-                      <span className="c-m">{n.due ? n.due.slice(5) : ''}</span>
+                      <span className={cx('c-m', pk('est') && 'pk')}>{fmtEst(n.est)}</span>
+                      <span className={cx('c-m', pk('due') && 'pk')}>{n.due ? n.due.slice(5) : ''}</span>
                       <span className="c-m">{relTime(n.modified)}</span>
                       <span className="c-m">{n.lastRun ? relTime(n.lastRun) : '—'}</span>
-                      <span className="c-m">{n.today ? '★ today' : n.later != null ? laterLabel(n.later) : ''}</span>
+                      <span className={cx('c-m', pk('today') && 'pk')}>{n.today ? '★ today' : n.later != null ? laterLabel(n.later) : ''}</span>
                     </>
                   ) : (
                     <>
                       {n.today && <span className="todaydot" title="In Next">★</span>}
-                      {n.est && <span className="est">{fmtEst(n.est)}</span>}
+                      {n.est && <span className={cx('est', pk('est') && 'pk')}>{fmtEst(n.est)}</span>}
                     </>
                   )}
                 </>
@@ -426,7 +435,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
 
       {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
       {!embedded && <div className="keys">
-        <kbd>↑↓</kbd> move · <kbd>←→</kbd> fold · <kbd>⏎</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>A</kbd> sub-item · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>T</kbd> in Next · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy / paste · <kbd>/</kbd> commands
+        <kbd>↑↓</kbd> move · <kbd>←→</kbd> fold · <kbd>−</kbd><kbd>+</kbd> all · <kbd>⏎</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>A</kbd> sub-item · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>T</kbd> in Next · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy / paste · <kbd>/</kbd> commands
       </div>}
     </div>
   );

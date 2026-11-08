@@ -5,7 +5,7 @@ import './styles.css';
 import { Desktop } from './Desktop';
 import { Controls } from './Controls';
 import { DENSITIES, SCALES, get, useS } from './store';
-import { closeCapture, openAi, closeAi, openCapture, redo, setClock, setTab, toggleHelp, toggleHidden, undo } from './actions';
+import { acceptAi, closeCapture, openAi, closeAi, openCapture, rejectAi, redo, setClock, setTab, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod } from './kbd';
 
 function App() {
@@ -43,6 +43,12 @@ function App() {
         const code = e.code.replace('Digit', '');
         if (['1', '2', '3'].includes(code)) return (e.preventDefault(), setTab(tabs[+code - 1]));
         return;
+      }
+      if (M && !e.altKey && get().proposal) {
+        // a pending AI proposal: ⌘⏎ accepts, ⌘⌫ rejects (but ⌘⌫ still edits a text field that has text)
+        const t = e.target as HTMLInputElement | null;
+        if (k === 'Enter') return (e.preventDefault(), e.stopPropagation(), acceptAi());
+        if (k === 'Backspace' && !(isEditable(t) && t?.value)) return (e.preventDefault(), e.stopPropagation(), rejectAi());
       }
       if (M && !e.altKey) {
         if (['1', '2', '3'].includes(k)) return (e.preventDefault(), setTab(tabs[+k - 1]));

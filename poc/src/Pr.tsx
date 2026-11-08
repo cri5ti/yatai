@@ -38,18 +38,8 @@ const GLYPH: Record<PrStatus, JSX.Element | null> = {
     </>
   ),
   feedback: null,
-  failing: (
-    <>
-      {ring}
-      <path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" {...line} />
-    </>
-  ),
-  ready: (
-    <>
-      {ring}
-      <path d="M5.2 8.4l2 2 3.7-4.2" {...line} />
-    </>
-  ),
+  failing: <path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8" {...line} strokeWidth="2.2" />,
+  ready: <path d="M3.8 8.4l3 3 5.6-6.4" {...line} strokeWidth="2.2" />,
   merged: (
     <>
       <circle cx="4.5" cy="3.6" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -77,9 +67,13 @@ export function PrState({ status, comments = DEFAULT_COMMENTS }: { status: PrSta
     );
   }
   return (
-    <svg className={`prsi pr-${status}`} width="11" height="11" viewBox="0 0 16 16" role="img" aria-label={prLabel(status)}>
+    <svg className={`prsi pr-${status}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={prLabel(status)}>
       <title>{prLabel(status)}</title>
-      {GLYPH[status]}
+      {/* a filled disc in the status colour with the glyph knocked out in the surface colour */}
+      <circle cx="8" cy="8" r="8" fill="currentColor" />
+      <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
+        {GLYPH[status]}
+      </g>
     </svg>
   );
 }

@@ -53,6 +53,7 @@ export interface Seg {
   owner: string; // item id, meeting id, or ROOT; the card header
   items: string[]; // the rows directly under the owner that are in Next (their Next-children nest under them)
   keep?: boolean; // an explicitly created, still-empty card
+  pulled?: boolean; // holds sub-items dragged out of their parent row: the parent repeats as this card's header
 }
 
 export interface Current {
@@ -102,6 +103,7 @@ export interface MenuItem {
   danger?: boolean;
   disabled?: boolean;
   sub?: MenuItem[];
+  date?: { value?: string; pick: (iso: string) => void }; // opens a calendar inside the menu
   run?: () => void;
 }
 export interface MenuState {
@@ -115,15 +117,35 @@ export interface MenuState {
 
 export interface AiMsg {
   id: string;
-  role: 'user' | 'ai';
+  role: 'user' | 'ai' | 'note';
   text: string;
   chips?: { label: string; run: () => void }[];
+  suggest?: string[]; // follow-ups the AI proposes: clicking one sends it
+  error?: boolean;
 }
 export interface AiState {
   ctx?: string;
   ctxId?: string;
   msgs: AiMsg[];
   busy: boolean;
+  status?: string; // what the AI is doing right now ("Reading today's items…")
+}
+
+/* ---------- AI proposals: staged changes shown in purple until accepted / rejected ---------- */
+export type PatchKey = 'title' | 'est' | 'due' | 'status' | 'today';
+export interface SubSpec {
+  id: string; // existing item, or an id minted when the AI proposed it
+  isNew?: boolean;
+  title?: string;
+  est?: number | null;
+  status?: Status;
+  children?: SubSpec[]; // omitted = keep that item's own sub-items as they are
+}
+export type AiOp =
+  | { op: 'patch'; id: string; set: { title?: string; est?: number | null; due?: string | null; status?: Status; today?: boolean } }
+  | { op: 'subs'; id: string; items: SubSpec[] };
+export interface Proposal {
+  ops: AiOp[];
 }
 
 export type Ins =
@@ -180,6 +202,7 @@ export interface State extends Doc {
   ins: Ins | null; // inline "create here" draft
   menu: MenuState | null;
   ai: AiState | null;
+  proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
   help: boolean;
   aiBusy: string | null;
   toasts: Toast[];
@@ -321,6 +344,7 @@ export function initialState(): State {
     ins: null,
     menu: null,
     ai: null,
+    proposal: null,
     help: false,
     aiBusy: null,
     toasts: [],
@@ -330,7 +354,7 @@ export function initialState(): State {
 }
 
 const KEY = 'yatai-poc-v3';
-const transient = (s: State) => ({ ...s, drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, help: false, edit: null, ins: null, multi: [], anchor: null, past: [], future: [] });
+const transient = (s: State) => ({ ...s, drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, proposal: null, help: false, edit: null, ins: null, multi: [], anchor: null, past: [], future: [] });
 
 function load(): State {
   try {
@@ -367,6 +391,10 @@ export const docOf = (s: State): Doc => ({ nodes: s.nodes, inbox: s.inbox, meeti
  * Return null from `fn` to signal "nothing changed" (no history entry).
  */
 export function commit(label: string, fn: (s: State) => Partial<State> | null): boolean {
+  if (state.proposal && !label.startsWith('AI:')) {
+    blocked?.();
+    return false; // the AI proposal has to be accepted or rejected first
+  }
   const patch = fn(state);
   if (!patch) return false;
   const entry: Hist = { label, doc: docOf(state) };
@@ -374,6 +402,10 @@ export function commit(label: string, fn: (s: State) => Partial<State> | null): 
   emit();
   return true;
 }
+
+let blocked: (() => void) | null = null;
+/** what to tell the user when an edit is refused because an AI proposal is pending */
+export const onBlocked = (fn: () => void) => (blocked = fn);
 
 export const get = () => state;
 const subscribe = (l: () => void) => {

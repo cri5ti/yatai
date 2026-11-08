@@ -1,6 +1,8 @@
 import { countItems } from './clip';
 import type { ClipItem } from './clip';
-import { CALENDAR, DENSITIES, SCALES, commit, docOf, get, seedInbox, set, uid } from './store';
+import { CALENDAR, DENSITIES, SCALES, commit, docOf, get, onBlocked, seedInbox, set, uid } from './store';
+import { AI_CFG, chatTurn, noteToModel, resetConvo, stopTurn } from './ai';
+import { acceptProposal, rejectProposal } from './proposal';
 import type { Current, Doc, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { DEFAULT_COMMENTS, prLabel } from './Pr';
@@ -324,6 +326,8 @@ export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `
 export const cycleEst = (ids: string[], dir: 1 | -1) => patchNodes('Estimate', ids, (n) => ({ est: stepEst(n.est, dir) }));
 export const setDue = (ids: string[], days: number | null) =>
   patchNodes(days == null ? 'Clear due date' : 'Set due date', ids, { due: days == null ? undefined : isoDay(days) });
+/** due on a specific day (yyyy-mm-dd), from the date picker */
+export const setDueOn = (ids: string[], iso: string) => patchNodes('Set due date', ids, { due: iso });
 export function deferTo(ids: string[], days: number) {
   const nodes = get().nodes;
   const all = new Set<string>();
@@ -568,7 +572,7 @@ export function moveRow(id: string, dir: -1 | 1) {
     }
     if (id.startsWith(FX)) return null; // the calendar row never leaves its meeting
     if (sg.items.length > 1) {
-      const ns: Seg = { id: 's_' + uid(), owner: sg.owner, items: [id] };
+      const ns: Seg = { id: 's_' + uid(), owner: sg.owner, items: [id], pulled: sg.pulled };
       const out = withItems(plan, si, sg.items.filter((x) => x !== id));
       out.splice(dir === -1 ? si : si + 1, 0, ns);
       return { plan: out, nsel: { card: ns.id, row: id } };
@@ -602,33 +606,63 @@ export function moveRows(ids: string[], dir: -1 | 1) {
   } else reorderItems(ids, dir, true);
 }
 
+/** the segment owner an item belongs to: its parent (or the top level) */
+const ownerOfNode = (n: Node) => n.parentId ?? ROOT;
+/** is this item a sub-item of a Next row (it nests under it unless pulled out)? */
+const nestsInNext = (nodes: Node[], n: Node) => !!n.parentId && !!nodes.find((p) => p.id === n.parentId)?.today;
+
+/** drop a row next to a top-level row of a card of the same group (a sub-item lands in its parent's pulled card) */
 export function dropRowInSeg(id: string, targetRowId: string, pos: 'before' | 'after') {
   commit('Move action', (s) => {
     if (id === targetRowId || id.startsWith(FX)) return null;
+    const n = s.nodes.find((x) => x.id === id);
     const plan = planOf(s);
-    const si = segOf(plan, id);
     const ti = segOf(plan, targetRowId);
-    if (si < 0 || ti < 0 || plan[si].owner !== plan[ti].owner) return null;
+    if (!n || ti < 0 || plan[ti].owner !== ownerOfNode(n)) return null;
     const out = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
     const items = out[ti].items;
     items.splice(items.indexOf(targetRowId) + (pos === 'after' ? 1 : 0), 0, id);
+    if (nestsInNext(s.nodes, n)) out[ti] = { ...out[ti], pulled: true };
     return { plan: out, nsel: { card: out[ti].id, row: id } };
   });
 }
 
-/** dropping an action outside its card splits the task's schedule: same task, a new segment elsewhere */
+/**
+ * dropping a row outside its card splits the schedule: same item, a new segment elsewhere.
+ * A sub-item takes its parent along as the new card's header (a repeat); the parent row stays where it was.
+ */
 export function dropRowSplit(id: string, targetSegId: string, pos: 'before' | 'after') {
   commit('Split task', (s) => {
     if (id.startsWith(FX)) return null;
+    const n = s.nodes.find((x) => x.id === id);
     const plan = planOf(s);
     const si = segOf(plan, id);
     const ti = plan.findIndex((sg) => sg.id === targetSegId);
-    if (si < 0 || ti < 0 || (si === ti && plan[si].items.length < 2)) return null;
-    const ns: Seg = { id: 's_' + uid(), owner: plan[si].owner, items: [id] };
+    if (!n || ti < 0 || (si >= 0 && si === ti && plan[si].items.length < 2)) return null;
+    const ns: Seg = { id: 's_' + uid(), owner: si >= 0 ? plan[si].owner : ownerOfNode(n), items: [id] };
+    if (nestsInNext(s.nodes, n)) ns.pulled = true;
     const out = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
     out.splice(pos === 'before' ? ti : ti + 1, 0, ns);
     return { plan: out, nsel: { card: ns.id, row: id } };
   });
+}
+
+/**
+ * a sub-item dropped back into its group: onto its parent ('into') or beside a sibling nested under it.
+ * It leaves any pulled card (the split closes) and, beside a sibling, takes that place in the tree.
+ */
+export function dropSubItem(id: string, targetId: string, pos: 'before' | 'after' | 'into') {
+  const was = segOf(planOf(get()), id) >= 0;
+  const done = commit(was ? 'Consolidate' : 'Reorder', (s) => {
+    const n = s.nodes.find((x) => x.id === id);
+    const t = s.nodes.find((x) => x.id === targetId);
+    if (!n || !t || id === targetId) return null;
+    if ((pos === 'into' ? t.id : t.parentId) !== n.parentId) return null; // only within its own group
+    const plan = planOf(s).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
+    const nodes = pos === 'into' ? openIt(s.nodes, t.id) : relocate(s.nodes, id, n.parentId, pos === 'before' ? { before: t.id } : { after: t.id });
+    return { nodes, plan, nsel: { card: s.nsel.card, row: id } };
+  });
+  if (done && was) toast('Back in its group', 'good');
 }
 
 export function dropCard(key: string, targetKey: string | null, pos: 'before' | 'after') {
@@ -645,18 +679,48 @@ export function dropCard(key: string, targetKey: string | null, pos: 'before' | 
   });
 }
 
-/** bring every segment of the task into this one */
+/**
+ * bring every segment of the task into this one — and any sub-items pulled out of rows in this card back under their parents.
+ * On a pulled card that is the only one of its kind, its sub-items go back under their parent row.
+ */
 export function consolidate(segId: string) {
+  let msg = 'Consolidated all actions here';
   const done = commit('Consolidate', (s) => {
     const plan = planOf(s);
     const t = plan.find((sg) => sg.id === segId);
     if (!t) return null;
     const others = plan.filter((sg) => sg.owner === t.owner && sg.id !== segId);
-    if (!others.length) return null;
+    const here = subtreeIds(s.nodes, t.items.filter((x) => !x.startsWith(FX)));
+    const pulledIn = plan.filter((sg) => sg.pulled && sg.id !== segId && here.has(sg.owner));
+    if (!others.length && !pulledIn.length) {
+      if (!t.pulled) return null;
+      msg = 'Back under its parent';
+      return { plan: plan.filter((sg) => sg !== t) };
+    }
     const items = [...t.items, ...others.flatMap((o) => o.items)];
-    return { plan: plan.filter((sg) => !others.includes(sg)).map((sg) => (sg.id === segId ? { ...sg, items } : sg)) };
+    return { plan: plan.filter((sg) => !others.includes(sg) && !pulledIn.includes(sg)).map((sg) => (sg.id === segId ? { ...sg, items } : sg)) };
   });
-  toast(done ? 'Consolidated all actions here' : 'Already all in one place', done ? 'good' : 'info');
+  toast(done ? msg : 'Already all in one place', done ? 'good' : 'info');
+}
+
+/* ---------- collapse / expand all (− / +) ---------- */
+/** Next: every card, every row with sub-items (collapsing also folds open notes) */
+export function openAllNext(open: boolean) {
+  const s = get();
+  const ids = new Set<string>();
+  for (const c of nextModel({ ...s, nodes: s.nodes.map((n) => (n.open ? n : { ...n, open: true })) }).cards) {
+    if (c.kind === 'task' && c.task) ids.add(c.task.id);
+    for (const r of c.rows) if (r.node && r.kids) ids.add(r.node.id);
+  }
+  set((st) => ({
+    nodes: st.nodes.map((n) => (ids.has(n.id) && n.open !== open ? { ...n, open } : n)),
+    meetings: st.meetings.map((m) => ((m.open !== false) !== open ? { ...m, open } : m)),
+    expanded: open ? st.expanded : {},
+  }));
+}
+/** Organizer: every item with children */
+export function openAllTree(open: boolean) {
+  set((st) => ({ nodes: st.nodes.map((n) => (n.open !== open && st.nodes.some((c) => c.parentId === n.id) ? { ...n, open } : n)) }));
 }
 
 /* ---------- start / stopwatch / focus ---------- */
@@ -924,22 +988,38 @@ export async function planToday() {
 }
 
 /* ---------- AI popup (⌘/) ---------- */
+/** the conversation is kept while its proposal is pending, so closing the popup does not lose it */
+let parked: State['ai'] = null;
 export function openAi(ctxId?: string) {
   const s = get();
   const node = ctxId ? s.nodes.find((n) => n.id === ctxId) : undefined;
   const meeting = ctxId ? s.meetings.find((m) => m.id === ctxId) : undefined;
   const ctx = node ? plain(node.title.split('\n')[0]) : meeting?.title;
-  set(() => ({ ai: { ctx, ctxId, msgs: [], busy: false }, menu: null }));
+  const keep = s.proposal && parked;
+  if (!keep) resetConvo();
+  set(() => ({ ai: keep ? { ...parked!, ctx, ctxId, busy: false, status: undefined } : { ctx, ctxId, msgs: [], busy: false }, menu: null }));
+  parked = null;
 }
 export function closeAi() {
+  const s = get();
+  if (s.ai?.busy) stopTurn();
+  parked = s.proposal ? s.ai : null;
   set(() => ({ ai: null }));
   focusArea();
 }
+const note = (text: string) => {
+  const m = { id: uid(), role: 'note' as const, text };
+  if (get().ai) set((s) => ({ ai: s.ai && { ...s.ai, msgs: [...s.ai.msgs, m] } }));
+  else if (parked) parked = { ...parked, msgs: [...parked.msgs, m] };
+};
 export async function askAi(text: string) {
   text = text.trim();
   const a0 = get().ai;
   if (!text || !a0 || a0.busy) return;
-  set((s) => ({ ai: s.ai && { ...s.ai, busy: true, msgs: [...s.ai.msgs, { id: uid(), role: 'user', text }] } }));
+  set((s) => ({ ai: s.ai && { ...s.ai, msgs: [...s.ai.msgs, { id: uid(), role: 'user', text }] } }));
+  if (AI_CFG.configured) return chatTurn(text);
+  // no OPENAI_API_KEY: the old mocked replies
+  set((s) => ({ ai: s.ai && { ...s.ai, busy: true } }));
   await sleep(get().aiDelay + 500);
   const s = get();
   if (!s.ai) return;
@@ -948,8 +1028,29 @@ export async function askAi(text: string) {
   if (r.intent === 'plan') chips.push({ label: '✨ Plan my day', run: () => planToday() });
   if (r.intent === 'breakdown' && s.ai.ctxId && s.nodes.some((n) => n.id === s.ai!.ctxId))
     chips.push({ label: '✨ Add as actions', run: () => breakDown(s.ai!.ctxId!) });
-  set((st) => ({ ai: st.ai && { ...st.ai, busy: false, msgs: [...st.ai.msgs, { id: uid(), role: 'ai', text: r.text, chips: chips.length ? chips : undefined }] } }));
+  const text2 = `${r.text}\n\n_(mocked — add OPENAI_API_KEY to poc/.env for the real assistant)_`;
+  set((st) => ({ ai: st.ai && { ...st.ai, busy: false, msgs: [...st.ai.msgs, { id: uid(), role: 'ai', text: text2, chips: chips.length ? chips : undefined }] } }));
 }
+
+/** ⌘⏎ / ⌘⌫ — the AI's proposal becomes one undo step, or goes away */
+export function acceptAi() {
+  if (!get().proposal) return;
+  const sum = acceptProposal();
+  if (!sum) return;
+  toast(`AI changes applied: ${sum} (⌘Z undoes)`, 'good');
+  noteToModel('The user ACCEPTED your proposal; it is applied now.');
+  note('✓ Accepted');
+  if (!get().ai) parked = null;
+}
+export function rejectAi() {
+  if (!get().proposal) return;
+  rejectProposal();
+  toast('AI proposal rejected — nothing changed', 'info');
+  noteToModel('The user REJECTED your proposal; nothing was changed.');
+  note('✕ Rejected');
+  if (!get().ai) parked = null;
+}
+onBlocked(() => toast('Accept (⌘⏎) or reject (⌘⌫) the AI proposal first', 'warn'));
 
 /* ---------- mock desktop controls ---------- */
 const flagToasts: Partial<Record<keyof Flags, { text: string; tone: Toast['tone'] }>> = {

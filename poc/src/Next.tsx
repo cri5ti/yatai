@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { set, useS } from './store';
+import { set } from './store';
 import type { State } from './store';
+import { useView } from './proposal';
+import type { Mark, Marks } from './proposal';
 import { ROOT, effSel, isLoose, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks } from './model';
 import type { CardM, Row } from './model';
 import {
-  addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropRowInSeg, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
-  moveRows, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
+  addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropRowInSeg, dropRowSplit, dropSubItem, editText, focusItem, indentItems, isDone, moveCard, moveRow,
+  moveRows, openAllNext, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
   toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
@@ -16,8 +18,10 @@ import { Chips, DueChip } from './Chips';
 import { useFlip } from './flip';
 import { cx, focusArea, isEditable, mod } from './kbd';
 
-type Drag = { t: 'row'; id: string; owner: string; seg: string } | { t: 'card'; key: string };
-type Hint = { t: 'row'; id: string; pos: 'before' | 'after' } | { t: 'card'; key: string; pos: 'before' | 'after' } | { t: 'end' };
+/** owner: the group the item belongs to (its parent, or the top level); listed: it is a top-level row of its card (not nested) */
+type Drag = { t: 'row'; id: string; owner: string; parent: string | null; seg: string; listed: boolean } | { t: 'card'; key: string };
+/** sub: a sub-item back among its siblings / onto its parent ('into') — a tree move, not a plan move */
+type Hint = { t: 'row'; id: string; pos: 'before' | 'after' | 'into'; sub?: true } | { t: 'card'; key: string; pos: 'before' | 'after' } | { t: 'end' };
 
 const srcIcon: Record<string, string> = { pr: '⑂', pipeline: '⚙', workitem: '▣', ai: '✦' };
 
@@ -47,23 +51,43 @@ function Stopwatch({ spent, since }: { spent: number; since: number }) {
 function cardHint(e: React.DragEvent, card: CardM, d: Drag): Hint | null {
   if (!card.seg || card.pinned) return null;
   if (d.t === 'card' && d.key === card.key) return null;
-  if (d.t === 'row' && d.seg === card.key) return null;
+  if (d.t === 'row' && d.listed && d.seg === card.key) return null; // a sub-item may split out right beside its own card
   const el = (e.currentTarget as HTMLElement).closest('[data-fc]') as HTMLElement;
   const r = el.getBoundingClientRect();
   return { t: 'card', key: card.key, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
 }
 function rowHint(e: React.DragEvent, card: CardM, row: Row, d: Drag): Hint | null {
-  if (d.t !== 'row' || !card.seg) return null;
-  if (card.seg.owner === d.owner) {
-    if (d.id === row.id || row.depth > 0) return null;
+  if (d.t !== 'row' || !card.seg || d.id === row.id) return null;
+  const half = () => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    return { t: 'row', id: row.id, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
+    return e.clientY < r.top + r.height / 2 ? ('before' as const) : ('after' as const);
+  };
+  const listed = card.seg.items.includes(row.id);
+  // a top-level row of a card of the same group: reorder / move between that group's cards
+  if (listed && card.seg.owner === d.owner) return { t: 'row', id: row.id, pos: half() };
+  const t = row.node;
+  if (t && d.parent) {
+    // a pulled-out sub-item dropped on its parent row goes back under it
+    if (t.id === d.parent) return d.listed ? { t: 'row', id: row.id, pos: 'into', sub: true } : null;
+    // …or among its siblings nested there
+    if (!listed && t.parentId === d.parent) return { t: 'row', id: row.id, pos: half(), sub: true };
   }
   return cardHint(e, card, d);
 }
 
+/** purple: what a pending AI proposal adds / changes / removes */
+const propCls = (m?: Mark) => m && `prop prop-${m.kind}`;
+const propTip = (m?: Mark) =>
+  m &&
+  (m.kind === 'add'
+    ? 'Proposed by AI: new'
+    : m.kind === 'remove'
+      ? 'Proposed by AI: remove'
+      : `Proposed by AI: ${Object.keys(m.prev).map((k) => (k === 'today' ? 'Next' : k === 'parent' ? 'moved here' : k)).join(', ')}`);
+
 interface Shared {
   s: State;
+  marks: Marks | null;
   sel: { card: string | null; row: string | null };
   multi: Set<string>;
   hint: Hint | null;
@@ -91,12 +115,12 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
     openMenu(n && x.multi.has(n.id) && x.multi.size > 1 ? { t: 'multi', ids: [...x.multi] } : { t: 'row', id: row.id }, e.clientX, e.clientY);
   };
   const dnh =
-    n && row.depth === 0
+    n
       ? {
           draggable: !editing,
           onDragStart: (e: React.DragEvent) => {
             e.stopPropagation();
-            dnd.current = { t: 'row', id: row.id, owner: card.ownerId, seg: card.key };
+            dnd.current = { t: 'row', id: row.id, owner: n.parentId ?? ROOT, parent: n.parentId, seg: card.key, listed: !!card.seg?.items.includes(row.id) };
             e.dataTransfer.setData('text/plain', row.id);
             e.dataTransfer.effectAllowed = 'move';
             x.setDragId(row.id);
@@ -127,7 +151,7 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
       if (!h) return;
       e.preventDefault();
       e.stopPropagation();
-      if (h.t === 'row') dropRowInSeg(d.id, h.id, h.pos);
+      if (h.t === 'row') h.sub || h.pos === 'into' ? dropSubItem(d.id, h.id, h.pos) : dropRowInSeg(d.id, h.id, h.pos);
       else if (h.t === 'card') dropRowSplit(d.id, h.key, h.pos);
     },
   };
@@ -175,10 +199,13 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
   const hlIds = hlForRow(s.nodes, s.hl, row);
   const isPr = prLinks(info.first).length > 0;
   const done = isDone(s.nodes, node.id);
+  const pm = x.marks?.[node.id];
+  const pk = (k: string) => pm?.kind === 'change' && k in pm.prev;
 
   return (
     <div
-      className={cx('arow', done && 'done', node.status === 'dropped' && 'dropped', running && 'live', selected && 'is-sel', picked && !selected && 'is-multi', editing && 'editing', hlIds.length > 0 && 'hl', hcls, x.dragId === row.id && 'dragging')}
+      className={cx('arow', done && 'done', node.status === 'dropped' && 'dropped', running && 'live', selected && 'is-sel', picked && !selected && 'is-multi', editing && 'editing', hlIds.length > 0 && 'hl', propCls(pm), pk('today') && 'prop-add', hcls, x.dragId === row.id && 'dragging')}
+      title={propTip(pm)}
       onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
       style={style}
       data-fr={row.id}
@@ -195,7 +222,7 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
         </button>
       )}
       <button
-        className={cx('check', container && 'sq', done && 'on')}
+        className={cx('check', container && 'sq', done && 'on', pk('status') && 'pk')}
         tabIndex={-1}
         aria-label={done ? 'Mark not done' : 'Mark done'}
         onClick={(e) => (e.stopPropagation(), toggleDoneNodes([node.id]))}
@@ -223,17 +250,33 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
               </span>
             ) : null}
             <DueChip node={node} />
+            {pk('est') && pm!.prev.est ? <s className="est-chip was">{fmtEst(pm!.prev.est as number)}</s> : null}
+            {node.est ? (
+              <button
+                className={cx('est-chip', pk('est') && 'pk')}
+                tabIndex={-1}
+                title="Estimate (E) — shift+←/→ to scroll"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  openEstMenu([node.id], r.left, r.bottom + 4);
+                }}
+              >
+                {fmtEst(node.est)}
+              </button>
+            ) : null}
             <button
-              className={cx('est-chip', !node.est && 'empty')}
+              className="kebab"
               tabIndex={-1}
-              title="Estimate (E) — shift+←/→ to scroll"
+              aria-label="Actions"
+              title="Actions (/)"
               onClick={(e) => {
                 e.stopPropagation();
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                openEstMenu([node.id], r.left, r.bottom + 4);
+                openMenu({ t: 'row', id: node.id }, r.left - 180, r.bottom + 4);
               }}
             >
-              {node.est ? fmtEst(node.est) : '＋est'}
+              ⋮
             </button>
             {!done && node.status !== 'dropped' && !node.smart && (
               <button className="play" tabIndex={-1} title={running ? 'Pause (⇧Space)' : 'Start (⇧Space)'} onClick={(e) => (e.stopPropagation(), toggleStartItem(node.id))}>
@@ -242,9 +285,10 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
             )}
           </div>
           <div className="abody">
-            <div className="first">
+            <div className={cx('first', pk('title') && 'pk')}>
               {node.smart && !isPr && <span className="src">{srcIcon[node.smart.source]}</span>}
               {inline(info.first)}
+              {pm?.kind === 'add' && <span className="propchip">new</span>}
               <Chips node={node} />
               {node.status === 'dropped' && <span className="chip info">abandoned</span>}
               {!open && info.checks.total > 0 && (
@@ -278,6 +322,9 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
   const picked = !!card.task && x.multi.has(card.task.id);
   // a change the user did not make: highlight the card when it is a meeting, or when the item is hidden inside it
   const hlIds = hlForCard(s.nodes, s.hl, card);
+  // purple header: the owner itself is touched, or a proposed change hides inside the collapsed card
+  const pm = card.task ? x.marks?.[card.task.id] : undefined;
+  const propHidden = !!x.marks && card.collapsed && card.rows.some((r) => r.node && x.marks![r.node.id]);
   const live = card.rows.some((r) => r.node && s.current?.id === r.node.id);
   const titleEdit = s.edit === 'card:' + card.key;
   const movable = !!card.seg && !card.pinned;
@@ -357,7 +404,8 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
       }}
     >
       {!isLoose(card) && <header
-        className="chead"
+        className={cx('chead', (pm || propHidden) && 'prop', pm && `prop-${pm.kind}`)}
+        title={propTip(pm) ?? (propHidden ? 'Proposed AI changes inside' : undefined)}
         draggable={movable && !titleEdit}
         onClick={(e) => x.onSelect(e, card, null)}
         onDoubleClick={() => card.kind === 'task' && toggleCardOpen(card, card.collapsed)}
@@ -465,7 +513,7 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
 const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}`;
 
 export function Next() {
-  const s = useS();
+  const { s, marks } = useView();
   const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.flags, s.clock, s.prs]);
   const nav = useMemo(() => navList(m.cards), [m]);
   const sel = effSel(m.cards, s.nsel);
@@ -522,7 +570,7 @@ export function Next() {
     }
     pick(c.key, row);
   };
-  const x: Shared = { s, sel, multi, hint, setHint, dnd, dragId, setDragId, onSelect };
+  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, onSelect };
 
   /** what a command applies to: the multi-selection, or the one selected item */
   const targets = (): string[] => {
@@ -626,6 +674,9 @@ export function Next() {
       else if (card) startCard(card);
       return;
     }
+    // − / + : collapse / expand everything
+    if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
+    if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
 
     switch (k) {
@@ -806,6 +857,8 @@ export function Next() {
           else dropRowSplit(d.id, lastMovable.key, 'after');
         }}
       >
+        {/* the columns live on an inner box of natural height: on the scroller itself they would overflow sideways */}
+        <div className="cols">
         {m.cards.length === 0 && !draftTask && (
           <div className="empty">
             <div className="big">All clear 🎉</div>
@@ -819,12 +872,13 @@ export function Next() {
             {draftAt === i && taskDraft}
           </div>
         ))}
+        </div>
         <div className={cx('endzone', hint?.t === 'end' && 'over')} />
       </div>
 
       {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
       <div className="keys">
-        <kbd>↑↓</kbd> move · <kbd>→</kbd> in · <kbd>←</kbd> out · <kbd>⏎</kbd> new below · <kbd>⇧⏎</kbd> above · <kbd>F2</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>⌫</kbd> out of Next · <kbd>⇧⌫</kbd> delete · <kbd>/</kbd> commands · <kbd>?</kbd> all
+        <kbd>↑↓</kbd> move · <kbd>→</kbd> in · <kbd>←</kbd> out · <kbd>⏎</kbd> new below · <kbd>⇧⏎</kbd> above · <kbd>F2</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>−</kbd><kbd>+</kbd> collapse / expand all · <kbd>⇧↑↓</kbd> multi-select · <kbd>⌫</kbd> out of Next · <kbd>⇧⌫</kbd> delete · <kbd>/</kbd> commands · <kbd>?</kbd> all
       </div>
     </div>
   );

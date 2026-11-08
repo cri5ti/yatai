@@ -211,10 +211,11 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
   const isOwner = (id: string) => id === ROOT || mIds.has(id) || byId.has(id);
   const ownerOf = (n: Node) => n.parentId ?? ROOT;
   const isRootRow = (n: Node) => n.today && !(n.parentId && byId.get(n.parentId)?.today);
-  const valid = (owner: string, id: string) => {
-    if (id.startsWith(FX)) return id === FX + owner && mIds.has(owner);
+  /** a sub-item of a Next row normally nests under it; a "pulled" segment lists it on its own, the parent repeating as header */
+  const valid = (sg: Seg, id: string) => {
+    if (id.startsWith(FX)) return id === FX + sg.owner && mIds.has(sg.owner);
     const n = byId.get(id);
-    return !!n && isRootRow(n) && ownerOf(n) === owner;
+    return !!n && n.today && ownerOf(n) === sg.owner && (isRootRow(n) || !!sg.pulled);
   };
 
   const seen = new Set<string>();
@@ -222,7 +223,7 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
   for (const sg of plan) {
     if (!isOwner(sg.owner)) continue;
     const items = sg.items.filter((id) => {
-      if (!valid(sg.owner, id) || seen.has(id)) return false;
+      if (!valid(sg, id) || seen.has(id)) return false;
       seen.add(id);
       return true;
     });
@@ -316,9 +317,11 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'flags'
     };
   };
 
+  // sub-items pulled out into a card of their own are not repeated under their parent
+  const listed = new Set(plan.flatMap((sg) => sg.items));
   /** a root row followed by its Next descendants, depth-first in tree order */
   const expand = (n: Node, depth: number, out: Row[]) => {
-    const kids = nodes.filter((c) => c.parentId === n.id && c.today);
+    const kids = nodes.filter((c) => c.parentId === n.id && c.today && !listed.has(c.id));
     out.push({ id: n.id, node: n, depth, kids: kids.length > 0 });
     if (n.open !== false) for (const c of kids) expand(c, depth + 1, out);
   };
@@ -334,7 +337,7 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'flags'
         continue;
       }
       const n = byId.get(id)!;
-      if ((n.smart && n.status !== 'done' && needsAttention(n, flags)) || prAttention(n, s.prs)) {
+      if ((n.smart && n.status !== 'done' && needsAttention(n, flags))) {
         const arows: Row[] = [{ id: n.id, node: n, depth: 0, kids: false }];
         attention.push({
           key: 'att_' + n.id,
@@ -394,7 +397,9 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'flags'
     const n = counts.get(c.ownerId)!;
     const i = (idx.get(c.ownerId) ?? 0) + 1;
     idx.set(c.ownerId, i);
-    if (n > 1) c.part = { i, n };
+    // a pulled card's owner is itself a row elsewhere: that row is part 1
+    if (c.seg?.pulled) c.part = { i: i + 1, n: n + 1 };
+    else if (n > 1) c.part = { i, n };
   }
 
   pinned.sort((a, b) => a.meeting!.eff - b.meeting!.eff);

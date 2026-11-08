@@ -87,6 +87,9 @@
   --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #8250df; --gh-closed: #82071e;
   --hl: #fff2a0; /* yellow: something changed that you did not change */
   --hl-bar: #d9a400;
+  --ai: #7c3aed; /* purple: changes an AI proposal would make — until you accept / reject */
+  --ai-soft: #f3ecfe;
+  --ai-text: #6526cf;
   --live: #e0457b; /* the started action */
   --live-soft: rgba(224, 69, 123, 0.1);
   --shadow-pop: 0 10px 40px rgba(20, 24, 50, 0.25);
@@ -129,6 +132,9 @@
   --gh-draft: #8b949e; --gh-review: #4493f8; --gh-feedback: #f0883e; --gh-failing: #ff7b72; --gh-ready: #3fb950; --gh-merged: #ab7df8; --gh-closed: #e5534b;
   --hl: #4d4100;
   --hl-bar: #e6b800;
+  --ai: #a77bff;
+  --ai-soft: #2c2142;
+  --ai-text: #c7a8ff;
   --live: #ff7aa8;
   --live-soft: rgba(255, 122, 168, 0.12);
   --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.55);

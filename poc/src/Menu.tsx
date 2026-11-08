@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useS } from './store';
 import type { MenuItem, MenuState } from './store';
 import { closeMenu } from './actions';
+import { Calendar, calKey, fromIso, parseDay, toIso, today } from './DatePick';
 
 /** Context menu + command palette: right-click or "/" . Type to filter, ↑↓ to move, Enter to run, ← / Esc to go back. */
 export function Menu() {
@@ -15,6 +16,8 @@ function MenuInner({ menu }: { menu: MenuState }) {
   const [hi, setHi] = useState(0);
   const [pos, setPos] = useState({ x: menu.x, y: menu.y });
   const box = useRef<HTMLDivElement>(null);
+  // a "date" item turns the menu into a calendar: arrows move the day, typing jumps to a date, ⏎ picks
+  const [cal, setCal] = useState<{ item: MenuItem; cursor: Date } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const list = stack[stack.length - 1];
 
@@ -31,13 +34,18 @@ function MenuInner({ menu }: { menu: MenuState }) {
     const r = box.current?.getBoundingClientRect();
     if (!r) return;
     setPos({ x: Math.max(8, Math.min(menu.x, window.innerWidth - r.width - 8)), y: Math.max(8, Math.min(menu.y, window.innerHeight - r.height - 8)) });
-  }, [stack.length, shown.length]);
+  }, [stack.length, shown.length, !!cal]);
   useEffect(() => {
     box.current?.querySelector('.mi.hi')?.scrollIntoView({ block: 'nearest' });
   }, [hi, stack.length]);
 
   const run = (it?: MenuItem) => {
     if (!it || it.disabled) return;
+    if (it.date) {
+      setCal({ item: it, cursor: it.date.value ? fromIso(it.date.value) : today() });
+      setQ('');
+      return;
+    }
     if (it.sub) {
       setStack((st) => [...st, it.sub!]);
       setQ('');
@@ -47,7 +55,17 @@ function MenuInner({ menu }: { menu: MenuState }) {
     closeMenu();
     it.run?.();
   };
+  const pickDate = (d: Date) => {
+    const it = cal!.item;
+    closeMenu();
+    it.date!.pick(toIso(d));
+  };
   const back = () => {
+    if (cal) {
+      setCal(null);
+      setQ('');
+      return;
+    }
     if (stack.length > 1) {
       setStack((st) => st.slice(0, -1));
       setQ('');
@@ -65,16 +83,30 @@ function MenuInner({ menu }: { menu: MenuState }) {
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="menu-title">{stack.length > 1 ? '‹ ' : ''}{menu.title}</div>
+        <div className="menu-title">{stack.length > 1 || cal ? '‹ ' : ''}{menu.title}{cal ? ` · ${cal.item.label.replace(/…$/, '')}` : ''}</div>
         <input
           ref={input}
           className="menu-input"
           value={q}
           spellCheck={false}
-          onChange={(e) => (setQ(e.target.value), setHi(0))}
+          placeholder={cal ? 'fri · +3 · +2w · nov 20 · 2026-12-01' : undefined}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setHi(0);
+            const d = cal && parseDay(e.target.value);
+            if (d) setCal({ ...cal!, cursor: d });
+          }}
           onKeyDown={(e) => {
             e.stopPropagation();
             const k = e.key;
+            if (cal) {
+              const d = calKey(k, e.shiftKey, cal.cursor);
+              if (d) return (e.preventDefault(), setCal({ ...cal, cursor: d }));
+              if (k === 'Enter') return (e.preventDefault(), pickDate(parseDay(q) ?? cal.cursor));
+              if (k === 'Escape' || (k === 'Backspace' && !q)) return (e.preventDefault(), back());
+              if (k === 'Tab') e.preventDefault();
+              return;
+            }
             if (k === 'Escape') (e.preventDefault(), back());
             else if (k === 'ArrowDown') (e.preventDefault(), setHi((h) => (h + 1) % Math.max(1, shown.length)));
             else if (k === 'ArrowUp') (e.preventDefault(), setHi((h) => (h - 1 + shown.length) % Math.max(1, shown.length)));
@@ -88,6 +120,9 @@ function MenuInner({ menu }: { menu: MenuState }) {
             }
           }}
         />
+        {cal ? (
+          <Calendar cursor={cal.cursor} value={cal.item.date!.value} onCursor={(d) => setCal({ ...cal, cursor: d })} onPick={pickDate} />
+        ) : (
         <div className="menu-list">
           {shown.map((it, i) => (
             <div
@@ -109,7 +144,12 @@ function MenuInner({ menu }: { menu: MenuState }) {
           ))}
           {!shown.length && <div className="mi-empty">No command matches “{q}”</div>}
         </div>
-        <div className="menu-tip">{cur?.tip ?? '↑↓ move · ⏎ run · Esc back'}</div>
+        )}
+        <div className="menu-tip">
+          {cal
+            ? `${cal.cursor.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} — ←→ day · ↑↓ week · PgUp/PgDn month · Home today · ⏎ pick · Esc back`
+            : cur?.tip ?? '↑↓ move · ⏎ run · Esc back'}
+        </div>
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ A highlight is added when a change did not come from a deliberate edit the user 
 | External status change (GitHub PR changed state or unresolved-comment count, pipeline failed, work item moved, AI session needs feedback / finished) | The item(s) bound to it |
 | Calendar change (a meeting moved) | The meeting card |
 | **Undo / redo that brings an item back** | The items that reappeared |
-| AI that adds or reorganises things (plan today, break down) | The items it added |
+| AI that adds or reorganises things (plan today, break down — the mocked one-shot actions) | The items it added |
 
 **Undo is the odd one out, on purpose.** It *is* a user action, but its effect lands somewhere the user is probably not looking — the restored item may sit in another card, a collapsed parent, or another tab. It contradicts "only changes the user didn't make", yet the reasoning is the same: the change shows up away from the user's attention, so it gets marked.
 
@@ -47,9 +47,9 @@ A URL that identifies a thing the app understands is shown as a compact referenc
 
 - **GitHub pull request** (`https://github.com/<org>/<repo>/pull/<n>`, also `/pulls/<n>`): shown as **`[mark] repo#n [state]`**. The org and full URL are in the tooltip and the link target.
 - **The mark is part of the text flow.** The GitHub mark is an inline-block that belongs to the same no-wrap group as `repo#n` and its state, so a long title wraps *after* the reference rather than leaving the icon alone on a line.
-- **State is an icon, not a word.** One tiny glyph per state, in GitHub's colours: `draft` dashed ring (dark grey) · `to review` ring with dot (blue) · `build fails` ✕ (red) · `ready` ✓ (green) · `merged` merge graph (purple) · `closed` slashed ring (dark red; the link is also struck through). The words live in the tooltip / accessible name.
+- **State is an icon, not a word.** One small filled disc per state in GitHub's colours with the glyph knocked out in the background colour: `draft` dashed ring (dark grey) · `to review` ring with dot (blue) · `build fails` ✕ (red) · `ready` ✓ (green) · `merged` merge graph (purple) · `closed` slashed ring (dark red; the link is also struck through). The words live in the tooltip / accessible name.
 - **`has feedback` is a count.** Instead of an icon, an orange pill shows the number of *unresolved comments*. A change in that number is an external change and raises a highlight (§1).
-- Statuses that need you (`has feedback`, `build fails`, `ready`) lift the item into the attention area of Next, like other smart items. A status *change* also raises a highlight.
+- A PR status never moves the item: it stays where the user put it. A status *change* raises a highlight (§1) instead.
 - Anywhere a link cannot be rendered (window titles, toasts, menus, the focus pill) it degrades to plain `repo#n`.
 - In the POC the status is simulated from the mock bar; in the product it comes from the GitHub connector (see design.md §4).
 
@@ -98,3 +98,32 @@ Anything can sit at the top level. In Next, top-level items are just rows with n
 - **In Next, ⌫ takes items out of Next** (with everything beneath them); they stay in the Organizer. **⇧⌫ deletes them completely.** In the Organizer ⌫ always deletes. Both are undoable. Meetings are the exception: ⌫ removes them from yatai (they come back from the Outlook drawer).
 - **Toggling a parent into / out of Next acts on the whole hierarchy**, parent included.
 - **Indent follows what you see.** ⌘] in Next nests under the row displayed directly above, even after rows were moved around; outdenting keeps the item where it was on screen.
+
+## 9. Splitting sub-items out of their parent
+
+- **Any row can be dragged in Next**, sub-items included. Dropping a sub-item outside its card (before / after another card, or beside its own) gives it a card of its own whose header is its parent — **the parent repeats** there, with the split marker (⑂ 2/2); the parent row stays where it was and simply no longer shows that sub-item.
+- **Moving it back consolidates.** Dropping it onto its parent row, or between its siblings nested there, puts it back in the group (and closes the split). `/consolidate` on the pulled card does the same; on the parent's card it also brings back every sub-item pulled out of its rows.
+- Dropping a sub-item between its siblings (nested, same parent) reorders them in the tree.
+- Implementation: a plan segment with `pulled: true` may list sub-items of a Next row; they are then left out when their parent row expands.
+
+## 10. Collapse / expand all
+
+`−` collapses everything, `+` (or `=`) expands everything — in Next (cards, rows with sub-items; collapsing also folds open notes) and in the Organizer (every item with children).
+
+## 11. AI proposals: purple until you decide
+
+**Principle.** The AI never changes your data directly. Whatever it wants to change is shown in place, **purple**, until you **accept** (⌘⏎) or **reject** (⌘⌫) it as a whole.
+
+- **Purple = proposed** (`--ai`, `--ai-soft`), the counterpart of yellow = changed by someone else (§1). New items carry a small `NEW` chip, removed ones are struck through, changed fields (title, estimate — with the old value struck beside it — due, status, being in Next) are tinted. A collapsed card or parent with proposed changes inside is purple too.
+- **The views show the result.** Next and the Organizer render the document as the proposal would leave it, so you judge the outcome, not a diff.
+- **Accept is one undo step** (⌘Z takes it all back). Reject discards it; nothing was ever changed. Accepted changes are not highlighted yellow — you just reviewed them.
+- **While a proposal is pending, other edits are refused** (with a toast) — decide first. Navigation, collapsing and the chat keep working: you can keep talking to refine the proposal; new changes add to it.
+- **The conversation docks** bottom-left without a scrim while a proposal is pending, so the purple stays visible. Closing it keeps both the proposal (a bar at the bottom of the window: Chat · Reject · Accept) and the conversation.
+- **Clickable next steps.** Every answer ends with 2–4 follow-ups the AI suggests ("Revise the Vitest estimate", "Break down Extract staff"), shown as chips above the input; clicking one sends it. Before the first message the chips are openers (about the selected item when there is one). Keyboard: ↑ from the empty input onto the chips, ←→ between them, ⏎ sends, ↓ / Esc back to the input. The model returns `{reply, suggestions}` as structured output, so they are always there.
+- **Tools the AI has:** `get_today_items` (meetings and every item in Next), `get_item` (one item with its notes and whole sub-tree), `search_items`, `patch_items` (some keys of one or more items: title, est, due, status, today) and `set_sub_items` (an item's complete list of sub-items, nested: keep by id, add without, omit to remove). Read tools see the document as proposed so far.
+- **Configuration (POC):** `OPENAI_API_KEY` (and optional `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENAI_BASE_URL`) in `poc/.env`. Calls go to the Responses API (`/v1/responses`) with `store: false`: the conversation, encrypted reasoning included, is kept in the app and resent each turn. The Vite dev server proxies `/api/openai` and adds the key, so it never reaches the browser. Without a key the old mocked replies are used.
+
+
+## 12. Picking a date
+
+`/due` → **Pick a date…** (`5`) turns the menu into a calendar in place, no separate dialog. ←→ day, ↑↓ week, PgUp/PgDn (or ⇧↑↓) month, Home today, ⏎ picks, Esc / ⌫ goes back to the list; clicking a day picks it. Typing jumps straight to a date: `fri` (the next one), `+3`, `+2w`, `+1m`, `tom`, `20` (the next 20th), `nov 20`, `20/11` (in the locale's day/month order), `2026-12-01`. It opens on the current due date (marked with a dot); today is outlined.

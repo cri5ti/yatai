@@ -20,6 +20,14 @@ const dueItems = (ids: string[]): MenuItem[] => [
   { id: 'd1', label: 'Tomorrow', key: '2', run: () => A.setDue(ids, 1) },
   { id: 'd3', label: 'In 3 days', key: '3', run: () => A.setDue(ids, 3) },
   { id: 'd7', label: 'Next week', key: '4', run: () => A.setDue(ids, 7) },
+  {
+    id: 'dpick',
+    label: 'Pick a date…',
+    key: '5',
+    icon: '📅',
+    tip: 'A calendar — or type fri, +3, +2w, nov 20, 2026-12-01',
+    date: { value: get().nodes.find((n) => n.id === ids[0])?.due, pick: (iso) => A.setDueOn(ids, iso) },
+  },
   { id: 'dn', label: 'Clear due date', key: '0', run: () => A.setDue(ids, null) },
 ];
 const reschedItems = (ids: string[]): MenuItem[] => [
@@ -93,16 +101,21 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   }
   items.push({ id: 'indent', label: 'Indent (into the item above)', cmd: 'indent', keys: '⌘]', icon: '⇥', run: () => A.indentItems([n.id], rowsOnly) });
   items.push({ id: 'outdent', label: 'Outdent (up a level)', cmd: 'outdent', keys: '⌘[', icon: '⇤', run: () => A.outdentItems([n.id]) });
-  if (c.card && !c.row && c.card.kind === 'task')
+  if (c.card && !c.row && c.card.kind === 'task') {
+    // sub-items of rows in this card that were dragged out into cards of their own come back too
+    const here = A.subtreeIds(nodes, c.card.seg?.items ?? []);
+    const pulledOut = nextModel(get()).cards.some((x) => x.seg?.pulled && x.key !== c.card!.key && here.has(x.ownerId));
+    const split = parts > 1 || pulledOut;
     items.push({
       id: 'consolidate',
       label: 'Consolidate',
       cmd: 'consolidate',
       icon: '⇲',
-      disabled: parts < 2,
-      tip: parts < 2 ? 'Consolidate all your actions here (this task is not split)' : 'Consolidate all your actions here',
+      disabled: !split,
+      tip: split ? 'Consolidate all your actions here' : 'Consolidate all your actions here (this task is not split)',
       run: () => A.consolidate(c.card!.key),
     });
+  }
   items.push({ id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems([n.id]) });
   items.push({ id: 'breakdown', label: 'Break down with AI', cmd: 'breakdown', keys: 'B', icon: '✨', run: () => A.breakDown(n.id) });
   if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });

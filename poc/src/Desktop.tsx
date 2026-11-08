@@ -7,7 +7,7 @@ import { Inbox } from './Inbox';
 import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
-import { AiPop } from './AiPop';
+import { AiPop, ProposalBar } from './AiPop';
 import { capture, closeCapture, setBounds, dismissToast, openDrawer, redo, setDensity, setLayout, setScale, setTab, toggleHelp, toggleHidden, undo } from './actions';
 import { CALENDAR, DENSITIES, SCALES } from './store';
 import { Drawer } from './Drawer';
@@ -149,6 +149,7 @@ function Win() {
       <div className="content">
         {pill ? <Focus /> : s.tab === 'next' ? <Next /> : s.tab === 'inbox' ? <Inbox /> : <Organizer />}
       </div>
+      {!pill && !s.ai && <ProposalBar />}
       {!pill && (
         <div className="uibar" role="toolbar" aria-label="Sources and display">
           <div className="ugrp drawers" role="group" aria-label="Sources">
@@ -260,8 +261,10 @@ const HELP: [string, [string, string][]][] = [
       ['⌘↑ ⌘↓', 'Reorder (animated) — or drag'],
       ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
       ['/  or right-click', 'Commands: /consolidate /abandon /due /reschedule /tomorrow /estimate /duplicate /ai'],
+      ['−  +', 'Collapse / expand everything'],
       ['⌘Z  ⌘⇧Z', 'Undo / redo — every change goes through the undo manager'],
-      ['⌘/', 'Ask AI'],
+      ['⌘/', 'Ask AI — its changes come back as a purple proposal'],
+      ['⌘⏎  ·  ⌘⌫', 'Accept · reject the AI proposal'],
       ['?', 'This sheet'],
     ],
   ],
@@ -278,6 +281,7 @@ const HELP: [string, [string, string][]][] = [
       ['Space', 'Toggle done (just a marker — nothing disappears)'],
       ['→ / ←', 'On an action: expand / collapse its notes · on a task: expand / collapse the task'],
       ['⌘↑ ⌘↓ on an action', 'Reorder inside the task; past the edge it splits out into its own card'],
+      ['Drag a sub-item out', 'Splits it into its own card, its parent repeated as the header — drag it back onto the parent (or /consolidate) to merge'],
       ['E', 'Estimate picker: 1=5m 2=15m 3=30m 4=1h 5=2h 6=4h 8=8h'],
     ],
   ],
