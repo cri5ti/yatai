@@ -197,3 +197,24 @@ export async function aiPost(path: string, body: string, baseUrl: string, signal
   }
   return { ok: r.status >= 200 && r.status < 300, status: r.status, data };
 }
+
+/* ---------- plugins: requests and tokens go through Rust (src-tauri/src/plugin.rs) ---------- */
+export interface SecretStatus {
+  configured: boolean;
+  host: string | null;
+}
+export const pluginSecretStatus = (plugin: string): Promise<SecretStatus> =>
+  isTauri ? invoke<SecretStatus>('plugin_secret_status', { plugin }) : Promise.resolve({ configured: false, host: null });
+/** store the token for `host` (empty token: remove it); it is not readable from the page afterwards */
+export const pluginSecretSet = (plugin: string, host: string, token: string) => invoke<SecretStatus>('plugin_secret_set', { plugin, host, token });
+
+export interface HttpRes {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+/** an https request made by Rust; `auth` adds the plugin's token (only to the host it was stored for) */
+export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean }): Promise<HttpRes> {
+  if (!isTauri) throw new Error('This source needs the desktop app');
+  return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth } });
+}

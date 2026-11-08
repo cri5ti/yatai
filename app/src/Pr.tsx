@@ -1,5 +1,6 @@
 import { useS } from './store';
 import type { PrStatus } from './store';
+import { prCountOf, prStatusOf } from './model';
 
 export const PR_STATUSES: { id: PrStatus; label: string }[] = [
   { id: 'draft', label: 'draft' },
@@ -85,14 +86,14 @@ export function PrState({ status, comments = DEFAULT_COMMENTS }: { status: PrSta
 export function PrRef({ url, org, repo, num, icon = true }: { url: string; org: string; repo: string; num: string; icon?: boolean }) {
   const s = useS();
   const key = `${org}/${repo}#${num}`;
-  const st: PrStatus = s.prs[key] ?? 'review';
+  const st: PrStatus = prStatusOf(s.snaps, key);
   return (
     <span className={`pr pr-${st}`}>
       {icon && <GhIcon />}
       <a href={url} target="_blank" rel="noreferrer" title={`${org}/${repo} #${num}`} onClick={(e) => e.stopPropagation()}>
         {repo}#{num}
       </a>
-      <PrState status={st} comments={s.prc[key]} />
+      <PrState status={st} comments={prCountOf(s.snaps, key)} />
     </span>
   );
 }

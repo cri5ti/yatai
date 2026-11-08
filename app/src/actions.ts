@@ -1,12 +1,14 @@
 import { countItems } from './clip';
 import type { ClipItem } from './clip';
-import { CALENDAR, DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
+import { DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
 import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
 import { acceptProposal, rejectProposal } from './proposal';
-import type { Chip, Current, Doc, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
+import type { Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
-import { DEFAULT_COMMENTS, prLabel } from './Pr';
-import { FX, ROOT, doneOf, fmt, plain, prLinks, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
+import { pluginById } from './plugins/registry';
+import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
+import type { Snapshot } from './plugins/types';
+import { FX, ROOT, doneOf, fmt, plain, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
 import { quietFlip } from './flip';
@@ -61,20 +63,17 @@ export function dismissHl(ids: string[]) {
   });
 }
 
-/** the mocked GitHub connector reports a new status for a PR */
+/** developer panel: the MOCK GitHub now says this about a PR; the tracker picks it up like any change */
 export function setPrStatus(key: string, status: PrStatus) {
-  const prev = get().prs[key] ?? 'review';
-  if (prev === status) return;
+  if ((get().prs[key] ?? 'review') === status) return;
   set((s) => ({ prs: { ...s.prs, [key]: status } }));
-  highlight(get().nodes.filter((n) => prLinks(n.title).some((l) => l.key === key)).map((n) => n.id));
-  const tone = status === 'failing' ? 'bad' : status === 'feedback' ? 'warn' : status === 'ready' || status === 'merged' ? 'good' : 'info';
-  toast(`${key.replace(/^[^/]+\//, '')}: ${prLabel(status)}`, tone);
+  void refreshNow('github');
 }
 
 export function setPrComments(key: string, n: number) {
-  if ((get().prc[key] ?? DEFAULT_COMMENTS) === n) return;
+  if (get().prc[key] === n) return;
   set((s) => ({ prc: { ...s.prc, [key]: n } }));
-  highlight(get().nodes.filter((x) => prLinks(x.title).some((l) => l.key === key)).map((x) => x.id));
+  void refreshNow('github');
 }
 
 /* ---------- meetings: delete here, bring back from the Outlook drawer ---------- */
@@ -93,33 +92,45 @@ export function removeMeeting(id: string) {
   toast(`${m.title} removed — bring it back from the Outlook drawer`, 'info');
 }
 export function bringMeeting(id: string) {
-  const m = CALENDAR.find((x) => x.id === id);
-  if (!m || get().meetings.some((x) => x.id === id)) return;
+  const e = Object.values(get().agenda).flat().find((x) => x.id === id);
+  if (!e || get().meetings.some((x) => x.id === id)) return;
+  const m: Meeting = { id: e.id, title: e.title, start: e.start, durationMin: e.durationMin, where: e.where };
   commit('Bring in meeting', (s) => ({ meetings: [...s.meetings, { ...m, day: today() }] }));
   toast(`${m.title} is back in Next`, 'good');
 }
 
 /* ---------- the Outlook / GitHub / DevOps drawers ---------- */
 export const openDrawer = (kind: DrawerKind) =>
-  set((s) => ({ drawer: s.drawer?.kind === kind ? null : { kind, tab: kind === 'outlook' ? 'today' : kind === 'github' ? 'assigned' : 'mentions', sel: 0 }, menu: null }));
+  set((s) => {
+    const p = pluginById(kind);
+    const tab = (p?.live?.lists ?? p?.mock?.lists ?? [])[0]?.id ?? '';
+    return { drawer: s.drawer?.kind === kind ? null : { kind, tab, sel: 0 }, menu: null };
+  });
 export const closeDrawer = () => {
   set(() => ({ drawer: null }));
   focusArea();
 };
 export const setDrawerTab = (tab: string) => set((s) => (s.drawer ? { drawer: { ...s.drawer, tab, sel: 0 } } : {}));
+/** ⌘R in a drawer, or a button: look again now */
+export const refreshDrawer = () => void refreshNow(get().drawer?.kind);
 export const setDrawerSel = (sel: number) => set((s) => (s.drawer ? { drawer: { ...s.drawer, sel } } : {}));
 
 /** pull something from a source into yatai: straight into Next, or into the Inbox to triage later */
-export function bringIn(spec: { title: string; smart?: Node['smart']; pr?: { key: string; status: PrStatus; comments?: number } }, to: 'next' | 'inbox') {
+export function bringIn(spec: { title: string; ref?: string; smart?: string; snap?: Snapshot }, to: 'next' | 'inbox') {
   if (to === 'inbox') {
     capture(spec.title);
     return toast('Added to the Inbox', 'good');
   }
-  const node = mk(null, spec.title, { today: true, smart: spec.smart, status: spec.smart ? 'waiting' : 'todo' });
+  const smart = spec.smart ? { source: spec.smart as NonNullable<Node['smart']>['source'], ref: spec.ref } : undefined;
+  const node = mk(null, spec.title, { today: true, smart, status: smart ? 'waiting' : 'todo' });
+  const sn = spec.snap;
+  const key = sn?.ref.startsWith('github:') ? sn.ref.slice(7) : null;
   commit('Bring in', (s) => ({
     nodes: [...s.nodes, node],
-    prs: spec.pr && !s.prs[spec.pr.key] ? { ...s.prs, [spec.pr.key]: spec.pr.status } : s.prs,
-    prc: spec.pr?.comments != null && s.prc[spec.pr.key] == null ? { ...s.prc, [spec.pr.key]: spec.pr.comments } : s.prc,
+    snaps: sn && !s.snaps[sn.ref] ? { ...s.snaps, [sn.ref]: sn } : s.snaps,
+    // the mock GitHub has to agree with what the drawer showed
+    prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
+    prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
     nsel: { card: 's_' + ROOT, row: node.id },
     multi: [],
   }));
@@ -1063,28 +1074,9 @@ export function rejectAi() {
 onBlocked(() => toast('Accept (⌘⏎) or reject (⌘⌫) the AI proposal first', 'warn'));
 
 /* ---------- mock desktop controls ---------- */
-const flagToasts: Partial<Record<keyof Flags, { text: string; tone: Toast['tone'] }>> = {
-  prBuildFailing: { text: 'PR #482: build failed (unit-tests)', tone: 'bad' },
-  prNewComments: { text: 'PR #482: 3 new review comments', tone: 'warn' },
-  prApproved: { text: 'PR #482 approved — ready to merge', tone: 'good' },
-  pipelineFailed: { text: 'Deploy 2.4 failed at prod-eu', tone: 'bad' },
-  workItemChanged: { text: 'WI 18233 moved to Resolved', tone: 'warn' },
-  aiNeedsFeedback: { text: 'Claude session is waiting for your input', tone: 'warn' },
-  aiDone: { text: 'Claude session finished: 14 files changed', tone: 'good' },
-  meetingMoved: { text: 'Design review moved to 11:30 (was 14:00)', tone: 'warn' },
-};
-
-const flagTargets: Partial<Record<keyof Flags, string[]>> = {
-  pipelineFailed: ['a_pipe'],
-  workItemChanged: ['a_wi'],
-  aiNeedsFeedback: ['a_claude'],
-  aiDone: ['a_claude'],
-  meetingMoved: ['m2'],
-};
 export function setFlag(k: keyof Flags, v: boolean) {
   set((s) => ({ flags: { ...s.flags, [k]: v } }));
-  if (v) highlight(flagTargets[k] ?? []);
-  if (v && flagToasts[k]) toast(flagToasts[k]!.text, flagToasts[k]!.tone);
+  void refreshNow(); // the mock plugins read the flags; the tracker turns what changed into highlights and toasts
 }
 
 /** developer panel: move the clock by hand (stops following real time until reset) */
@@ -1134,6 +1126,7 @@ export function rollDay() {
     meetings: s.meetings.filter((m) => !gone.has(m.id)),
     plan: s.plan.filter((g) => !gone.has(g.owner)),
     flags: { ...s.flags, meetingMoved: false },
+    agenda: {},
     past: [],
     future: [],
   }));
@@ -1150,6 +1143,24 @@ export const closeSettings = () => {
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
 export const patchUi = (p: Partial<State>) => set(() => p);
 export const refreshAi = () => refreshAiKey();
+/** Settings → Accounts: keep the token in the keychain, check it, start tracking */
+export async function connectPlugin(id: string, token: string) {
+  try {
+    const as = await connectAccount(id, token);
+    toast(`${pluginById(id)?.name ?? id}: connected as ${as}`, 'good');
+    void refreshNow(id);
+  } catch (e) {
+    toast(`${pluginById(id)?.name ?? id}: ${e instanceof Error ? e.message : String(e)}`, 'bad');
+  }
+}
+export async function disconnectPlugin(id: string) {
+  try {
+    await disconnectAccount(id);
+    toast(`${pluginById(id)?.name ?? id}: token removed from the keychain`, 'info');
+  } catch (e) {
+    toast(`Keychain: ${String(e)}`, 'bad');
+  }
+}
 export const toggleDev = () => set((s) => ({ dev: !s.dev, hidden: false }));
 export const setDemo = (demo: boolean) => set(() => ({ demo }));
 export function loadDemo() {

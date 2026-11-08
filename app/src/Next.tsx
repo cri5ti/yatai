@@ -514,7 +514,7 @@ const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}
 
 export function Next() {
   const { s, marks } = useView();
-  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.flags, s.clock, s.prs]);
+  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.clock, s.snaps]);
   const nav = useMemo(() => navList(m.cards), [m]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;

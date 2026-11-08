@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
+import type { AccountState, AgendaEvent, ListState, Snapshot } from './plugins/types';
 
 export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
 /** what the (mocked) GitHub connector reports for a pull request */
 export type PrStatus = 'draft' | 'review' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
-export type DrawerKind = 'outlook' | 'github' | 'devops';
+/** the id of the plugin whose drawer is open ('outlook', 'github', 'devops', …) */
+export type DrawerKind = string;
 export type Layout = 'dock' | 'float' | 'max' | 'pill';
 export type Tab = 'next' | 'inbox' | 'organizer';
 
@@ -23,7 +25,7 @@ export interface Node {
   due?: string; // yyyy-mm-dd
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
-  smart?: { source: SmartSource };
+  smart?: { source: SmartSource; ref?: string }; // ref: what the plugin tracks ('devops:wi/18233'); older items derive it (model.ts refsOf)
 }
 
 export interface InboxItem {
@@ -39,7 +41,7 @@ export interface Meeting {
   day?: string; // yyyy-mm-dd it is on (meetings are for today: older ones are cleared at the day's rollover)
   title: string;
   start: number; // minutes of day
-  movedTo?: number; // applied when flags.meetingMoved
+  movedTo?: number; // where the calendar moved it (set by the plugin tracker when the agenda changes)
   durationMin: number;
   where: string;
   open?: boolean; // card collapsed when false
@@ -179,6 +181,7 @@ export interface Settings {
   model: string;
   effort: string; // reasoning effort for reasoning models; '' = model default
   baseUrl: string; // '' = https://api.openai.com/v1
+  githubHost: string; // '' = github.com; else a GitHub Enterprise host (its token is in the keychain)
 }
 
 export interface State extends Doc {
@@ -200,9 +203,13 @@ export interface State extends Doc {
   hidden: boolean;
   capture: boolean;
   dark: boolean;
-  prs: Record<string, PrStatus>; // 'org/repo#123' -> status
-  prc: Record<string, number>; // 'org/repo#123' -> unresolved review comments
-  drawer: { kind: DrawerKind; tab: string; sel: number } | null; // Outlook / GitHub / DevOps pop-up
+  prs: Record<string, PrStatus>; // the MOCK GitHub's truth ('org/repo#123' -> status), set from the developer panel
+  prc: Record<string, number>; // …and its unresolved review comments
+  snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
+  agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
+  lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
+  accounts: Record<string, AccountState>; // plugin id -> connected?
+  drawer: { kind: DrawerKind; tab: string; sel: number } | null; // a plugin's pop-up
   hl: Record<string, true>; // yellow highlights: changes the user did not make, cleared only by hovering them
   bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number }>>; // user-resized window rects (dock: only w)
   scale: number; // index into SCALES
@@ -301,7 +308,7 @@ const seedInbox = (): InboxItem[] => [
 
 export const seedMeetings = (): Meeting[] => [
   { id: 'm1', title: 'Team standup', start: 9 * 60 + 30, durationMin: 15, where: 'Teams' },
-  { id: 'm2', title: 'Design review', start: 14 * 60, movedTo: 11 * 60 + 30, durationMin: 45, where: 'Room 4.12' },
+  { id: 'm2', title: 'Design review', start: 14 * 60, durationMin: 45, where: 'Room 4.12' },
   { id: 'm3', title: '1:1 with Sam', start: 16 * 60, durationMin: 30, where: 'Teams' },
 ];
 
@@ -332,7 +339,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '' };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '' };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
@@ -362,6 +369,10 @@ export function initialState(): State {
     dark: false,
     prs: {},
     prc: {},
+    snaps: {},
+    agenda: {},
+    lists: {},
+    accounts: {},
     drawer: null,
     hl: {},
     bounds: {},
@@ -394,7 +405,7 @@ export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'or
 /** state that is not saved: it starts fresh every launch */
 export const TRANSIENT = {
   drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, proposal: null, help: false, edit: null, ins: null,
-  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false,
+  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false, lists: {}, accounts: {},
 } satisfies Partial<State>;
 export { minutesNow, today };
 
@@ -453,7 +464,7 @@ export const useS = () => useSyncExternalStore(subscribe, get);
 
 /** developer panel: replace the whole document (empty, or the demo data); UI preferences stay */
 export function resetDoc(doc: Doc, demo: boolean) {
-  state = { ...state, ...doc, ...TRANSIENT, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
+  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, snaps: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
   emit();
 }
 export const resetAll = () => resetDoc(emptyDoc(), false);

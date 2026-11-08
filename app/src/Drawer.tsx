@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { CALENDAR, useS } from './store';
-import type { DrawerKind, State } from './store';
-import { ADO, GH } from './mock';
+import { useS } from './store';
+import type { State } from './store';
 import { act } from './act';
-import { fmt, meetingsFor, prLinks } from './model';
+import { allAgenda, fmt, refsOf } from './model';
 import { GhIcon, PrState } from './Pr';
 import { cx } from './kbd';
+import { isTauri } from './platform';
+import { pluginById, implFor } from './plugins/registry';
+import type { Entry as PluginEntry, ListDef } from './plugins/types';
 
-interface Entry {
+interface Row {
   id: string;
   lead: ReactNode;
   title: ReactNode;
@@ -19,20 +21,7 @@ interface Entry {
   canInbox: boolean;
 }
 
-const TABS: Record<DrawerKind, { id: string; label: string }[]> = {
-  outlook: [{ id: 'today', label: 'Today’s agenda' }],
-  github: [
-    { id: 'assigned', label: 'Assigned to me' },
-    { id: 'mine', label: 'My PRs' },
-    { id: 'mentions', label: 'Mentions' },
-  ],
-  devops: [
-    { id: 'mentions', label: 'Mentions' },
-    { id: 'mine', label: 'My work items' },
-    { id: 'created', label: 'Created by me' },
-  ],
-};
-const TITLES: Record<DrawerKind, ReactNode> = {
+const TITLES: Record<string, ReactNode> = {
   outlook: <>📅 Outlook</>,
   github: (
     <>
@@ -42,63 +31,74 @@ const TITLES: Record<DrawerKind, ReactNode> = {
   devops: <>◈ DevOps</>,
 };
 
-/** what the real connector will need (design.md §4) — until then the drawer says so instead of showing made-up data */
-const PENDING: Record<DrawerKind, string> = {
-  outlook: 'The Outlook calendar connector (Microsoft Graph, read-only) is not built yet.',
-  github: 'The GitHub connector is not built yet. Pasting a pull-request link into any item already shows it as a PR.',
-  devops: 'The Azure DevOps connector is not built yet.',
-};
+/** the tabs of a plugin's drawer (the mock's when only that exists, so the tabs are there before it is connected) */
+function tabsOf(kind: string): ListDef[] {
+  const p = pluginById(kind);
+  return p?.live?.lists ?? p?.mock?.lists ?? [];
+}
 
-function entriesFor(s: State, kind: DrawerKind, tab: string): Entry[] {
-  if (!s.demo) return [];
+/** why a drawer has nothing to show yet, and what to do about it */
+function blocked(s: State, kind: string): { text: string; connect?: boolean } | null {
+  const p = pluginById(kind);
+  if (!p || implFor(p, s)) return null;
+  if (p.live && !isTauri) return { text: `${p.name} needs the desktop app.` };
+  if (p.live && p.auth) {
+    const st = s.accounts[kind]?.state;
+    return { text: st === 'expired' ? `${p.name} rejected the token.` : `${p.name} is not connected.`, connect: true };
+  }
+  return { text: `The ${p.name} connector is not built yet.` };
+}
+
+const rowOf = (en: PluginEntry, s: State): Row => ({
+  id: en.ref,
+  lead: 'text' in en.lead ? <span className="dtime">{en.lead.text}</span> : <PrState status={en.lead.glyph as never} comments={en.lead.count} />,
+  title: en.snap ? (
+    <>
+      <b>{en.snap.name}</b> {en.title}
+    </>
+  ) : (
+    en.title
+  ),
+  sub: en.sub,
+  have: s.nodes.some((n) => refsOf(n).includes(en.ref)),
+  dim: en.dim,
+  canInbox: en.canInbox,
+  add: (to) => act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to),
+});
+
+function rowsFor(s: State, kind: string, tab: string): Row[] {
+  const p = pluginById(kind);
+  const impl = p && implFor(p, s);
+  if (!p || !impl) return [];
   if (kind === 'outlook') {
-    return meetingsFor({ meetings: CALENDAR, flags: s.flags, clock: s.clock }).map((m) => ({
-      id: m.id,
-      lead: <span className="dtime">{fmt(m.eff)}</span>,
-      title: (
-        <>
-          {m.title}
-          {m.movedFrom != null && <span className="chip warn">moved from {fmt(m.movedFrom)}</span>}
-        </>
-      ),
-      sub: `${m.durationMin} min · ${m.where}${m.state === 'now' ? ' · in progress' : m.state === 'done' ? ' · ended' : ''}`,
-      have: s.meetings.some((x) => x.id === m.id),
-      dim: m.state === 'done',
-      canInbox: false,
-      add: () => act.bringMeeting(m.id),
-    }));
+    // a calendar plugin lists today's agenda
+    const mine = new Map(s.meetings.map((m) => [m.id, m]));
+    return (s.agenda[kind] ?? allAgenda(s))
+      .slice()
+      .sort((a, b) => a.start - b.start)
+      .map((e) => {
+        const have = mine.get(e.id);
+        const minsAway = e.start - s.clock;
+        const state = minsAway > 0 ? 'upcoming' : minsAway + e.durationMin > 0 ? 'now' : 'done';
+        const from = have && have.start !== e.start ? have.start : undefined;
+        return {
+          id: e.id,
+          lead: <span className="dtime">{fmt(e.start)}</span>,
+          title: (
+            <>
+              {e.title}
+              {from != null && <span className="chip warn">moved from {fmt(from)}</span>}
+            </>
+          ),
+          sub: `${e.durationMin} min · ${e.where}${state === 'now' ? ' · in progress' : state === 'done' ? ' · ended' : ''}`,
+          have: !!have,
+          dim: state === 'done',
+          canInbox: false,
+          add: () => act.bringMeeting(e.id),
+        };
+      });
   }
-  if (kind === 'github') {
-    return (GH[tab] ?? []).map((g) => {
-      const key = `${g.org}/${g.repo}#${g.num}`;
-      const url = `https://github.com/${g.org}/${g.repo}/pull/${g.num}`;
-      return {
-        id: key,
-        lead: <PrState status={s.prs[key] ?? g.status} comments={s.prc[key] ?? g.comments} />,
-        title: (
-          <>
-            <b>
-              {g.repo}#{g.num}
-            </b>{' '}
-            {g.title}
-          </>
-        ),
-        sub: `${g.org} · ${g.note}`,
-        have: s.nodes.some((n) => prLinks(n.title).some((l) => l.key === key)),
-        canInbox: true,
-        add: (to) => act.bringIn({ title: `${url} ${g.title}`, pr: { key, status: g.status, comments: g.comments } }, to),
-      };
-    });
-  }
-  return (ADO[tab] ?? []).map((w) => ({
-    id: w.id,
-    lead: <span className="dtime">WI {w.id}</span>,
-    title: w.title,
-    sub: `${w.type} · ${w.state} · ${w.note}`,
-    have: s.nodes.some((n) => n.title.includes(`WI ${w.id}`)),
-    canInbox: true,
-    add: (to) => act.bringIn({ title: `WI ${w.id} — ${w.title}`, smart: { source: 'workitem' } }, to),
-  }));
+  return (s.lists[`${kind}/${tab}`]?.entries ?? []).map((en) => rowOf(en, s));
 }
 
 /** a pop-up over the bottom of the window: browse a source, bring things in (⏎ → Next, I → Inbox) */
@@ -114,8 +114,10 @@ export function Drawer() {
   }, [d?.sel]);
   if (!d) return null;
 
-  const tabs = TABS[d.kind];
-  const entries = entriesFor(s, d.kind, d.tab);
+  const tabs = tabsOf(d.kind);
+  const entries = rowsFor(s, d.kind, d.tab);
+  const stop = blocked(s, d.kind);
+  const ls = s.lists[`${d.kind}/${d.tab}`];
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
   const cur = entries[sel];
 
@@ -142,7 +144,7 @@ export function Drawer() {
   return (
     <div className={`drawer drawer-${d.kind}`} role="dialog" aria-label={`${d.kind} — bring things in`} onKeyDown={onKey}>
       <div className="dhead">
-        <span className="dtitle">{TITLES[d.kind]}</span>
+        <span className="dtitle">{(TITLES[d.kind] ?? d.kind)}</span>
         <div className="dtabs" role="tablist">
           {tabs.map((t) => (
             <button key={t.id} role="tab" aria-selected={d.tab === t.id} className={d.tab === t.id ? 'on' : ''} onClick={() => act.setDrawerTab(t.id)}>
@@ -155,14 +157,23 @@ export function Drawer() {
         </button>
       </div>
       <div className="dlist" tabIndex={0} ref={list} data-drawer-list>
-        {!s.demo ? (
+        {stop ? (
           <div className="dempty">
-            {PENDING[d.kind]}
+            {stop.text}
             <br />
+            {stop.connect && (
+              <button className="btn sm" onClick={() => act.openSettings()}>
+                Connect in Settings…
+              </button>
+            )}{' '}
             <button className="btn sm" onClick={() => act.setDemo(true)}>
               Use demo data
             </button>
           </div>
+        ) : ls?.error ? (
+          <div className="dempty">{ls.error}</div>
+        ) : !ls && d.kind !== 'outlook' ? (
+          <div className="dempty">Loading…</div>
         ) : (
           entries.length === 0 && <div className="dempty">Nothing here.</div>
         )}

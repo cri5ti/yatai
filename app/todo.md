@@ -43,20 +43,24 @@
 - [ ] Shortcuts that are already taken should be rebindable in Settings, not just reported
 - [ ] macOS: decide on the Dock icon (regular app vs menu-bar only / accessory policy)
 
-## Next: connectors (design.md §4, §10; plan in spec/design/plugins.md)
+## Connectors (plan: spec/design/plugins.md)
 
-- [ ] **Plugin system first** (plugins.md §11): core + mocked Outlook / DevOps / GitHub on it, then the Rust http/secrets host, then GitHub live
+Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on it with mocked data; GitHub / GitHub Enterprise is live with a personal access token.
 
-- [ ] **GitHub** (first: pasted PR links already render as PRs)
-  - [ ] auth: device flow or a token in the keychain (or reuse `gh auth token`)
-  - [ ] poll each linked PR: state, checks, unresolved review threads → `prs` / `prc`, highlight + toast on change
-  - [ ] drawer tabs from the API: assigned to me, my PRs, mentions
-- [ ] **Outlook calendar** via Microsoft Graph (read-only `Calendars.Read`)
-  - [ ] find out whether an app registration is possible in the work tenant, or device-code is needed
-  - [ ] today's events → the Outlook drawer; moved / cancelled meetings highlight
-- [ ] **Azure DevOps**: work items (mentions, mine, created by me), pipeline runs
-- [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback — hooks, logs, or APIs?
-- [ ] Polling while the window is hidden: it keeps running in the webview; decide if it needs to move to Rust
+- [ ] GitHub, check by hand with a real token
+  - [ ] Settings → Accounts: host blank (github.com) + fine-grained token → "Connected as …"; wrong token → toast, nothing kept in the keychain
+  - [ ] GitHub Enterprise: host `ghe.example.com`, token for that host → PR links of that host render as PRs, the drawer lists work
+  - [ ] paste a PR url into an item and add it to Next: its icon follows the real state (checks, unresolved threads, approved)
+  - [ ] push a failing check / leave a comment on a tracked PR: within a minute the item highlights and a toast appears
+  - [ ] drawer tabs: assigned to me / my PRs / mentions show real PRs; ⏎ brings one into Next
+  - [ ] revoke the token on GitHub: one toast, polling stops, drawer says "rejected the token"
+  - [ ] Remove in Settings clears the keychain entry (Keychain Access → `yatai` / `plugin:github`)
+- [ ] GitHub: device flow once a GitHub App client_id exists; issues (links + state); review actions are out of scope
+- [ ] **Outlook calendar** via Microsoft Graph (read-only `Calendars.Read`): find out whether an app registration is possible in the work tenant, or device-code is needed; then replace `plugins/outlook.ts`'s mock with a live `agenda`
+- [ ] **Azure DevOps**: work items (mentions, mine, created by me), pipeline runs: replace the mock in `plugins/devops.ts` (PAT first)
+- [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback: hooks, logs, or APIs?
+- [ ] Polling while the window is hidden: it keeps running in the webview at a slower rate (3 min); decide if it needs to move to Rust
+- [ ] The tracker only looks at items in Next (and items bound with `smart`); an item in the Organizer shows the last state it had
 
 ## Later
 

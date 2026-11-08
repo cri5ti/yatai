@@ -5,6 +5,7 @@ import { getCurrentWindow, Window as TauriWindow } from '@tauri-apps/api/window'
 import './tokens.css';
 import './styles.css';
 import { DENSITIES, SCALES, get, replaceState, useS } from './store';
+import { followHost } from './plugins/tracker';
 import type { State } from './store';
 import { act } from './act';
 import { isEditable, mod } from './kbd';
@@ -84,6 +85,7 @@ async function boot() {
   document.body.classList.add('popup-body', `popup-${view}`);
   const root = createRoot(document.getElementById('root')!);
   let first = true;
+  followHost();
   await listen<State>('yatai://state', (m) => {
     replaceState(m);
     if (!first) return;

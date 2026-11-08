@@ -6,6 +6,7 @@ import { dbPath } from './persist';
 import { isTauri, showCapture } from './platform';
 import { fmt, plain, prLinks } from './model';
 import { DEFAULT_COMMENTS, PR_STATUSES } from './Pr';
+import { prCountOf, prStatusOf } from './model';
 
 const layouts: { id: Layout; label: string; hint: string }[] = [
   { id: 'dock', label: 'Dock', hint: 'thin sidebar' },
@@ -91,15 +92,15 @@ export function DevPanel() {
       </section>
 
       <section>
-        <h3>GitHub pull requests</h3>
-        <p className="note">Every PR url found in your items. Pick a status to simulate GitHub changing it.</p>
+        <h3>GitHub pull requests (mock)</h3>
+        <p className="note">{s.demo ? 'Every PR url found in your items. Pick a status to simulate GitHub changing it.' : 'Only the demo connectors can be driven from here: turn them on under Data. With a real token, GitHub decides.'}</p>
         {prs.map((p) => (
           <label key={p.key} className="prrow">
             <span title={p.items.join(' · ')}>{p.key.replace(/^[^/]+\//, '')}</span>
-            {(s.prs[p.key] ?? 'review') === 'feedback' && (
-              <input className="prn" type="number" min={1} max={99} title="Unresolved comments" value={s.prc[p.key] ?? DEFAULT_COMMENTS} onChange={(e) => act.setPrComments(p.key, Math.max(1, +e.target.value || 1))} />
+            {(s.prs[p.key] ?? prStatusOf(s.snaps, p.key)) === 'feedback' && (
+              <input className="prn" type="number" min={1} max={99} title="Unresolved comments" value={s.prc[p.key] ?? prCountOf(s.snaps, p.key) ?? DEFAULT_COMMENTS} onChange={(e) => act.setPrComments(p.key, Math.max(1, +e.target.value || 1))} />
             )}
-            <select value={s.prs[p.key] ?? 'review'} onChange={(e) => act.setPrStatus(p.key, e.target.value as PrStatus)}>
+            <select disabled={!s.demo} value={s.prs[p.key] ?? 'review'} onChange={(e) => act.setPrStatus(p.key, e.target.value as PrStatus)}>
               {PR_STATUSES.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.label}

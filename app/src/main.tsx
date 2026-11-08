@@ -4,11 +4,12 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { acceptAi, capture, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
 import { startPopups } from './popups';
+import { startTracker } from './plugins/tracker';
 import { invoke, isFrontmost, isTauri, listen, setVisible } from './platform';
 
 function App() {
@@ -142,6 +143,7 @@ async function boot() {
   rollDay();
   void refreshAiKey();
   startPopups();
+  startTracker({ toast, highlight });
   if (isTauri)
     void invoke<string[]>('shortcuts_taken').then((t) => t.length && toast(`${t.join(' and ')} ${t.length > 1 ? 'are' : 'is'} used by another app — use the tray icon instead`, 'warn'));
   createRoot(document.getElementById('root')!).render(

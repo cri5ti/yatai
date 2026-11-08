@@ -7,8 +7,8 @@ export function Chips({ node }: { node: Node }) {
   const s = useS();
   return (
     <>
-      {alertsFor(node, s.flags).map((a, i) => (
-        <span key={i} className={`chip ${a.tone}`}>
+      {alertsFor(node, s.snaps).map((a) => (
+        <span key={a.key} className={`chip ${a.tone}`}>
           {a.text}
         </span>
       ))}

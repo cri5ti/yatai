@@ -1,6 +1,6 @@
 # yatai — plugins (connectors)
 
-Status: proposal. Expands `design.md` §4 (smart items) and §10 (milestones 2, 3, 6).
+Status: implemented in `app/src/plugins/` (see "As built" at the end for where it differs from the proposal). Expands `design.md` §4 (smart items) and §10 (milestones 2, 3, 6).
 First targets: **GitHub** (real data), **Outlook** and **Azure DevOps** (move onto the plugin system, still mocked).
 More sources are expected (Jira, Linear, GitLab, Teams, AI sessions), so the system is built around the *kinds of things a source gives us*, not around three hard-coded integrations.
 
@@ -320,3 +320,15 @@ Each step is its own commit(s) and keeps `tsc` + `build` (+ `cargo check/test`) 
 - **Polling while hidden**: webview timers are throttled when the window is hidden (see `todo.md`). Likely answer: move the tracker loop into Rust and have it emit events, once there are real plugins to justify it. The plugin interface does not change.
 - **One ref per node** vs several (a PR plus its work item on one action)? v1: one; titles can still contain more links, rendered but not tracked beyond the first.
 - **Plugin settings UI**: generic form from a schema in the manifest (base URL, repos to ignore, poll interval) vs bespoke per plugin. Proposal: a small `settings` schema in the manifest, rendered by Settings.
+
+## 13. As built
+
+Differences from the proposal above, decided while implementing:
+
+- **Auth**: personal access token (fine-grained, read-only) first; no `gh` import, no device flow yet. The token is stored with the host it is allowed to go to (`api.github.com`, or the Enterprise host), and `plugin_http` refuses to send it anywhere else. Redirects are not followed.
+- **GitHub Enterprise** is supported from the start: Settings → *GitHub host* (blank = github.com). One host at a time; PR links are recognised for that host only. REST/GraphQL live at `https://<host>/api/graphql`.
+- **Refs are strings** (`github:acme/api#482`), not objects. `Plugin` has `match`, `auth`, `live`, `mock` and `pollMs`; the provider bag (`Impl`) has `fetch`, `lists`/`list`, `agenda`. Implementations import the platform bridge directly instead of receiving a `Host`.
+- **What is polled**: items in Next that are not done, plus items bound to a source with `smart` (work items, runs); GitHub PRs come from the links in item titles. Every 60 s while the window is shown, 3 min while hidden, backing off with the rate limit; the open drawer's list is refreshed on the same schedule. There is no push channel to a desktop app (webhooks need a reachable server; the notifications API is polled too), so polling it is.
+- **State**: `snaps` (last snapshot per ref, saved) replaces what `prs` / `prc` used to be for the UI. `prs` / `prc` / `flags` stay, but only as the *mock* plugins' input from the developer panel. `agenda` (saved) holds the calendar events; a meeting moved by the calendar gets `movedTo`.
+- **Not done**: the `snapshot` SQL table (snapshots live in the UI-state JSON), per-plugin settings schema, `Host.kv`, shared accounts between plugins.
+- Tested headlessly (esbuild + node): the GitHub mapping, the live API against a stubbed transport (batching, Enterprise endpoints, 401 / rate limit, rejected token removed again), and the tracker with the mocks (first sight is silent, changes toast + highlight once, meeting moves). Rust: unit tests for the host check.

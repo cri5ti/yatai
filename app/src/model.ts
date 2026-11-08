@@ -1,4 +1,5 @@
-import type { Flags, Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
+import type { Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
+import type { AgendaEvent, Alert, Snapshot } from './plugins/types';
 
 export const FX = 'fx_'; // fixed calendar row inside a meeting card: fx_<meetingId>
 
@@ -40,7 +41,12 @@ export function dueLabel(due: string): { text: string; tone: 'bad' | 'warn' | 'i
 export const laterLabel = (d?: number) => (d == null ? '' : d === 1 ? 'tomorrow' : `in ${d}d`);
 
 /* ---------- GitHub pull-request links ---------- */
-const PR_SRC = 'https://github\\.com/([\\w.-]+)/([\\w.-]+)/pulls?/(\\d+)';
+/** the one GitHub host whose links are recognised: github.com, or the Enterprise host from Settings */
+let prHost = 'github.com';
+export const normHost = (h: string) => h.trim().replace(/^https?:\/\//i, '').replace(/[/?#].*$/, '').toLowerCase() || 'github.com';
+export const setPrHost = (h: string) => void (prHost = normHost(h));
+export const getPrHost = () => prHost;
+const prSrc = () => `https://${prHost.replace(/\./g, '\\.')}/([\\w.-]+)/([\\w.-]+)/pulls?/(\\d+)`;
 export interface PrLink {
   key: string; // org/repo#123
   org: string;
@@ -50,21 +56,47 @@ export interface PrLink {
 }
 /** every PR link in a piece of text (a url, with or without trailing path) */
 export function prLinks(text: string): PrLink[] {
-  const re = new RegExp(PR_SRC + '(?:[/?#][^\\s)]*)?', 'g');
+  const re = new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g');
   const out: PrLink[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) out.push({ key: `${m[1]}/${m[2]}#${m[3]}`, org: m[1], repo: m[2], num: m[3], url: m[0] });
   return out;
 }
-export const prMatch = (url: string) => new RegExp('^' + PR_SRC).exec(url);
+export const prMatch = (url: string) => new RegExp('^' + prSrc()).exec(url);
+export const prUrl = (org: string, repo: string, num: string) => `https://${prHost}/${org}/${repo}/pull/${num}`;
 /** text for places that cannot render a link: PR urls become repo#123 */
-export const plain = (text: string) => text.replace(new RegExp(PR_SRC + '(?:[/?#][^\\s)]*)?', 'g'), (_, _o, r, n) => `${r}#${n}`);
+export const plain = (text: string) => text.replace(new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g'), (_, _o, r, n) => `${r}#${n}`);
+
+/* ---------- plugin refs and their snapshots ---------- */
+/** the ref an item's `smart` badge tracks; items made before refs existed derive it */
+export function smartRef(n: Node): string | undefined {
+  if (!n.smart) return undefined;
+  if (n.smart.ref) return n.smart.ref;
+  switch (n.smart.source) {
+    case 'pipeline': return 'devops:run/deploy-2.4';
+    case 'workitem': return `devops:wi/${/WI (\d+)/.exec(n.title)?.[1] ?? '0'}`;
+    case 'ai': return 'ai:session/claude';
+  }
+  return undefined;
+}
+/** everything an item tracks: its smart ref and the PR links on its first line */
+export function refsOf(n: Node): string[] {
+  const out = new Set<string>();
+  const r = smartRef(n);
+  if (r) out.add(r);
+  for (const l of prLinks(n.title.split('\n')[0])) out.add(`github:${l.key}`);
+  return [...out];
+}
+type Snaps = Record<string, Snapshot>;
+/** a PR's state as the GitHub plugin last reported it ('review' until it has) */
+export const prStatusOf = (snaps: Snaps, key: string): PrStatus => (snaps[`github:${key}`]?.view.glyph as PrStatus | undefined) ?? 'review';
+export const prCountOf = (snaps: Snaps, key: string): number | undefined => snaps[`github:${key}`]?.view.count;
 
 /** PR states that want your attention (like a smart item with a non-neutral alert) */
 export const PR_ATTENTION: PrStatus[] = ['failing', 'feedback', 'ready'];
-export function prAttention(n: Node, prs: Record<string, PrStatus>) {
+export function prAttention(n: Node, snaps: Snaps) {
   if (n.status === 'done') return false;
-  return prLinks(n.title.split('\n')[0]).some((l) => PR_ATTENTION.includes(prs[l.key] ?? 'review'));
+  return prLinks(n.title.split('\n')[0]).some((l) => PR_ATTENTION.includes(prStatusOf(snaps, l.key)));
 }
 
 /** does any item in the subtree of `id` carry a highlight? (used so a collapsed parent can show it) */
@@ -109,37 +141,14 @@ export function pathOf(nodes: Node[], id: string | null): string[] {
   return out;
 }
 
-export interface Alert {
-  tone: 'bad' | 'warn' | 'good' | 'info';
-  text: string;
+/** the chips of a smart item: what its plugin last said (nothing until it has said something) */
+export function alertsFor(n: Node, snaps: Snaps): Alert[] {
+  const ref = smartRef(n);
+  if (!ref || n.status === 'done') return [];
+  return snaps[ref]?.alerts ?? [];
 }
 
-export function alertsFor(n: Node, f: Flags): Alert[] {
-  if (!n.smart || n.status === 'done') return [];
-  const a: Alert[] = [];
-  switch (n.smart.source) {
-    case 'pr':
-      if (f.prBuildFailing) a.push({ tone: 'bad', text: 'Build failed' });
-      if (f.prNewComments) a.push({ tone: 'warn', text: '3 new comments' });
-      if (f.prApproved) a.push({ tone: 'good', text: 'Approved · mergeable' });
-      if (!a.length) a.push({ tone: 'info', text: 'Awaiting review' });
-      break;
-    case 'pipeline':
-      a.push(f.pipelineFailed ? { tone: 'bad', text: 'Deploy failed at "prod-eu"' } : { tone: 'info', text: 'Deploying · stage 2/4' });
-      break;
-    case 'workitem':
-      a.push(f.workItemChanged ? { tone: 'warn', text: 'State: Active → Resolved' } : { tone: 'info', text: 'Active' });
-      break;
-    case 'ai':
-      if (f.aiNeedsFeedback) a.push({ tone: 'warn', text: 'Claude needs feedback' });
-      else if (f.aiDone) a.push({ tone: 'good', text: 'Session finished' });
-      else a.push({ tone: 'info', text: 'Claude working…' });
-      break;
-  }
-  return a;
-}
-
-export const needsAttention = (n: Node, f: Flags) => alertsFor(n, f).some((a) => a.tone !== 'info');
+export const needsAttention = (n: Node, snaps: Snaps) => alertsFor(n, snaps).some((a) => a.tone !== 'info');
 
 /* ---------- meetings ---------- */
 export interface EffMeeting extends Meeting {
@@ -149,10 +158,13 @@ export interface EffMeeting extends Meeting {
   state: 'upcoming' | 'now' | 'done';
 }
 
-export function meetingsFor(s: Pick<State, 'meetings' | 'flags' | 'clock'>): EffMeeting[] {
+export const allAgenda = (s: Pick<State, 'agenda'>): AgendaEvent[] => Object.values(s.agenda).flat();
+
+/** the meetings in Next; `movedTo` is where the calendar moved one (the tracker sets it when the agenda changes) */
+export function meetingsFor(s: Pick<State, 'meetings' | 'clock'>): EffMeeting[] {
   return s.meetings
     .map((m) => {
-      const moved = s.flags.meetingMoved && m.movedTo != null;
+      const moved = m.movedTo != null && m.movedTo !== m.start;
       const eff = moved ? m.movedTo! : m.start;
       const minsAway = eff - s.clock;
       const state: EffMeeting['state'] = minsAway > 0 ? 'upcoming' : minsAway + m.durationMin > 0 ? 'now' : 'done';
@@ -296,8 +308,8 @@ export interface CardM {
 
 const isCounted = (n: Node) => n.status !== 'dropped';
 
-export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'flags' | 'clock' | 'prs'>) {
-  const { nodes, flags } = s;
+export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock' | 'snaps'>) {
+  const { nodes, snaps } = s;
   const plan = reconcilePlan(s.plan, nodes, s.meetings);
   const ms = new Map(meetingsFor(s).map((m) => [m.id, m]));
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -337,7 +349,7 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'flags'
         continue;
       }
       const n = byId.get(id)!;
-      if ((n.smart && n.status !== 'done' && needsAttention(n, flags))) {
+      if ((n.smart && n.status !== 'done' && needsAttention(n, snaps))) {
         const arows: Row[] = [{ id: n.id, node: n, depth: 0, kids: false }];
         attention.push({
           key: 'att_' + n.id,
