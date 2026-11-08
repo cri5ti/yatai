@@ -1,0 +1,151 @@
+/* ==========================================================================
+   yatai design tokens — the only place raw values live.
+   styles.css consumes these; nothing else should hard-code a colour, size or duration.
+   ========================================================================== */
+:root {
+  /* ---- type ---- */
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14.5px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semi: 600;
+  --fw-bold: 700;
+  --lh-tight: 1.25;
+  --lh-body: 1.5;
+
+  /* ---- space (4px-ish scale) ---- */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+
+  /* ---- shape ---- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+  --bw: 1px;
+
+  /* ---- motion ---- */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 300ms;
+  --dur-4: 450ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- layers ---- */
+  --z-win: 20;
+  --z-taskbar: 50;
+  --z-popup: 60;
+  --z-toast: 70;
+  --z-menu: 80;
+
+  /* ---- window geometry ---- */
+  --dock-w: 372px;
+  --float-w: 560px;
+  --pill-w: 360px;
+  --taskbar-h: 40px;
+
+  /* ---- colour: light ---- */
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f7;
+  --surface-3: #e6e9f2;
+  --border: #e6e8f0;
+  --border-strong: #c3c8d6;
+  --hover: rgba(70, 80, 120, 0.08);
+  --appt: #e3effb; /* Outlook-style appointment blue */
+  --text: #1b1f2a;
+  --text-muted: #7a8194;
+  --accent: #5b5bd6;
+  --accent-soft: #e9e9fb;
+  --accent-text: #3a3aa8;
+  --on-accent: #ffffff;
+  --focus: #2f6bff; /* the keyboard focus ring — deliberately louder than --accent */
+  --focus-soft: rgba(47, 107, 255, 0.16);
+  --bad: #d92d3a;
+  --bad-soft: #fde8ea;
+  --warn: #b7791f;
+  --warn-soft: #fdf1d8;
+  --good: #1f8a52;
+  --good-soft: #def5e7;
+  --info: #5b6478;
+  --info-soft: #eceef4;
+  --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #8250df; --gh-closed: #82071e;
+  --hl: #fff2a0; /* yellow: something changed that you did not change */
+  --hl-bar: #d9a400;
+  --ai: #7c3aed; /* purple: changes an AI proposal would make — until you accept / reject */
+  --ai-soft: #f3ecfe;
+  --ai-text: #6526cf;
+  --live: #e0457b; /* the started action */
+  --live-soft: rgba(224, 69, 123, 0.1);
+  --shadow-pop: 0 10px 40px rgba(20, 24, 50, 0.25);
+  --shadow-card: 0 1px 2px rgba(20, 24, 50, 0.06);
+  --scrim: rgba(14, 16, 30, 0.28);
+
+  /* ---- colour: mock desktop + control panel (not part of the product UI) ---- */
+  --ctl-bg: #181b24;
+  --ctl-surface: #262a36;
+  --ctl-border: #3a4052;
+  --ctl-text: #d6d9e5;
+  --ctl-muted: #8b92a8;
+}
+
+:root[data-theme='dark'] {
+  --bg: #14161d;
+  --surface: #1d2029;
+  --surface-2: #262a36;
+  --surface-3: #30354a;
+  --border: #2c3140;
+  --border-strong: #4a5066;
+  --hover: rgba(255, 255, 255, 0.07);
+  --appt: #1b2b42;
+  --text: #e7e9f1;
+  --text-muted: #8b92a8;
+  --accent: #8b8bff;
+  --accent-soft: #2c2f55;
+  --accent-text: #b9b9ff;
+  --on-accent: #12131c;
+  --focus: #6ea0ff;
+  --focus-soft: rgba(110, 160, 255, 0.2);
+  --bad: #ff6b76;
+  --bad-soft: #3d1f24;
+  --warn: #f0b955;
+  --warn-soft: #3a2e17;
+  --good: #55d18c;
+  --good-soft: #15321f;
+  --info: #a0a8c0;
+  --info-soft: #2b3040;
+  --gh-draft: #8b949e; --gh-review: #4493f8; --gh-feedback: #f0883e; --gh-failing: #ff7b72; --gh-ready: #3fb950; --gh-merged: #ab7df8; --gh-closed: #e5534b;
+  --hl: #4d4100;
+  --hl-bar: #e6b800;
+  --ai: #a77bff;
+  --ai-soft: #2c2142;
+  --ai-text: #c7a8ff;
+  --live: #ff7aa8;
+  --live-soft: rgba(255, 122, 168, 0.12);
+  --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.55);
+  --scrim: rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 1ms;
+    --dur-2: 1ms;
+    --dur-3: 1ms;
+    --dur-4: 1ms;
+  }
+}

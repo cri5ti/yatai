@@ -1,0 +1,231 @@
+mod ai;
+mod db;
+
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
+use tauri::{
+    image::Image,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, RunEvent, State, WindowEvent,
+};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// set once the UI has flushed its pending writes (or gave up waiting): then quitting really quits
+static CAN_EXIT: AtomicBool = AtomicBool::new(false);
+
+/* ---------- commands ---------- */
+
+#[tauri::command]
+fn db_load(db: State<db::Db>) -> Result<serde_json::Value, String> {
+    let c = db.0.lock().map_err(|e| e.to_string())?;
+    db::load(&c)
+}
+
+#[tauri::command]
+fn db_apply(db: State<db::Db>, ops: Vec<db::Op>) -> Result<(), String> {
+    let mut c = db.0.lock().map_err(|e| e.to_string())?;
+    db::apply(&mut c, &ops)
+}
+
+#[tauri::command]
+fn db_path(app: AppHandle) -> String {
+    data_file(&app).display().to_string()
+}
+
+/// the inbox count next to the tray icon (macOS menu bar) / in its tooltip
+#[tauri::command]
+fn set_badge(tray: State<Tray>, count: u32) {
+    if let Some(t) = tray.0.lock().ok().and_then(|t| t.clone()) {
+        let label = if count > 0 { Some(count.to_string()) } else { None };
+        #[cfg(target_os = "macos")]
+        let _ = t.set_title(label.as_deref());
+        let _ = t.set_tooltip(Some(match label {
+            Some(n) => format!("yatai · {n} in the inbox"),
+            None => "yatai".into(),
+        }));
+    }
+}
+
+#[tauri::command]
+fn show_capture(app: AppHandle) {
+    open_capture(&app);
+}
+
+/// the UI calls this once its writes are on disk
+#[tauri::command]
+fn quit(app: AppHandle) {
+    CAN_EXIT.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
+/* ---------- shell ---------- */
+
+struct Tray(Mutex<Option<TrayIcon>>);
+/// global shortcuts another app already had
+struct Taken(Vec<&'static str>);
+
+#[tauri::command]
+fn shortcuts_taken(t: State<Taken>) -> Vec<&'static str> {
+    t.0.clone()
+}
+
+fn data_file(app: &AppHandle) -> std::path::PathBuf {
+    let dir = app.path().app_data_dir().expect("no app data dir");
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("yatai.db")
+}
+
+/// everything about the main window (show / hide, layout, position) is decided by the UI; the shell only asks
+fn to_main(app: &AppHandle, event: &str) {
+    if event == "yatai://show" {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
+    let _ = app.emit_to("main", event, ());
+}
+
+fn open_capture(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("capture") {
+        let _ = w.center();
+        let _ = w.show();
+        let _ = w.set_focus();
+        let _ = app.emit_to("capture", "yatai://capture-open", ());
+    }
+}
+
+/// a small diamond, drawn rather than shipped (template image: macOS tints it for the menu bar)
+fn tray_image() -> Image<'static> {
+    const N: u32 = 36;
+    let mut px = vec![0u8; (N * N * 4) as usize];
+    let c = (N as f32 - 1.0) / 2.0;
+    for y in 0..N {
+        for x in 0..N {
+            let d = (x as f32 - c).abs() + (y as f32 - c).abs();
+            let a = ((c - 3.0 - d) * 1.5).clamp(0.0, 1.0); // anti-aliased edge
+            let i = ((y * N + x) * 4) as usize;
+            px[i + 3] = (a * 255.0) as u8;
+        }
+    }
+    Image::new_owned(px, N, N)
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
+    let show = MenuItem::with_id(app, "toggle", "Show / hide yatai", true, Some("Alt+Y"))?;
+    let capture = MenuItem::with_id(app, "capture", "Quick capture…", true, Some("Alt+Space"))?;
+    let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let dev = MenuItem::with_id(app, "dev", "Developer panel", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit yatai", true, Some("CmdOrCtrl+Q"))?;
+    let sep = || PredefinedMenuItem::separator(app);
+    let menu = Menu::with_items(app, &[&show, &capture, &sep()?, &settings, &dev, &sep()?, &quit])?;
+    TrayIconBuilder::with_id("yatai")
+        .icon(tray_image())
+        .icon_as_template(true)
+        .tooltip("yatai")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, e| match e.id.as_ref() {
+            "toggle" => to_main(app, "yatai://toggle"),
+            "capture" => open_capture(app),
+            "settings" => to_main(app, "yatai://settings"),
+            "dev" => to_main(app, "yatai://dev"),
+            "quit" => app.exit(0), // goes through ExitRequested, which lets the UI flush first
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, e| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
+                to_main(tray.app_handle(), "yatai://toggle");
+            }
+        })
+        .build(app)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let toggle = Shortcut::new(Some(Modifiers::ALT), Code::KeyY);
+    let capture = Shortcut::new(Some(Modifiers::ALT), Code::Space);
+
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| to_main(app, "yatai://show")))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, sc, e| {
+                    if e.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if sc == &toggle {
+                        to_main(app, "yatai://toggle");
+                    } else if sc == &capture {
+                        open_capture(app);
+                    }
+                })
+                .build(),
+        )
+        .manage(Tray(Mutex::new(None)))
+        .setup(move |app| {
+            let path = data_file(app.handle());
+            let conn = db::open(&path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+            app.manage(db::Db(Mutex::new(conn)));
+            let tray = build_tray(app.handle())?;
+            *app.state::<Tray>().0.lock().unwrap() = Some(tray);
+            // another app may own a shortcut already (⌥Space is popular): yatai still starts, and says so
+            let mut taken = vec![];
+            for (sc, name) in [(toggle, "⌥Y"), (capture, "⌥Space")] {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("yatai: cannot register {name}: {e}");
+                    taken.push(name);
+                }
+            }
+            app.manage(Taken(taken));
+            Ok(())
+        })
+        .on_window_event(|w, e| {
+            // closing a window only hides it; yatai lives in the tray
+            if let WindowEvent::CloseRequested { api, .. } = e {
+                api.prevent_close();
+                match w.label() {
+                    "main" => {
+                        let _ = w.emit_to("main", "yatai://hide", ());
+                    }
+                    _ => {
+                        let _ = w.hide();
+                    }
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            db_load,
+            db_apply,
+            db_path,
+            set_badge,
+            show_capture,
+            shortcuts_taken,
+            quit,
+            ai::ai_key_status,
+            ai::ai_set_key,
+            ai::ai_post,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building yatai");
+
+    app.run(|app, e| {
+        if let RunEvent::ExitRequested { api, .. } = e {
+            if CAN_EXIT.load(Ordering::SeqCst) {
+                return;
+            }
+            // let the UI write what is pending, then quit (or quit anyway after a second)
+            api.prevent_exit();
+            let _ = app.emit_to("main", "yatai://quit", ());
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1200));
+                CAN_EXIT.store(true, Ordering::SeqCst);
+                app.exit(0);
+            });
+        }
+    });
+}
