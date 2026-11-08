@@ -64,7 +64,7 @@ Pluggable **connectors**, each polling (or subscribing) and producing status eve
 | Outlook / Teams calendar | meeting add/change/cancel; surfaced in Today and promoted as start time nears |
 | Teams messages (later) | raise awareness of selected chats/mentions |
 
-Connector contract: `auth()`, `poll(since) → events[]`, `link(url) → item`. Events update item status and may bump priority in Today (e.g. build failure promotes the card).
+Connector contract: `auth()`, `poll(since) → events[]`, `link(url) → item`. The plugin system that replaces this sketch (providers, snapshots, alerts, auth, polling) is in [plugins.md](plugins.md). Events update item status and may bump priority in Today (e.g. build failure promotes the card).
 
 **Calendar sync (open question):** Microsoft Graph API (OAuth device/PKCE flow) is the route to Outlook and Teams calendar and messages. Read-only scopes (`Calendars.Read`, later `Chat.Read`). Needs an app registration; a work tenant may require admin consent.
 

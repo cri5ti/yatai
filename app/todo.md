@@ -43,7 +43,9 @@
 - [ ] Shortcuts that are already taken should be rebindable in Settings, not just reported
 - [ ] macOS: decide on the Dock icon (regular app vs menu-bar only / accessory policy)
 
-## Next: connectors (design.md §4, §10)
+## Next: connectors (design.md §4, §10; plan in spec/design/plugins.md)
+
+- [ ] **Plugin system first** (plugins.md §11): core + mocked Outlook / DevOps / GitHub on it, then the Rust http/secrets host, then GitHub live
 
 - [ ] **GitHub** (first: pasted PR links already render as PRs)
   - [ ] auth: device flow or a token in the keychain (or reuse `gh auth token`)
