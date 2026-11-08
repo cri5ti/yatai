@@ -9,7 +9,7 @@ import { followHost } from './plugins/tracker';
 import type { State } from './store';
 import { act } from './act';
 import { isEditable, mod } from './kbd';
-import { emitTo, listen, startDrag } from './platform';
+import { emitTo, listen, openLinksWithModifier, startDrag } from './platform';
 import { VIEWS, isView, viewOfLabel, wanted } from './popups';
 import type { View } from './popups';
 import { Settings } from './Settings';
@@ -86,6 +86,7 @@ async function boot() {
   const root = createRoot(document.getElementById('root')!);
   let first = true;
   followHost();
+  openLinksWithModifier();
   await listen<State>('yatai://state', (m) => {
     replaceState(m);
     if (!first) return;

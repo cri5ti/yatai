@@ -99,6 +99,7 @@ export interface ListState {
   entries: Entry[];
   at: number;
   error?: string;
+  loading?: boolean; // a refresh is running
 }
 
 export const refKey = (plugin: string, id: string) => `${plugin}:${id}`;

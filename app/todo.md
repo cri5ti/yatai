@@ -21,6 +21,8 @@
   - [ ] drag a popup by its header; moving the float window takes its popups along (macOS)
   - [ ] typing in the AI chat, accepting with ⌘⏎ from the chat, chips under a reply; drawer ↑↓ ⏎ I
   - [ ] hiding yatai (⌥Y, ✕) hides open popups; showing it brings them back; focus mode puts the drawer away
+- [ ] ⌘-click (Ctrl-click) on a PR link or any url opens the system browser; a plain click still just selects the row and never navigates the webview
+- [ ] Drawer ↻ (or R) refreshes the list: spinner while it runs, "updated Ns ago" in the footer
 - [ ] Context menus fit in the 372 px dock
 - [ ] Dark mode carries over to the capture window
 - [ ] Developer panel: demo connectors, Load demo data, Start empty, simulated clock → Real time

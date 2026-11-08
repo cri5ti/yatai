@@ -108,6 +108,26 @@ fn popup_close(app: AppHandle, view: String) {
     }
 }
 
+/// open a web link in the system browser (the webview itself never navigates away)
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let ok = reqwest::Url::parse(&url).map(|u| matches!(u.scheme(), "http" | "https")).unwrap_or(false);
+    if !ok {
+        return Err("only http(s) links".into());
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("rundll32");
+        c.arg("url.dll,FileProtocolHandler");
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// the UI calls this once its writes are on disk
 #[tauri::command]
 fn quit(app: AppHandle) {
@@ -265,6 +285,7 @@ pub fn run() {
             popup_close,
             shortcuts_taken,
             quit,
+            open_url,
             ai::ai_key_status,
             ai::ai_set_key,
             ai::ai_post,

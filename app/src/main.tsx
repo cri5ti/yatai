@@ -10,7 +10,7 @@ import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
 import { startPopups } from './popups';
 import { startTracker } from './plugins/tracker';
-import { invoke, isFrontmost, isTauri, listen, setVisible } from './platform';
+import { invoke, isFrontmost, isTauri, listen, openLinksWithModifier, setVisible } from './platform';
 
 function App() {
   const s = useS();
@@ -143,6 +143,7 @@ async function boot() {
   rollDay();
   void refreshAiKey();
   startPopups();
+  openLinksWithModifier();
   startTracker({ toast, highlight });
   if (isTauri)
     void invoke<string[]>('shortcuts_taken').then((t) => t.length && toast(`${t.join(' and ')} ${t.length > 1 ? 'are' : 'is'} used by another app — use the tray icon instead`, 'warn'));

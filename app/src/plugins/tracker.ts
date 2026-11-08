@@ -135,11 +135,15 @@ async function runPlugin(p: Plugin) {
     }
     if (drawer && impl.list) {
       const key = `${p.id}/${drawer.tab}`;
+      set((st) => ({ lists: { ...st.lists, [key]: { entries: st.lists[key]?.entries ?? [], at: st.lists[key]?.at ?? 0, error: st.lists[key]?.error, loading: true } } }));
       try {
         const entries = await impl.list(drawer.tab);
         set((st) => ({ lists: { ...st.lists, [key]: { entries, at: Date.now() } } }));
       } catch (e) {
-        if (e instanceof AuthError) throw e;
+        if (e instanceof AuthError) {
+          set((st) => ({ lists: { ...st.lists, [key]: { ...st.lists[key], entries: st.lists[key]?.entries ?? [], at: st.lists[key]?.at ?? 0, loading: false } } }));
+          throw e;
+        }
         set((st) => ({ lists: { ...st.lists, [key]: { entries: st.lists[key]?.entries ?? [], at: Date.now(), error: e instanceof Error ? e.message : String(e) } } }));
       }
     }

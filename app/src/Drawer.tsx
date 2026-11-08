@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useS } from './store';
 import type { State } from './store';
 import { act } from './act';
-import { allAgenda, fmt, refsOf } from './model';
+import { allAgenda, fmt, refsOf, relTime } from './model';
 import { GhIcon, PrState } from './Pr';
 import { cx } from './kbd';
 import { isTauri } from './platform';
@@ -116,7 +116,7 @@ export function Drawer() {
 
   const tabs = tabsOf(d.kind);
   const entries = rowsFor(s, d.kind, d.tab);
-  const stop = blocked(s, d.kind);
+  const block = blocked(s, d.kind);
   const ls = s.lists[`${d.kind}/${d.tab}`];
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
   const cur = entries[sel];
@@ -132,6 +132,9 @@ export function Drawer() {
       stop();
       const i = tabs.findIndex((t) => t.id === d.tab);
       act.setDrawerTab(tabs[(i + (k === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id);
+    } else if (k === 'r' || k === 'R') {
+      stop();
+      act.refreshDrawer();
     } else if (k === 'Enter' && cur) {
       stop();
       cur.have ? act.toast('Already in yatai') : cur.add('next');
@@ -152,16 +155,19 @@ export function Drawer() {
             </button>
           ))}
         </div>
+        <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={() => act.refreshDrawer()}>
+          ↻
+        </button>
         <button className="x" aria-label="Close" title="Close (Esc)" onClick={() => act.closeDrawer()}>
           ✕
         </button>
       </div>
       <div className="dlist" tabIndex={0} ref={list} data-drawer-list>
-        {stop ? (
+        {block ? (
           <div className="dempty">
-            {stop.text}
+            {block.text}
             <br />
-            {stop.connect && (
+            {block.connect && (
               <button className="btn sm" onClick={() => act.openSettings()}>
                 Connect in Settings…
               </button>
@@ -207,7 +213,7 @@ export function Drawer() {
         ))}
       </div>
       <div className="dfoot">
-        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · {d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close
+        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
       </div>
     </div>
   );

@@ -90,7 +90,7 @@ export function PrRef({ url, org, repo, num, icon = true }: { url: string; org: 
   return (
     <span className={`pr pr-${st}`}>
       {icon && <GhIcon />}
-      <a href={url} target="_blank" rel="noreferrer" title={`${org}/${repo} #${num}`} onClick={(e) => e.stopPropagation()}>
+      <a href={url} target="_blank" rel="noreferrer" title={`${org}/${repo} #${num} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
         {repo}#{num}
       </a>
       <PrState status={st} comments={prCountOf(s.snaps, key)} />

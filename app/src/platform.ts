@@ -218,3 +218,27 @@ export async function pluginHttp(plugin: string, req: { method?: string; url: st
   if (!isTauri) throw new Error('This source needs the desktop app');
   return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth } });
 }
+
+/* ---------- links ---------- */
+export const openUrl = (url: string) => (isTauri ? invoke('open_url', { url }) : Promise.resolve(void window.open(url, '_blank', 'noreferrer')));
+
+/**
+ * Links in the app: ⌘-click (Ctrl-click) opens one in the system browser; a plain click never navigates the webview
+ * (it keeps doing what it did: selecting the row). Desktop app only; a browser handles its own links.
+ */
+export function openLinksWithModifier() {
+  if (!isTauri) return;
+  document.addEventListener(
+    'click',
+    (e) => {
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a || !/^https?:/i.test(a.href)) return;
+      e.preventDefault();
+      if (e.metaKey || e.ctrlKey) {
+        e.stopPropagation();
+        void openUrl(a.href).catch(() => {});
+      }
+    },
+    true,
+  );
+}

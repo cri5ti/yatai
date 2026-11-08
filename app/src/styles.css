@@ -349,6 +349,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .dhead { display: flex; align-items: center; gap: var(--sp-3); padding: 4px 8px 0 12px; border-bottom: var(--bw) solid var(--border); flex: none; }
 .dtitle { font-weight: var(--fw-semi); margin-right: var(--sp-4); display: inline-flex; align-items: center; gap: 5px; }
 .dtabs { display: flex; flex: 1; }
+.dhead .refresh.spin { animation: spin .8s linear infinite; } .dhead .refresh:disabled { opacity: .6; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .dtabs button { padding: 5px 9px; color: var(--text-muted); border-bottom: 2px solid transparent; border-radius: var(--r-xs) var(--r-xs) 0 0; }
 .dtabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: var(--fw-semi); }
 .dlist { flex: 1; overflow-y: auto; outline: none; min-height: 0; user-select: none; }
