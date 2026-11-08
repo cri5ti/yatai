@@ -9,7 +9,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, RunEvent, State, WindowEvent,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -52,6 +52,59 @@ fn set_badge(tray: State<Tray>, count: u32) {
 #[tauri::command]
 fn show_capture(app: AppHandle) {
     open_capture(&app);
+}
+
+/// a popup window (settings, help, the AI chat, the drawers, the developer panel): created on first use,
+/// then only moved / shown / hidden. The main window decides when and where (see src/popups.ts).
+/// Async: on Windows a window must not be created from a synchronous command (it would deadlock).
+#[tauri::command]
+async fn popup_open(app: AppHandle, view: String, x: f64, y: f64, w: f64, h: f64, focus: bool) -> Result<(), String> {
+    if view.is_empty() || !view.chars().all(|c| c.is_ascii_lowercase()) {
+        return Err(format!("bad popup name {view:?}"));
+    }
+    let label = format!("popup-{view}");
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.set_size(LogicalSize::new(w, h));
+        let _ = win.set_position(LogicalPosition::new(x, y));
+        let _ = win.show();
+        if focus {
+            let _ = win.set_focus();
+        }
+        return Ok(());
+    }
+    let main = app.get_webview_window("main").ok_or("no main window")?;
+    // created hidden: the page shows itself once it has its first state and has painted
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("popup.html".into()))
+        .title("yatai")
+        .decorations(false)
+        .shadow(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .inner_size(w, h)
+        .min_inner_size(260.0, 140.0)
+        .position(x, y)
+        // a child of the main window: kept above it, and (macOS) moved along with it
+        .parent(&main)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn popup_close(app: AppHandle, view: String) {
+    if let Some(win) = app.get_webview_window(&format!("popup-{view}")) {
+        // give the keyboard back to the main window, unless the user had already gone somewhere else
+        let had_focus = win.is_focused().unwrap_or(false);
+        let _ = win.hide();
+        if had_focus {
+            if let Some(main) = app.get_webview_window("main") {
+                if main.is_visible().unwrap_or(false) {
+                    let _ = main.set_focus();
+                }
+            }
+        }
+    }
 }
 
 /// the UI calls this once its writes are on disk
@@ -191,6 +244,10 @@ pub fn run() {
                     "main" => {
                         let _ = w.emit_to("main", "yatai://hide", ());
                     }
+                    // a popup is open because the state says so: the main window closes it there
+                    l if l.starts_with("popup-") => {
+                        let _ = w.emit_to("main", "yatai://popup-closed", l.trim_start_matches("popup-"));
+                    }
                     _ => {
                         let _ = w.hide();
                     }
@@ -203,6 +260,8 @@ pub fn run() {
             db_path,
             set_badge,
             show_capture,
+            popup_open,
+            popup_close,
             shortcuts_taken,
             quit,
             ai::ai_key_status,

@@ -172,7 +172,7 @@ function Win() {
           </div>
         </div>
       )}
-      {!pill && <Drawer />}
+      {!pill && !isTauri && <Drawer />}
       {s.aiBusy && <div className="aibusy">✨ {s.aiBusy}</div>}
     </div>
   );
@@ -219,12 +219,17 @@ export function Shell() {
   return (
     <div className="desktop">
       <Win />
-      {!isTauri && <Capture />}
       <Menu />
-      <AiPop />
-      <Help />
-      <Settings />
-      {s.dev && <DevPanel />}
+      {/* the app opens these as their own windows (popups.ts); the browser build shows them in the page */}
+      {!isTauri && (
+        <>
+          <Capture />
+          <AiPop />
+          <Help />
+          <Settings />
+          {s.dev && <DevPanel />}
+        </>
+      )}
 
       <div className="toasts">
         {s.toasts.map((t) => (

@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2022',
-      rollupOptions: { input: { main: resolve(__dirname, 'index.html'), capture: resolve(__dirname, 'capture.html') } },
+      rollupOptions: { input: { main: resolve(__dirname, 'index.html'), capture: resolve(__dirname, 'capture.html'), popup: resolve(__dirname, 'popup.html') } },
     },
   };
 });

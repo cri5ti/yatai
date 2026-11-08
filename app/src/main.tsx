@@ -8,6 +8,7 @@ import { acceptAi, capture, closeCapture, openAi, closeAi, openCapture, openSett
 import { isEditable, mod } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
+import { startPopups } from './popups';
 import { invoke, isFrontmost, isTauri, listen, setVisible } from './platform';
 
 function App() {
@@ -140,6 +141,7 @@ async function boot() {
   }
   rollDay();
   void refreshAiKey();
+  startPopups();
   if (isTauri)
     void invoke<string[]>('shortcuts_taken').then((t) => t.length && toast(`${t.join(' and ')} ${t.length > 1 ? 'are' : 'is'} used by another app — use the tray icon instead`, 'warn'));
   createRoot(document.getElementById('root')!).render(

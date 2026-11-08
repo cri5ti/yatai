@@ -15,11 +15,22 @@
 - [ ] ✕ and ⌘W hide to the tray instead of quitting
 - [ ] Settings: save a key → assistant goes live; Remove → mocked replies; model / effort / base URL are used
 - [ ] Release build (`bun run bundle`): key comes from the keychain only, no `.env`
-- [ ] Menus, AI popup, help and drawers fit in the 372 px dock (AI popup docked bottom-left while a proposal is pending)
+- [ ] Popup windows: ⌘, settings, ? help, ⌘/ AI chat, the three drawers, ⌘⇧D developer panel each open as their own window
+  - [ ] beside the dock (left of it), or centered for settings / help; no white flash on first open
+  - [ ] Esc, ⌘W and ✕ close them; help also closes when you click elsewhere; the keyboard goes back to the main window
+  - [ ] drag a popup by its header; moving the float window takes its popups along (macOS)
+  - [ ] typing in the AI chat, accepting with ⌘⏎ from the chat, chips under a reply; drawer ↑↓ ⏎ I
+  - [ ] hiding yatai (⌥Y, ✕) hides open popups; showing it brings them back; focus mode puts the drawer away
+- [ ] Context menus fit in the 372 px dock
 - [ ] Dark mode carries over to the capture window
 - [ ] Developer panel: demo connectors, Load demo data, Start empty, simulated clock → Real time
 
 ## Gaps in what's there
+
+- [ ] Popups: their size / position is not remembered (always placed beside the main window)
+- [ ] Popups on Windows / Linux: owned windows do not follow the main one when it moves; Wayland ignores window positions
+- [ ] Popups are square-cornered (rounded + see-through needs `macOSPrivateApi`)
+- [ ] Context menus could become native menus (Tauri menu API) instead of in-page
 
 - [ ] AI: Stop only stops waiting; cancel the request in Rust (abort handle per request)
 - [ ] Dock → large for the Organizer has lost the POC's animation (animate the window size, or accept it)

@@ -100,6 +100,29 @@ export async function windowRect(): Promise<Rect | null> {
   return { x: p.x / f, y: p.y / f, w: s.width / f, h: s.height / f };
 }
 
+/** where a popup window goes: centered on the screen, or beside the main window (left of the dock, else right, else over it) */
+export interface Placement {
+  place: 'center' | 'beside';
+  align?: 'top' | 'bottom';
+  w: number;
+  /** 'main': as tall as the main window */
+  h: number | 'main';
+}
+export async function popupRect(p: Placement): Promise<Rect> {
+  const wa = await workArea();
+  const m = (await windowRect()) ?? wa;
+  const M = 8;
+  const w = Math.min(p.w, wa.w - 2 * M);
+  const h = Math.min(p.h === 'main' ? m.h : p.h, wa.h - 2 * M);
+  if (p.place === 'center') return { x: wa.x + (wa.w - w) / 2, y: wa.y + Math.max(M, (wa.h - h) / 3), w, h };
+  let x: number;
+  if (m.x - wa.x >= w + M) x = m.x - M - w;
+  else if (wa.x + wa.w - (m.x + m.w) >= w + M) x = m.x + m.w + M;
+  else x = Math.max(wa.x + M, m.x + 12); // no room beside it: over its left side
+  const y = p.align === 'top' ? m.y : m.y + m.h - h;
+  return { x, y: Math.max(wa.y, Math.min(y, wa.y + wa.h - h)), w, h };
+}
+
 export async function onWindowChange(fn: () => void): Promise<() => void> {
   if (!isTauri) return () => {};
   const { getCurrentWindow } = await import('@tauri-apps/api/window');

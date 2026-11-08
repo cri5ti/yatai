@@ -22,12 +22,14 @@ The Rust toolchain is pinned in `src-tauri/rust-toolchain.toml` (Tauri 2.12 need
 | `OPENAI_API_KEY` in `.env`, dev-server proxy | Settings (**⌘,**): key in the OS keychain, model, reasoning effort, base URL. Rust makes the API call, so the key never enters the webview. Debug builds also read `app/.env`. |
 | Mock clock | Real time. At a new day, yesterday's meetings leave Next (their prep items stay) and items moved to "tomorrow" / "+N days" come back, highlighted. |
 | Mock bar on the right | **Developer panel** (tray menu or **⌘⇧D**): demo connectors, load demo data / start empty, simulated clock, PR statuses, scenarios. |
+| Settings, help, AI chat, drawers, mock bar as overlays in the page | Their own popup windows beside the main one (see `src/popups.ts`). The main window owns the state; popups get a copy and send actions back by name (`src/act.ts`). |
 | Drawers full of fake data | Drawers say the connector isn't built yet; "Use demo data" turns the mocks on. |
 
 ## Layout
 
 ```
 src/              UI (from poc/src) + platform.ts (Tauri vs browser), persist.ts (SQLite sync), Settings, capture window
+                  popups.ts / popup.tsx / act.ts: popup windows (add one: a line in VIEWS + its component in popup.tsx)
 src-tauri/src/    lib.rs  shell: windows, tray, global shortcuts, quit-after-flush
                   db.rs   schema + migrations (PRAGMA user_version), whitelisted row writes
                   ai.rs   keychain + the OpenAI request

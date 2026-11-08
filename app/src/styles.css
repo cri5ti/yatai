@@ -435,3 +435,15 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 /* ---------- the quick-capture window (its own OS window) ---------- */
 .capture-body { background: var(--surface); overflow: hidden; }
 .capture-pop.capture-win { position: static; transform: none; width: 100%; height: 100%; border-radius: 0; border: 0; box-shadow: none; }
+
+/* ---------- popup windows (popup.html): each view fills its own OS window ---------- */
+.popup-body { background: var(--surface); overflow: hidden; user-select: none; }
+.popup-body input, .popup-body textarea, .popup-body .ai-msg { user-select: text; }
+.popup-body .ai-veil, .popup-body .ai-veil.docked { position: fixed; inset: 0; display: flex; padding: 0; background: none; pointer-events: auto; animation: none; }
+.popup-body .ai-pop, .popup-body .ai-veil.docked .ai-pop, .popup-body .help { width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; animation: none; }
+.popup-body .ai-log { flex: 1; }
+.popup-body .help { overflow-y: auto; }
+.popup-body .drawer { position: fixed; inset: 0; height: auto; border-top: 0; box-shadow: none; animation: none; zoom: 1; }
+.popup-body .controls { position: fixed; inset: 0; width: auto; border-left: 0; box-shadow: none; animation: none; }
+/* the headers move the window */
+.popup-body .ai-head, .popup-body .dhead, .popup-body .dev-head, .popup-body .help > h3 { cursor: grab; }
