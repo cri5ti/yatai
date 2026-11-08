@@ -2,14 +2,18 @@
 
 ## Layout
 
-- `spec/`: design docs (`spec/design/design.md`)
+- `design/`: design docs. Start with `design/design.md`; `interaction.md` and `ux.md` are the UX rules, `plugins.md` the external sources.
 - `poc/`: the React UX prototype. It is frozen and serves as the UX playground.
 - `app/`: the desktop app (Tauri 2 + Vite + React + Bun, SQLite). See `app/README.md` for how to run it and `app/todo.md` for what's left.
+
+## Design docs
+
+- Keep them high level (context for coding agents and for people), and update them when behaviour or architecture changes. Details live in the code and in `app/todo.md`.
 
 ## Commits
 
 - Commit often while working, so the history leaves a trail of the steps taken. Commit after each step that works: one feature, one fix, or one refactor that type-checks and builds. Don't save everything for a single commit at the end.
-- Commit on `main` unless asked to branch. Write a short subject line (`app: …`, `poc: …`, `spec: …`), then a few lines on what changed and why.
+- Commit on `main` unless asked to branch. Write a short subject line (`app: …`, `poc: …`, `design: …`), then a few lines on what changed and why.
 - Before committing, run `bunx tsc --noEmit` and `bun run build` in `app/`. When Rust changed, also run `cargo check` (and `cargo test`) in `app/src-tauri`.
 - Never commit `.env` files, `src-tauri/target`, or `node_modules`.
 

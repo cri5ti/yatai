@@ -1,5 +1,5 @@
 /**
- * The poll loop (spec/design/plugins.md §5–6). It asks each plugin about what is in Next (and the open drawer),
+ * The poll loop (design/plugins.md §5–6). It asks each plugin about what is in Next (and the open drawer),
  * stores the snapshots, and turns what changed into highlights and toasts. Only the main window runs it.
  * It never imports the actions: the main window hands it a sink.
  */

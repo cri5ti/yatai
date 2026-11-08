@@ -47,7 +47,7 @@
 - [ ] Shortcuts that are already taken should be rebindable in Settings, not just reported
 - [ ] macOS: decide on the Dock icon (regular app vs menu-bar only / accessory policy)
 
-## Connectors (plan: spec/design/plugins.md)
+## Connectors (plan: design/plugins.md)
 
 Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on it with mocked data; GitHub / GitHub Enterprise is live with a personal access token.
 

@@ -23,7 +23,7 @@ The Rust toolchain is pinned in `src-tauri/rust-toolchain.toml` (Tauri 2.12 need
 | Mock clock | Real time. At a new day, yesterday's meetings leave Next (their prep items stay) and items moved to "tomorrow" / "+N days" come back, highlighted. |
 | Mock bar on the right | **Developer panel** (tray menu or **⌘⇧D**): demo connectors, load demo data / start empty, simulated clock, PR statuses, scenarios. |
 | Settings, help, AI chat, drawers, mock bar as overlays in the page | Their own popup windows beside the main one (see `src/popups.ts`). The main window owns the state; popups get a copy and send actions back by name (`src/act.ts`). |
-| Drawers full of fake data | Drawers say the connector isn't built yet; "Use demo data" turns the mocks on. |
+| Drawers full of fake data | Real GitHub (token) and Outlook (published calendar link) through the plugin system; Azure DevOps and AI sessions are still mocked (Developer panel → demo connectors). |
 
 ## Layout
 
@@ -39,4 +39,4 @@ Schema: `item` (the one tree: projects / tasks / actions), `inbox`, `meeting` (w
 
 ## Not built yet
 
-Real connectors (Outlook via Microsoft Graph, GitHub, Azure DevOps): see `spec/design/design.md` §4 and §10. OS notifications, launch at login, signing and auto-update.
+Real Azure DevOps and AI-session connectors, Outlook through Microsoft Graph (the app reads a published calendar link today): see `design/plugins.md` and `app/todo.md`. OS notifications, launch at login, signing and auto-update.

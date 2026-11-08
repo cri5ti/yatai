@@ -1,6 +1,8 @@
 # yatai — plugins (connectors)
 
-Status: implemented in `app/src/plugins/` (see "As built" at the end for where it differs from the proposal). Expands `design.md` §4 (smart items) and §10 (milestones 2, 3, 6).
+Part of the design docs: see [design.md](design.md).
+
+Status: implemented in `app/src/plugins/` (see "As built" at the end for where it differs from the proposal). Expands [design.md](design.md) §4 (smart items) and §10 (milestones 2, 3, 6).
 First targets: **GitHub** (real data), **Outlook** and **Azure DevOps** (move onto the plugin system, still mocked).
 More sources are expected (Jira, Linear, GitLab, Teams, AI sessions), so the system is built around the *kinds of things a source gives us*, not around three hard-coded integrations.
 

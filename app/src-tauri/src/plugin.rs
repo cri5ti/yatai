@@ -1,4 +1,4 @@
-//! The host side of the plugin system (spec/design/plugins.md §4, §10).
+//! The host side of the plugin system (design/plugins.md §4, §10).
 //! A plugin's token lives in the OS keychain, bound to the one host it may be sent to. The page asks Rust to make the
 //! request (`plugin_http`); Rust adds the Authorization header, so after the user has pasted a token it never comes back.
 

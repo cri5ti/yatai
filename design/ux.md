@@ -1,6 +1,6 @@
 # yatai — UX concepts
 
-Cross-cutting interaction ideas that apply to every view. Concrete screens live in [design/design.md](design/design.md); this file records the *principles* so new features behave consistently.
+Cross-cutting interaction ideas that apply to every view. Concrete screens and architecture live in [design.md](design.md), the general rules in [interaction.md](interaction.md), sources in [plugins.md](plugins.md); this file records the cross-cutting *principles* so new features behave consistently.
 
 ## 1. Highlights: surfacing changes the user didn't make
 
@@ -35,7 +35,7 @@ What does **not** highlight: anything the user did directly to the thing in fron
 - **Not part of undo.** Highlights are attention state, not data: undoing never "un-highlights", and dismissing one never creates an undo step.
 - **Several at once is fine.** Each is independent; there is no "clear all" — if there is a lot to catch up on, the highlights are the to-do list for your eyes.
 
-### Implementation notes (POC)
+### Implementation notes
 
 - State: `hl: Record<itemOrMeetingId, true>`; `highlight(ids)` / `dismissHl(ids)` in `actions.ts`.
 - Rendered in Next (row, collapsed card header, meeting card) and Organizer (row, collapsed parent) via the `.hl` class. Pointer dismissal is `mousemove` on the element; keyboard dismissal is an effect on selection change (`hlForRow` / `hlForCard` decide what an element stands for).
@@ -51,7 +51,7 @@ A URL that identifies a thing the app understands is shown as a compact referenc
 - **`has feedback` is a count.** Instead of an icon, an orange pill shows the number of *unresolved comments*. A change in that number is an external change and raises a highlight (§1).
 - A PR status never moves the item: it stays where the user put it. A status *change* raises a highlight (§1) instead.
 - Anywhere a link cannot be rendered (window titles, toasts, menus, the focus pill) it degrades to plain `repo#n`.
-- In the POC the status is simulated from the mock bar; in the product it comes from the GitHub connector (see design.md §4).
+- In the POC the status was simulated; in the app it comes from the GitHub plugin ([plugins.md](plugins.md)), or from the developer panel's mocks.
 
 ## 3. Source drawers: bring things in on demand
 
@@ -59,7 +59,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 
 | Drawer | Tabs | Brings in |
 |---|---|---|
-| **Outlook** | Today's agenda | A meeting card (with its fixed calendar row) |
+| **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row) |
 | **GitHub** | Assigned to me · My PRs · Mentions | An item whose text is the PR link (rendered per §2) |
 | **DevOps** | Mentions · My work items · Created by me | A work-item (smart) item |
 
@@ -121,7 +121,7 @@ Anything can sit at the top level. In Next, top-level items are just rows with n
 - **The conversation docks** bottom-left without a scrim while a proposal is pending, so the purple stays visible. Closing it keeps both the proposal (a bar at the bottom of the window: Chat · Reject · Accept) and the conversation.
 - **Clickable next steps.** Every answer ends with 2–4 follow-ups the AI suggests ("Revise the Vitest estimate", "Break down Extract staff"), shown as chips above the input; clicking one sends it. Before the first message the chips are openers (about the selected item when there is one). Keyboard: ↑ from the empty input onto the chips, ←→ between them, ⏎ sends, ↓ / Esc back to the input. The model returns `{reply, suggestions}` as structured output, so they are always there.
 - **Tools the AI has:** `get_today_items` (meetings and every item in Next), `get_item` (one item with its notes and whole sub-tree), `search_items`, `patch_items` (some keys of one or more items: title, est, due, status, today) and `set_sub_items` (an item's complete list of sub-items, nested: keep by id, add without, omit to remove). Read tools see the document as proposed so far.
-- **Configuration (POC):** `OPENAI_API_KEY` (and optional `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENAI_BASE_URL`) in `poc/.env`. Calls go to the Responses API (`/v1/responses`) with `store: false`: the conversation, encrypted reasoning included, is kept in the app and resent each turn. The Vite dev server proxies `/api/openai` and adds the key, so it never reaches the browser. Without a key the old mocked replies are used.
+- **Configuration:** the desktop app takes the key, model, reasoning effort and base URL in Settings (the key lives in the OS keychain); the POC and the browser build use `OPENAI_API_KEY` (and optional `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENAI_BASE_URL`) in a git-ignored `.env`. Calls go to the Responses API (`/v1/responses`) with `store: false`: the conversation, encrypted reasoning included, is kept in the app and resent each turn. The Vite dev server proxies `/api/openai` and adds the key, so it never reaches the browser. Without a key the old mocked replies are used.
 
 
 ## 12. Picking a date

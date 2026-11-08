@@ -1,5 +1,5 @@
 /**
- * The plugin interface (spec/design/plugins.md §3–4). Everything that crosses it is plain JSON, so the state
+ * The plugin interface (design/plugins.md §3–4). Everything that crosses it is plain JSON, so the state
  * can be copied to popup windows and a plugin could later move out of process.
  * A ref is the string `<plugin>:<id>` ('github:acme/api#482'); the id is opaque to the core.
  */
