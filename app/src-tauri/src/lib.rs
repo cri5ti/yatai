@@ -1,5 +1,6 @@
 mod ai;
 mod db;
+mod plugin;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -267,6 +268,9 @@ pub fn run() {
             ai::ai_key_status,
             ai::ai_set_key,
             ai::ai_post,
+            plugin::plugin_secret_status,
+            plugin::plugin_secret_set,
+            plugin::plugin_http,
         ])
         .build(tauri::generate_context!())
         .expect("error while building yatai");
