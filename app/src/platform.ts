@@ -152,13 +152,57 @@ export async function isFrontmost(): Promise<boolean> {
 
 export type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 const DIR = { n: 'North', s: 'South', e: 'East', w: 'West', ne: 'NorthEast', nw: 'NorthWest', se: 'SouthEast', sw: 'SouthWest' } as const;
-/** hand an edge / title-bar drag to the OS (the window has no native frame) */
-export async function startDrag(kind: Edge | 'move') {
+/**
+ * Hand an edge / title-bar drag to the OS (the window has no native frame). The OS call that resizes by an edge is
+ * not available on macOS, so there the pointer is followed by hand (setSize / setPosition, one step per frame).
+ */
+export async function startDrag(kind: Edge | 'move', ev?: PointerEvent) {
   if (!isTauri) return;
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   const w = getCurrentWindow();
-  if (kind === 'move') await w.startDragging();
-  else await w.startResizeDragging(DIR[kind] as never);
+  if (kind === 'move') return void (await w.startDragging());
+  if (!isMac || !ev) return void (await w.startResizeDragging(DIR[kind] as never));
+  const { LogicalPosition, LogicalSize } = await import('@tauri-apps/api/dpi');
+  const f = await w.scaleFactor();
+  const pos = (await w.outerPosition()).toLogical(f);
+  const size = (await w.outerSize()).toLogical(f);
+  const min = { w: 300, h: 72 };
+  const x0 = ev.screenX;
+  const y0 = ev.screenY;
+  let want: PointerEvent | null = null;
+  let busy = false;
+  const step = async () => {
+    if (busy || !want) return;
+    busy = true;
+    const e = want;
+    want = null;
+    const dx = e.screenX - x0;
+    const dy = e.screenY - y0;
+    let { x, y } = pos;
+    let { width, height } = size;
+    if (kind.includes('e')) width = Math.max(min.w, size.width + dx);
+    if (kind.includes('s')) height = Math.max(min.h, size.height + dy);
+    if (kind.includes('w')) {
+      width = Math.max(min.w, size.width - dx);
+      x = pos.x + size.width - width;
+    }
+    if (kind.includes('n')) {
+      height = Math.max(min.h, size.height - dy);
+      y = pos.y + size.height - height;
+    }
+    await Promise.all([w.setSize(new LogicalSize(width, height)), w.setPosition(new LogicalPosition(x, y))]);
+    busy = false;
+    if (want) void step();
+  };
+  const move = (e: PointerEvent) => ((want = e), void step());
+  const up = () => {
+    window.removeEventListener('pointermove', move, true);
+    window.removeEventListener('pointerup', up, true);
+    window.removeEventListener('pointercancel', up, true);
+  };
+  window.addEventListener('pointermove', move, true);
+  window.addEventListener('pointerup', up, true);
+  window.addEventListener('pointercancel', up, true);
 }
 
 export const setBadge = (count: number) => isTauri && invoke('set_badge', { count }).catch(() => {});

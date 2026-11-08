@@ -64,7 +64,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .tabs kbd { font-size: var(--fs-2xs); }
 .layout-dock .tabs button { padding: 5px 9px; }
 .wc { display: flex; }
-.wc button { border: 0; color: var(--text-muted); padding: 3px 7px; border-radius: var(--r-sm); }
+.wc button { border: 0; color: var(--text-muted); padding: 3px 8px; border-radius: var(--r-sm); font-size: 17px; line-height: 1.2; }
 .wc button:hover:not(:disabled) { color: var(--text); }
 .wc button:disabled { opacity: .35; cursor: default; }
 .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; position: relative; }
@@ -76,7 +76,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .muted { color: var(--text-muted); }
 .accent { color: var(--text); }
 .lh { color: var(--text-muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; margin: 10px 12px 4px; }
-.keys { color: var(--text-muted); font-size: var(--fs-xs); padding: 3px 12px; border-top: var(--bw) solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
 .btn { border: 0; border-radius: var(--r-sm); padding: 3px 8px; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.sm { padding: 2px 7px; font-size: var(--fs-sm); }
@@ -370,9 +369,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 /* ---------- window resizers ---------- */
 .win.resizing { transition: none !important; }
 .rz { position: absolute; z-index: 8; touch-action: none; }
-.rz-n, .rz-s { left: 8px; right: 8px; height: 4px; cursor: ns-resize; } .rz-n { top: 0; } .rz-s { bottom: 0; }
-.rz-e, .rz-w { top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; } .rz-e { right: 0; } .rz-w { left: 0; }
-.rz-ne, .rz-nw, .rz-se, .rz-sw { width: 10px; height: 10px; } .rz-ne { top: 0; right: 0; cursor: nesw-resize; } .rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+/* wide enough to hit: 7 px edges, 16 px corners (the corners sit on top of the edges) */
+.rz-n, .rz-s { left: 0; right: 0; height: 7px; cursor: ns-resize; } .rz-n { top: 0; } .rz-s { bottom: 0; }
+.rz-e, .rz-w { top: 0; bottom: 0; width: 7px; cursor: ew-resize; } .rz-e { right: 0; } .rz-w { left: 0; }
+.rz-ne, .rz-nw, .rz-se, .rz-sw { width: 16px; height: 16px; z-index: 9; } .rz-ne { top: 0; right: 0; cursor: nesw-resize; } .rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 .rz-nw { top: 0; left: 0; cursor: nwse-resize; } .rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
 .rz:hover { background: color-mix(in srgb, var(--focus) 35%, transparent); }
 .win.layout-float .titlebar, .win.layout-max .titlebar { cursor: grab; } .win.moving .titlebar { cursor: grabbing; }

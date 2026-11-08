@@ -66,13 +66,14 @@ function Win() {
   const layout = effLayout(s);
   useOsWindow();
   const key = isTauri && (layout === 'dock' || layout === 'float' || layout === 'max') ? layout : null;
-  const edges = key && !isMac ? DIRS[key] : [];
+  const edges = key ? DIRS[key] : [];
   /** edges and the title bar are handed to the OS: it resizes / moves the frameless window */
   const drag = (kind: Edge | 'move') => (e: React.PointerEvent) => {
     if (e.button !== 0 || !key) return;
-    if (kind === 'move' && ((e.target as HTMLElement).closest('button, .tabs') || key === 'dock')) return;
+    // the tab bar stretches across the title bar: only its buttons are buttons, the empty part drags the window
+    if (kind === 'move' && ((e.target as HTMLElement).closest('button') || key === 'dock')) return;
     e.preventDefault();
-    void startDrag(kind);
+    void startDrag(kind, e.nativeEvent);
   };
   const pill = layout === 'pill';
   const endedFocus = !!s.focus?.ended;

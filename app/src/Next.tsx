@@ -877,9 +877,6 @@ export function Next() {
       </div>
 
       {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
-      <div className="keys">
-        <kbd>↑↓</kbd> move · <kbd>→</kbd> in · <kbd>←</kbd> out · <kbd>⏎</kbd> new below · <kbd>⇧⏎</kbd> above · <kbd>F2</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>−</kbd><kbd>+</kbd> collapse / expand all · <kbd>⇧↑↓</kbd> multi-select · <kbd>⌫</kbd> out of Next · <kbd>⇧⌫</kbd> delete · <kbd>/</kbd> commands · <kbd>?</kbd> all
-      </div>
     </div>
   );
 }

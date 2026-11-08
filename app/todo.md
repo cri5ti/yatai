@@ -5,6 +5,8 @@
 - [ ] ⌘C / ⌘V on list items still copy / paste markdown (macOS routes them through the Edit menu)
 - [ ] ⌘Z / ⌘⇧Z with nothing being edited: one undo step, not two (the Edit menu has Undo too)
 - [ ] Resize the dock by its left edge: it keeps the new width and snaps back to the right edge, full height
+- [ ] Float / large: grab the empty part of the title bar (between the tabs and the icons) to move the window; the 7 px edges and 16 px corners resize it (macOS follows the pointer by hand: check it feels smooth, and that the corner and top edge don't steal clicks from the tabs)
+- [ ] Shell icons (↶ ↷ ? ⚙ ⧉ ✕) are larger; the shortcut hint bars at the bottom of Next / Inbox / Organizer are gone (? still lists everything)
 - [ ] Float / large: move and resize, quit, relaunch → same place; double-click the title bar → back to default
 - [ ] Organizer from the dock jumps to the large window, and back to the dock on ⌘1
 - [ ] Focus mode: pill is always on top, grows when the session ends, gives the window back after

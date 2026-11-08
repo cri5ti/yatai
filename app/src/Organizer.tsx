@@ -434,9 +434,6 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       </div>
 
       {live.length > 1 && <div className="multibar">{live.length} selected — <kbd>Space</kbd> done · <kbd>⌘[</kbd> <kbd>⌘]</kbd> outdent / indent · <kbd>⌘↑↓</kbd> move · <kbd>⌫</kbd> delete · <kbd>/</kbd> more · <kbd>Esc</kbd> clear</div>}
-      {!embedded && <div className="keys">
-        <kbd>↑↓</kbd> move · <kbd>←→</kbd> fold · <kbd>−</kbd><kbd>+</kbd> all · <kbd>⏎</kbd> edit · <kbd>⇧Space</kbd> start · <kbd>Space</kbd> done · <kbd>⌘⏎</kbd> new · <kbd>A</kbd> sub-item · <kbd>⌘[</kbd><kbd>⌘]</kbd> level · <kbd>⌘↑↓</kbd> reorder · <kbd>⇧↑↓</kbd> multi-select · <kbd>T</kbd> in Next · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy / paste · <kbd>/</kbd> commands
-      </div>}
     </div>
   );
 }

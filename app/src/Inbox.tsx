@@ -268,9 +268,6 @@ export function Inbox() {
           {multi.size} selected — <kbd>⌫</kbd> discard · <kbd>⌘↑↓</kbd> move · <kbd>⌘C</kbd> copy · drag to file · <kbd>Esc</kbd> clear
         </div>
       )}
-      <div className="keys">
-        <kbd>↑↓</kbd> move · <kbd>⏎</kbd> add below · <kbd>⇧⏎</kbd> above · <kbd>F2</kbd> edit · <kbd>F</kbd> file into… · <kbd>A</kbd> accept AI · <kbd>S</kbd> suggest · <kbd>⌘↑↓</kbd> reorder · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy / paste · <kbd>⌫</kbd> discard · <kbd>/</kbd> commands
-      </div>
     </div>
   );
 }
