@@ -154,23 +154,31 @@ export const needsAttention = (n: Node, snaps: Snaps) => alertsFor(n, snaps).som
 export interface EffMeeting extends Meeting {
   eff: number;
   movedFrom?: number;
+  dayOffset: number; // 0 = today, 1 = tomorrow … (a meeting brought in ahead, to prepare)
   minsAway: number;
   state: 'upcoming' | 'now' | 'done';
 }
 
+/** 'Tue 09:30' for a meeting ahead, '09:30' for today's */
+export const whenLabel = (m: Pick<EffMeeting, 'eff' | 'dayOffset' | 'day'>) =>
+  m.dayOffset > 0 && m.day ? `${new Date(m.day + 'T00:00').toLocaleDateString(undefined, { weekday: 'short' })} ${fmt(m.eff)}` : fmt(m.eff);
+export const inLabel = (m: Pick<EffMeeting, 'minsAway' | 'dayOffset' | 'day'>) =>
+  m.dayOffset === 1 ? 'tomorrow' : m.dayOffset > 1 ? `in ${m.dayOffset} days` : `in ${Math.ceil(m.minsAway)} min`;
+
 export const allAgenda = (s: Pick<State, 'agenda'>): AgendaEvent[] => Object.values(s.agenda).flat();
 
 /** the meetings in Next; `movedTo` is where the calendar moved one (the tracker sets it when the agenda changes) */
-export function meetingsFor(s: Pick<State, 'meetings' | 'clock'>): EffMeeting[] {
+export function meetingsFor(s: Pick<State, 'meetings' | 'clock' | 'day'>): EffMeeting[] {
   return s.meetings
     .map((m) => {
       const moved = m.movedTo != null && m.movedTo !== m.start;
       const eff = moved ? m.movedTo! : m.start;
-      const minsAway = eff - s.clock;
+      const dayOffset = Math.max(0, Math.round((Date.parse(m.day ?? s.day) - Date.parse(s.day)) / 86_400_000) || 0);
+      const minsAway = dayOffset * 1440 + eff - s.clock;
       const state: EffMeeting['state'] = minsAway > 0 ? 'upcoming' : minsAway + m.durationMin > 0 ? 'now' : 'done';
-      return { ...m, eff, movedFrom: moved ? m.start : undefined, minsAway, state };
+      return { ...m, eff, movedFrom: moved ? m.start : undefined, dayOffset, minsAway, state };
     })
-    .sort((a, b) => a.eff - b.eff);
+    .sort((a, b) => a.dayOffset - b.dayOffset || a.eff - b.eff);
 }
 
 /* ---------- items: everything is an item; "task" just means "has children" ---------- */
@@ -308,7 +316,7 @@ export interface CardM {
 
 const isCounted = (n: Node) => n.status !== 'dropped';
 
-export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock' | 'snaps'>) {
+export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock' | 'day' | 'snaps'>) {
   const { nodes, snaps } = s;
   const plan = reconcilePlan(s.plan, nodes, s.meetings);
   const ms = new Map(meetingsFor(s).map((m) => [m.id, m]));
@@ -414,7 +422,7 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
     else if (n > 1) c.part = { i, n };
   }
 
-  pinned.sort((a, b) => a.meeting!.eff - b.meeting!.eff);
+  pinned.sort((a, b) => a.meeting!.dayOffset - b.meeting!.dayOffset || a.meeting!.eff - b.meeting!.eff);
   attention.sort((a, b) => nodes.indexOf(a.rows[0].node!) - nodes.indexOf(b.rows[0].node!));
   const cards = [...pinned, ...attention, ...regular];
   const all = cards.reduce((a, c) => ({ done: a.done + c.done, total: a.total + c.total }), { done: 0, total: 0 });

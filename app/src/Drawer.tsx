@@ -17,7 +17,6 @@ interface Row {
   sub: string;
   have: boolean; // already in yatai
   dim?: boolean;
-  readonly?: boolean;
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
 }
@@ -61,11 +60,10 @@ const rowOf = (en: PluginEntry, s: State): Row => ({
     en.title
   ),
   sub: en.sub,
-  have: s.nodes.some((n) => refsOf(n).includes(en.ref)),
+  have: en.meeting ? s.meetings.some((m) => m.id === en.meeting!.id) : s.nodes.some((n) => refsOf(n).includes(en.ref)),
   dim: en.dim,
-  readonly: en.readonly,
   canInbox: en.canInbox,
-  add: (to) => (en.readonly ? act.toast('Only today’s meetings can be brought in: do it on the day') : act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to)),
+  add: (to) => (en.meeting ? act.bringMeeting(en.meeting.id, en.meeting) : act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to)),
 });
 
 function rowsFor(s: State, kind: string, tab: string): Row[] {
@@ -76,6 +74,7 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
     // a calendar plugin lists today's agenda
     const mine = new Map(s.meetings.map((m) => [m.id, m]));
     return (s.agenda[kind] ?? allAgenda(s))
+      .filter((e) => (e.day ?? s.day) === s.day)
       .filter((e) => !e.cancelled || mine.has(e.id))
       .sort((a, b) => a.start - b.start)
       .map((e) => {
@@ -190,7 +189,7 @@ export function Drawer() {
           )
         )}
         {entries.map((en, i) => (
-          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && !en.readonly && en.add('next')}>
+          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>
             {en.lead}
             <div className="dmain">
               <div className="dt">{en.title}</div>
@@ -198,7 +197,7 @@ export function Drawer() {
             </div>
             {en.have ? (
               <span className="dhave">✓ in yatai</span>
-            ) : en.readonly ? null : (
+            ) : (
               <span className="dgo">
                 <button className="btn sm" tabIndex={-1} title="Add to Next (⏎)" onClick={(e) => (e.stopPropagation(), en.add('next'))}>
                   ＋ Next

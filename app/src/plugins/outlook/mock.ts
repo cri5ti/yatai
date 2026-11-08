@@ -7,7 +7,8 @@ import { TABS, entriesFor } from './days';
 const MOVES: Record<string, number> = { m2: 11 * 60 + 30 };
 
 export const mock: Impl = {
-  async agenda() {
+  async agenda(day) {
+    if (day !== today()) return []; // the mock calendar only knows today
     const moved = get().flags.meetingMoved;
     return CALENDAR.map((m) => ({ id: m.id, title: m.title, start: moved && MOVES[m.id] != null ? MOVES[m.id] : m.start, durationMin: m.durationMin, where: m.where }));
   },

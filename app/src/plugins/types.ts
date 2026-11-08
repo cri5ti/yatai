@@ -47,7 +47,7 @@ export interface Entry {
   snap?: Snapshot; // seeds the snapshot of the new item
   smart?: string; // brought in as a smart item of this source ('workitem'); PRs are just links
   dim?: boolean;
-  readonly?: boolean; // can be looked at but not brought in (tomorrow's meetings)
+  meeting?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }; // a calendar entry: brought in as a meeting card on its day
   canInbox: boolean;
 }
 
@@ -58,6 +58,7 @@ export interface ListDef {
 
 /** a meeting from a calendar-like plugin (minutes of the day) */
 export interface AgendaEvent {
+  day?: string; // yyyy-mm-dd (set by the tracker)
   id: string;
   title: string;
   start: number;

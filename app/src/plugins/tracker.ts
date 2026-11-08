@@ -92,7 +92,7 @@ export function applyAgenda(plugin: string, events: AgendaEvent[], first: boolea
     if (!ev) {
       // it was on the calendar and is not any more (cancelled, or moved to another day)
       if (before) {
-        sink.toast(`${m.title} is no longer on your calendar today`, 'warn');
+        sink.toast(`${m.title} is no longer on your calendar${m.day && m.day > today() ? ' on that day' : ' today'}`, 'warn');
         hl.push(m.id);
       }
       return m;
@@ -136,7 +136,9 @@ async function runPlugin(p: Plugin) {
   try {
     if (impl.fetch && refs.length) applySnapshots(await impl.fetch(refs));
     if (impl.agenda) {
-      const ev = await impl.agenda(today());
+      // today's, and the days of meetings brought in ahead (to prepare), so a move there is noticed too
+      const days = [...new Set([today(), ...s.meetings.map((m) => m.day).filter((d): d is string => !!d && d > today())])];
+      const ev = (await Promise.all(days.map(async (d) => (await impl.agenda!(d)).map((e) => ({ ...e, day: d }))))).flat();
       applyAgenda(p.id, ev, !seenAgenda.has(p.id));
       seenAgenda.add(p.id);
     }

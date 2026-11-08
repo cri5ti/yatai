@@ -91,12 +91,14 @@ export function removeMeeting(id: string) {
   });
   toast(`${m.title} removed — bring it back from the Outlook drawer`, 'info');
 }
-export function bringMeeting(id: string) {
-  const e = Object.values(get().agenda).flat().find((x) => x.id === id);
+/** a meeting into Next: today's from the agenda; one ahead (to prepare) comes with its data and its day */
+export function bringMeeting(id: string, ahead?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }) {
+  const e = ahead ?? Object.values(get().agenda).flat().find((x) => x.id === id);
   if (!e || get().meetings.some((x) => x.id === id)) return;
-  const m: Meeting = { id: e.id, title: e.title, start: e.start, durationMin: e.durationMin, where: e.where };
-  commit('Bring in meeting', (s) => ({ meetings: [...s.meetings, { ...m, day: today() }] }));
-  toast(`${m.title} is back in Next`, 'good');
+  const day = ahead?.day ?? today();
+  const m: Meeting = { id: e.id, title: e.title, start: e.start, durationMin: e.durationMin, where: e.where, day };
+  commit('Bring in meeting', (s) => ({ meetings: [...s.meetings, m] }));
+  toast(ahead && day !== today() ? `${m.title} is in Next (${new Date(day + 'T00:00').toLocaleDateString(undefined, { weekday: 'long' })}): add your prep under it` : `${m.title} is back in Next`, 'good');
 }
 
 /* ---------- the Outlook / GitHub / DevOps drawers ---------- */

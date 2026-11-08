@@ -22,7 +22,7 @@ const weekday = (day: string) => {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short' });
 };
 
-/** drawer rows for the days after today: a weekday + time on the left, read-only (meetings come into Next on their day) */
+/** drawer rows for the days after today: a weekday + time on the left; a meeting can be brought in ahead, to prepare */
 export function entriesFor(tab: string, today: string, eventsOn: (day: string) => AgendaEvent[]): Entry[] {
   const days = daysOf(tab);
   return days.flatMap((n) => {
@@ -35,7 +35,7 @@ export function entriesFor(tab: string, today: string, eventsOn: (day: string) =
         sub: `${days.length > 1 ? `${new Date(day + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ` : ''}${e.durationMin} min${e.where ? ` · ${e.where}` : ''}`,
         lead: { text: days.length > 1 ? `${weekday(day)} ${hhmm(e.start)}` : hhmm(e.start) },
         text: e.title,
-        readonly: true,
+        meeting: { id: e.id, title: e.title, start: e.start, durationMin: e.durationMin, where: e.where, day },
         canInbox: false,
       }));
   });

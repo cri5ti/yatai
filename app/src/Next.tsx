@@ -3,7 +3,7 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks } from './model';
+import { ROOT, effSel, isLoose, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropRowInSeg, dropRowSplit, dropSubItem, editText, focusItem, indentItems, isDone, moveCard, moveRow,
@@ -175,7 +175,7 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
         </span>
         <div className="meta">
           <span className={`chip ${m.state === 'now' ? 'good' : m.minsAway <= 10 ? 'bad' : 'info'}`}>
-            {m.state === 'now' ? 'in progress' : m.state === 'done' ? 'ended' : `in ${Math.ceil(m.minsAway)} min`}
+            {m.state === 'now' ? 'in progress' : m.state === 'done' ? 'ended' : inLabel(m)}
           </span>
           <button className="btn sm" tabIndex={-1} onClick={(e) => (e.stopPropagation(), toast(`(mock) joining ${m.title}`))}>
             Join
@@ -183,7 +183,7 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
         </div>
         <div className="abody">
           <div className="first">
-            {fmt(m.eff)}–{fmt(m.eff + m.durationMin)} · {m.where}
+            {whenLabel(m)}–{fmt(m.eff + m.durationMin)} · {m.where}
             {m.movedFrom != null && <span className="chip warn">moved from {fmt(m.movedFrom)}</span>}
           </div>
         </div>
@@ -437,7 +437,7 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
         {card.kind === 'meeting' ? (
           <>
             <div className="mtime">
-              <b>{fmt(card.meeting!.eff)}</b>
+              <b>{whenLabel(card.meeting!)}</b>
               <span>{card.meeting!.durationMin}m</span>
             </div>
             <div className="mtitle">{card.meeting!.title}</div>
