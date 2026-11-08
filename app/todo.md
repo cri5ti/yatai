@@ -52,6 +52,8 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] GitHub Enterprise: host `ghe.example.com`, token for that host → PR links of that host render as PRs, the drawer lists work
   - [ ] paste a PR url into an item and add it to Next: its icon follows the real state (checks, unresolved threads, approved)
   - [ ] push a failing check / leave a comment on a tracked PR: within a minute the item highlights and a toast appears
+  - [ ] a bare pasted PR link in Next becomes `url Title` plus the PR description as note lines (typed text is never touched)
+  - [ ] a PR the token cannot see says so (toast with GitHub's message) instead of looking closed
   - [ ] drawer tabs: assigned to me / my PRs / mentions show real PRs; ⏎ brings one into Next
   - [ ] revoke the token on GitHub: one toast, polling stops, drawer says "rejected the token"
   - [ ] Remove in Settings clears the keychain entry (Keychain Access → `yatai` / `plugin:github`)

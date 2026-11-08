@@ -29,7 +29,8 @@ export interface Snapshot {
   view: View;
   alerts: Alert[];
   rev: string; // changes when anything shown changes
-  gone?: boolean; // deleted, or no access
+  gone?: boolean; // deleted, or the token cannot see it
+  desc?: string; // the PR's description (live GitHub only), used once to fill in a bare pasted link
 }
 
 /** the left-hand mark of a drawer row */

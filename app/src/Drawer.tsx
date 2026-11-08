@@ -175,7 +175,11 @@ export function Drawer() {
         ) : !ls && d.kind !== 'outlook' ? (
           <div className="dempty">Loading…</div>
         ) : (
-          entries.length === 0 && <div className="dempty">Nothing here.</div>
+          entries.length === 0 && (
+            <div className="dempty">
+              Nothing here.{d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo ? ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).' : ''}
+            </div>
+          )
         )}
         {entries.map((en, i) => (
           <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>

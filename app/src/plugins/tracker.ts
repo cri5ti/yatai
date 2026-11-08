@@ -5,7 +5,7 @@
  */
 import { get, set, subscribe, today } from '../store';
 import type { State } from '../store';
-import { fmt, refsOf, setPrHost } from '../model';
+import { fmt, prLinks, refsOf, setPrHost } from '../model';
 import { PLUGINS, implFor, pluginById } from './registry';
 import { AuthError, pluginOf } from './types';
 import type { AgendaEvent, Alert, Plugin, Snapshot, Tone } from './types';
@@ -40,7 +40,28 @@ export function changes(prev: Snapshot, next: Snapshot): { text: string; tone: T
   return [];
 }
 
+/**
+ * A bare pasted PR link (an item that is only the url) gets the PR's title and description: the title joins the
+ * headline, the description becomes the note lines. Edit it afterwards as you like: it is only done for a bare link.
+ */
+function describeBareLinks(snaps: Snapshot[]) {
+  const withDesc = new Map(snaps.filter((x) => x.desc !== undefined && !x.gone).map((x) => [x.ref, x]));
+  if (!withDesc.size) return;
+  const ids = new Set<string>();
+  const nodes = get().nodes.map((n) => {
+    if (n.title.includes('\n') || n.status === 'done') return n;
+    const line = n.title.trim();
+    const l = prLinks(line);
+    const sn = l.length === 1 && l[0].url === line ? withDesc.get(`github:${l[0].key}`) : undefined;
+    if (!sn) return n;
+    ids.add(n.id);
+    return { ...n, title: `${line} ${sn.title}${sn.desc ? `\n${sn.desc}` : ''}`, modified: Date.now() };
+  });
+  if (ids.size) set(() => ({ nodes }));
+}
+
 export function applySnapshots(snaps: Snapshot[]) {
+  describeBareLinks(snaps);
   const s = get();
   const next = { ...s.snaps };
   const hl: string[] = [];
@@ -50,6 +71,7 @@ export function applySnapshots(snaps: Snapshot[]) {
     if (prev && prev.rev === sn.rev) continue;
     next[sn.ref] = sn;
     changed = true;
+    if (sn.gone && !prev?.gone) sink.toast(sn.alerts[0]?.toast ?? sn.alerts[0]?.text ?? `${sn.name}: not found`, 'warn');
     if (!prev) continue; // the first time we hear of it is not a change
     const ch = changes(prev, sn);
     if (ch.length) hl.push(...nodesWith(s, sn.ref));

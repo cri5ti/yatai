@@ -51,7 +51,7 @@ export function snapshot(ref: string, name: string, title: string, f: Facts): Sn
 
 /** the GraphQL fields every PR query asks for */
 export const PR_FIELDS = `fragment F on PullRequest {
-  number title url state isDraft merged mergeable reviewDecision updatedAt
+  number title body url state isDraft merged mergeable reviewDecision updatedAt
   author { login }
   repository { nameWithOwner }
   reviewThreads(first: 100) { nodes { isResolved } }
@@ -65,6 +65,7 @@ export const PR_FIELDS = `fragment F on PullRequest {
 export interface GqlPr {
   number: number;
   title: string;
+  body?: string;
   url: string;
   state: 'OPEN' | 'CLOSED' | 'MERGED';
   isDraft: boolean;
@@ -106,5 +107,10 @@ export function factsOf(p: GqlPr): Facts {
 export const shortName = (p: GqlPr) => `${p.repository.nameWithOwner.split('/')[1]}#${p.number}`;
 /** `acme/api#482` — the id half of the ref */
 export const prId = (p: GqlPr) => `${p.repository.nameWithOwner}#${p.number}`;
-export const toSnapshot = (p: GqlPr): Snapshot => snapshot(refKey('github', prId(p)), shortName(p), p.title, factsOf(p));
+/** a PR description as a few lines of note: no HTML comments / tags, no runs of blank lines, not endless */
+export function cleanBody(b: string | undefined): string {
+  const t = (b ?? '').replace(/\r/g, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return t.length > 1500 ? t.slice(0, 1500).replace(/\s+\S*$/, '') + ' …' : t;
+}
+export const toSnapshot = (p: GqlPr): Snapshot => ({ ...snapshot(refKey('github', prId(p)), shortName(p), p.title, factsOf(p)), desc: cleanBody(p.body) });
 export const ago = (iso: string) => relTime(Date.parse(iso));

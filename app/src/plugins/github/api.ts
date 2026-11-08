@@ -69,13 +69,24 @@ export async function fetchPrs(refs: string[]): Promise<Snapshot[]> {
   for (let i = 0; i < parsed.length; i += 20) {
     const chunk = parsed.slice(i, i + 20);
     const body = chunk.map((x, j) => `p${j}: repository(owner: "${x.p!.owner}", name: "${x.p!.repo}") { pullRequest(number: ${x.p!.num}) { ...F } }`).join('\n');
-    const { data } = await gql<Record<string, { pullRequest: GqlPr | null } | null>>(`query {\n${body}\n}\n${PR_FIELDS}`);
+    const { data, errors } = await gql<Record<string, { pullRequest: GqlPr | null } | null>>(`query {\n${body}\n}\n${PR_FIELDS}`);
     chunk.forEach((x, j) => {
       const pr = data?.[`p${j}`]?.pullRequest;
+      // GitHub says "not found" for a repo the token may not see (org not approved, repo not selected, SSO), so say that
+      const why = errors?.find((e) => (e as { path?: unknown[] }).path?.[0] === `p${j}`)?.message;
+      const name = `${x.p!.repo}#${x.p!.num}`;
       out.push(
         pr
           ? { ...toSnapshot(pr), ref: x.ref }
-          : { ref: x.ref, name: `${x.p!.repo}#${x.p!.num}`, title: x.ref.slice(7), view: { glyph: 'closed', label: 'not found', tone: 'info' }, alerts: [], rev: 'gone', gone: true },
+          : {
+              ref: x.ref,
+              name,
+              title: x.ref.slice(7),
+              view: { glyph: 'review', label: 'no access', tone: 'warn' },
+              alerts: [{ key: 'gone', tone: 'warn', text: `Can't see ${name} with this token`, toast: `${name}: GitHub can't find it with this token${why ? ` (${why})` : ''}. Check the token's repositories, the org's approval and SSO.` }],
+              rev: 'gone',
+              gone: true,
+            },
       );
     });
   }
@@ -107,7 +118,7 @@ export async function listPrs(id: string): Promise<Entry[]> {
     .filter((p): p is GqlPr => !!p && !!p.number)
     .map((p) => {
       const snap = toSnapshot(p);
-      return { ref: refKey(ID, prId(p)), title: p.title, sub: `${p.repository.nameWithOwner} · ${notes[id](p)}`, lead: { glyph: snap.view.glyph, count: snap.view.count }, text: `${p.url} ${p.title}`, snap, canInbox: true } satisfies Entry;
+      return { ref: refKey(ID, prId(p)), title: p.title, sub: `${p.repository.nameWithOwner} · ${notes[id](p)}`, lead: { glyph: snap.view.glyph, count: snap.view.count }, text: `${p.url} ${p.title}${snap.desc ? `\n${snap.desc}` : ''}`, snap, canInbox: true } satisfies Entry;
     });
 }
 export { shortName };
