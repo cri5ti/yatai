@@ -88,8 +88,15 @@ export function applyAgenda(plugin: string, events: AgendaEvent[], first: boolea
   const hl: string[] = [];
   const meetings = s.meetings.map((m) => {
     const ev = events.find((e) => e.id === m.id);
-    if (!ev) return m;
     const before = prev.get(m.id);
+    if (!ev) {
+      // it was on the calendar and is not any more (cancelled, or moved to another day)
+      if (before) {
+        sink.toast(`${m.title} is no longer on your calendar today`, 'warn');
+        hl.push(m.id);
+      }
+      return m;
+    }
     if (before && before.start !== ev.start) {
       sink.toast(`${m.title} moved to ${fmt(ev.start)} (was ${fmt(before.start)})`, 'warn');
       hl.push(m.id);

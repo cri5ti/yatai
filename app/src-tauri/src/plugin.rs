@@ -128,6 +128,31 @@ pub async fn plugin_http(req: HttpReq) -> Result<HttpRes, String> {
     Ok(HttpRes { status, headers, body: String::from_utf8_lossy(&buf).into_owned() })
 }
 
+/// GET the url that was stored as this plugin's secret (a published calendar link is a password in itself:
+/// it never leaves Rust). Redirects stay on https; no credentials are added.
+#[tauri::command]
+pub async fn plugin_get_secret_url(plugin: String) -> Result<HttpRes, String> {
+    let (host, url) = load(&plugin).ok_or("not connected")?;
+    let u = check_url(&url, Some(&host))?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|a| if a.previous().len() > 3 || a.url().scheme() != "https" { a.stop() } else { a.follow() }))
+        .timeout(Duration::from_secs(30))
+        .user_agent("yatai")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut res = client.get(u).send().await.map_err(|e| e.to_string().replace(&url, "<calendar link>"))?;
+    let status = res.status().as_u16();
+    let headers = res.headers().iter().filter_map(|(k, v)| Some((k.as_str().to_string(), v.to_str().ok()?.to_string()))).collect();
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
+        buf.extend_from_slice(&chunk);
+        if buf.len() > MAX_BODY {
+            return Err("response too large".into());
+        }
+    }
+    Ok(HttpRes { status, headers, body: String::from_utf8_lossy(&buf).into_owned() })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

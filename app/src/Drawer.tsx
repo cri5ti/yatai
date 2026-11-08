@@ -74,7 +74,7 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
     // a calendar plugin lists today's agenda
     const mine = new Map(s.meetings.map((m) => [m.id, m]));
     return (s.agenda[kind] ?? allAgenda(s))
-      .slice()
+      .filter((e) => !e.cancelled || mine.has(e.id))
       .sort((a, b) => a.start - b.start)
       .map((e) => {
         const have = mine.get(e.id);
@@ -90,7 +90,7 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
               {from != null && <span className="chip warn">moved from {fmt(from)}</span>}
             </>
           ),
-          sub: `${e.durationMin} min · ${e.where}${state === 'now' ? ' · in progress' : state === 'done' ? ' · ended' : ''}`,
+          sub: `${e.durationMin} min · ${e.where}${e.cancelled ? ' · cancelled' : state === 'now' ? ' · in progress' : state === 'done' ? ' · ended' : ''}`,
           have: !!have,
           dim: state === 'done',
           canInbox: false,

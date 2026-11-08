@@ -120,14 +120,14 @@ export function Settings() {
                 </label>
               )}
               <label className="set-row">
-                <span>{p.name} token</span>
+                <span>{p.auth!.field.label}</span>
                 <span className="set-key">
                   <input
                     type="password"
                     autoComplete="off"
                     spellCheck={false}
                     disabled={!isTauri}
-                    placeholder={acc?.state === 'connected' ? '•••••••• in the keychain' : 'personal access token'}
+                    placeholder={acc?.state === 'connected' ? '•••••••• in the keychain' : p.auth!.field.placeholder}
                     value={tok[p.id] ?? ''}
                     onChange={(e) => setTok({ ...tok, [p.id]: e.target.value })}
                     onKeyDown={(e) => e.key === 'Enter' && tok[p.id]?.trim() && (e.preventDefault(), saveTok(p.id))}
@@ -146,11 +146,11 @@ export function Settings() {
                 {!isTauri
                   ? 'Accounts need the desktop app.'
                   : acc?.state === 'connected'
-                    ? `✓ Connected${acc.as ? ` as ${acc.as}` : ''} (${p.id === 'github' ? normHost(cfg.githubHost) : p.name}).`
+                    ? `✓ Connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : ''}.`
                     : acc?.state === 'expired'
-                      ? `${p.name} rejected the token: paste a new one.`
-                      : `Not connected. ${p.id === 'github' ? 'A fine-grained token with read access to pull requests, checks, commit statuses and metadata is enough.' : ''}`}{' '}
-                The token stays in the OS keychain and is only sent to {p.id === 'github' ? 'that host' : p.name}.
+                      ? `${p.name} rejected it: paste a new one.`
+                      : `Not connected. ${p.auth!.field.help}`}{' '}
+                It stays in the OS keychain.
               </p>
             </div>
           );

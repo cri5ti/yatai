@@ -84,6 +84,7 @@ export interface Plugin {
   match?(text: string): string[];
   /** the live implementation needs a token (kept in the keychain); Settings → Accounts connects it */
   auth?: {
+    field: { label: string; placeholder: string; help: string }; // what Settings asks for
     configured(): Promise<boolean>;
     who(): Promise<string>; // verifies the token; throws AuthError when rejected
     connect(token: string): Promise<string>;

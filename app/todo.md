@@ -60,7 +60,13 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] revoke the token on GitHub: one toast, polling stops, drawer says "rejected the token"
   - [ ] Remove in Settings clears the keychain entry (Keychain Access → `yatai` / `plugin:github`)
 - [ ] GitHub: device flow once a GitHub App client_id exists; issues (links + state); review actions are out of scope
-- [ ] **Outlook calendar** via Microsoft Graph (read-only `Calendars.Read`): find out whether an app registration is possible in the work tenant, or device-code is needed; then replace `plugins/outlook.ts`'s mock with a live `agenda`
+- [ ] **Outlook** (published ICS feed; Graph needs an admin to approve `Calendars.Read` in the work tenant, so it is parked)
+  - [ ] Settings → Accounts → Calendar link: paste the ICS link (Outlook on the web → Settings → Calendar → Shared calendars → Publish a calendar) → "Connected as <calendar> · N meetings today"
+  - [ ] today's meetings (times in your local zone, recurring ones, none of the all-day ones) match Outlook; a meeting brought into Next follows a move (highlight + toast) and a cancellation / removal
+  - [ ] note the feed lags behind Outlook (it is a published copy): measure how long a change takes to show up
+  - [ ] if some recurring meeting is wrong or on the wrong day, send me that VEVENT (without attendees) so the parser can be fixed
+  - [ ] Windows: never run yet (see above); the link fetch is plain https from Rust
+  - [ ] later, if the admin approves: Microsoft Graph `calendarView` with device code, which is real time (swap `plugins/outlook/index.ts`'s `live`)
 - [ ] **Azure DevOps**: work items (mentions, mine, created by me), pipeline runs: replace the mock in `plugins/devops.ts` (PAT first)
 - [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback: hooks, logs, or APIs?
 - [ ] Polling while the window is hidden: it keeps running in the webview at a slower rate (3 min); decide if it needs to move to Rust

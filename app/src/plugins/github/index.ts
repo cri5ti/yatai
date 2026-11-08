@@ -9,7 +9,10 @@ import { mock } from './mock';
 export const github: Plugin = {
   id: 'github',
   name: 'GitHub',
-  auth: { configured: async () => (await status()).configured, who: whoAmI, connect, disconnect: async () => void (await disconnect()) },
+  auth: {
+    field: { label: 'GitHub token', placeholder: 'personal access token', help: 'A fine-grained token with read access to pull requests, checks, commit statuses and metadata is enough (it must be able to see the private repositories you want).' },
+    configured: async () => (await status()).configured, who: whoAmI, connect, disconnect: async () => void (await disconnect()),
+  },
   match: (text) => prLinks(text).map((l) => refKey('github', l.key)),
   live: isTauri ? { fetch: fetchPrs, lists: LISTS, list: listPrs } : undefined,
   mock,

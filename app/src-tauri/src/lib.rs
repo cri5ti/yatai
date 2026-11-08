@@ -292,6 +292,7 @@ pub fn run() {
             plugin::plugin_secret_status,
             plugin::plugin_secret_set,
             plugin::plugin_http,
+            plugin::plugin_get_secret_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building yatai");

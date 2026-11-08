@@ -208,6 +208,9 @@ export const pluginSecretStatus = (plugin: string): Promise<SecretStatus> =>
 /** store the token for `host` (empty token: remove it); it is not readable from the page afterwards */
 export const pluginSecretSet = (plugin: string, host: string, token: string) => invoke<SecretStatus>('plugin_secret_set', { plugin, host, token });
 
+/** GET the url stored as the plugin's secret (never readable from the page) */
+export const pluginGetSecretUrl = (plugin: string) => invoke<HttpRes>('plugin_get_secret_url', { plugin });
+
 export interface HttpRes {
   status: number;
   headers: Record<string, string>;
