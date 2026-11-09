@@ -226,7 +226,7 @@ export interface State extends Doc {
   accounts: Record<string, AccountState>; // plugin id -> connected?
   drawer: { kind: DrawerKind; tab: string; sel: number } | null; // a plugin's pop-up
   hl: Record<string, true>; // yellow highlights: changes the user did not make, cleared only by hovering them
-  bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number }>>; // user-resized window rects (dock: only w)
+  bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number; p?: { x: number; y: number; w: number; h: number } }>>; // user-resized window rects (p: the same in physical px, position + inner size: exact across monitors with different scales)
   scale: number; // index into SCALES
   density: number; // index into DENSITIES
   showApps: boolean;

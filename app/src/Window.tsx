@@ -15,7 +15,8 @@ import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
 import { DevPanel } from './Controls';
 import { Help } from './Help';
-import { applyLayout, isApplying, isMac, isTauri, onWindowChange, placeWindow, setBadge, setOnTop, setTrayMode, setVisible, snapRect, startDrag, windowRect, workArea } from './platform';
+import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setOnTop, setTrayMode, setVisible, snapWindow, startDrag } from './platform';
+import type { Rect } from './platform';
 import { trayMode } from './model';
 import type { Edge } from './platform';
 
@@ -32,10 +33,10 @@ function useOsWindow() {
   const layout = effLayout(s);
   const ended = !!s.focus?.ended;
   const shown = useRef(false);
-  const last = useRef<Awaited<ReturnType<typeof windowRect>>>(null); // the rect after the last settled change: tells a move from a resize
+  const last = useRef<Rect | null>(null); // the physical outer rect after the last settled change: tells a move from a resize
   useEffect(() => {
     void applyLayout(layout, get().bounds, ended, get().onTop).then(async () => {
-      setTimeout(async () => (last.current = await windowRect()), 450);
+      setTimeout(async () => (last.current = (await snapWindow(null, 0))?.phys ?? null), 450);
       if (!shown.current && !get().hidden) {
         shown.current = true;
         void setVisible(true);
@@ -53,16 +54,12 @@ function useOsWindow() {
       clearTimeout(t);
       t = setTimeout(async () => {
         const l = effLayout(get());
-        let r = await windowRect();
-        if (!r || isApplying() || (l !== 'dock' && l !== 'float' && l !== 'max')) return;
-        // within 20 px of a screen edge: flush with it
-        const snapped = snapRect(r, last.current, await workArea());
-        if (snapped) {
-          await placeWindow(snapped);
-          r = snapped;
-        }
-        last.current = r;
-        setBounds(l, r);
+        if (isApplying() || (l !== 'dock' && l !== 'float' && l !== 'max')) return;
+        // within 20 px of the edge of the screen it is on: flush with it
+        const s = await snapWindow(last.current);
+        if (!s) return;
+        last.current = s.phys;
+        setBounds(l, s.logical);
       }, 300);
     }).then((u) => (off = u));
     return () => (clearTimeout(t), off?.());

@@ -32,7 +32,7 @@ export const setLayout = (layout: Layout) =>
   set((s) => ({ layout, hidden: false, prevLayout: layout === 'pill' && s.layout !== 'pill' ? s.layout : s.prevLayout }));
 /** out of the idle pill, back to the layout it came from */
 export const leavePill = () => set((s) => (s.layout === 'pill' && !s.focus ? { layout: backFromPill(s), hidden: false } : {}));
-export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: number; w: number; h: number } | null) =>
+export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: number; w: number; h: number; p?: { x: number; y: number; w: number; h: number } } | null) =>
   set((s) => {
     const b = { ...s.bounds };
     if (r) b[layout] = r;

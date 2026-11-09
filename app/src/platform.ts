@@ -32,6 +32,8 @@ export async function emitTo(target: string, event: string, payload?: unknown) {
 
 /* ---------- the main window ---------- */
 export type Rect = { x: number; y: number; w: number; h: number };
+/** a remembered window rect: logical, and (newer) the physical position + inner size it was taken from */
+export type SavedRect = Rect & { p?: Rect };
 const PILL = { w: 360, h: 84, ended: 330 };
 const DEFAULT = { dock: 372, float: { w: 560, h: 660 } };
 /** physical → logical, and the area the OS leaves free for windows (no menu bar / taskbar / dock) */
@@ -52,7 +54,7 @@ export const isApplying = () => applying > 0;
  * Put the OS window where a layout says: dock = right edge, full height · float = medium, top right ·
  * max = large · pill = small, always on top. A saved rect (the user moved / resized it) wins.
  */
-export async function applyLayout(layout: Layout, saved: Partial<Record<string, Rect>>, ended: boolean, onTop = false) {
+export async function applyLayout(layout: Layout, saved: Partial<Record<string, SavedRect>>, ended: boolean, onTop = false) {
   if (!isTauri) return;
   const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window');
   const w = getCurrentWindow();
@@ -74,12 +76,22 @@ export async function applyLayout(layout: Layout, saved: Partial<Record<string, 
   } else {
     r = { x: wa.x + 28, y: wa.y + 24, w: wa.w - 56, h: wa.h - 48 };
   }
+  // a rect remembered in physical px goes back exactly, as long as it is still on a connected screen (logical px of a
+  // second monitor with another scale factor do not convert back to the same place)
+  const keep = layout !== 'pill' ? saved[layout === 'dock' ? 'dock' : layout] : undefined;
+  const phys = keep?.p && (layout !== 'dock' || d) && (await onSomeScreen(keep.p)) ? keep.p : null;
   applying++;
   try {
     await w.setAlwaysOnTop(layout === 'pill' || onTop);
     await w.setResizable(layout !== 'pill');
-    await w.setSize(new LogicalSize(r.w, r.h));
-    await w.setPosition(new LogicalPosition(r.x, r.y));
+    if (phys) {
+      const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
+      await w.setSize(new PhysicalSize(phys.w, phys.h));
+      await w.setPosition(new PhysicalPosition(phys.x, phys.y));
+    } else {
+      await w.setSize(new LogicalSize(r.w, r.h));
+      await w.setPosition(new LogicalPosition(r.x, r.y));
+    }
   } finally {
     // the OS reports the resulting moves / resizes a little later
     setTimeout(() => applying--, 400);
@@ -110,18 +122,56 @@ export function snapRect(r: Rect, prev: Rect | null, wa: Rect, gap = 20): Rect |
   const same = Math.abs(x - r.x) < 0.5 && Math.abs(y - r.y) < 0.5 && Math.abs(w - r.w) < 0.5 && Math.abs(h - r.h) < 0.5;
   return same ? null : { x, y, w, h };
 }
-/** put the window exactly there (not remembered as the user's own move: the caller saves it) */
-export async function placeWindow(r: Rect) {
-  if (!isTauri) return;
-  const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window');
+/**
+ * Snap the window to the edges of the screen it is on, after a move / resize settled. Everything is in physical
+ * pixels: monitors can have different scale factors, and logical coordinates of a second monitor do not line up with
+ * the window's (that left an edge sticking out). The screen is the one holding the window's centre; the rect is the
+ * outer one (what you see), and the 20 px are that screen's logical pixels.
+ * `prev`: the physical outer rect after the last settled change (tells a move from a resize).
+ * Returns the physical outer rect now, and the logical rect to remember (position + inner size, as windowRect).
+ */
+export async function snapWindow(prev: Rect | null, gap = 20): Promise<{ phys: Rect; logical: SavedRect } | null> {
+  if (!isTauri) return null;
+  const { getCurrentWindow, availableMonitors, currentMonitor } = await import('@tauri-apps/api/window');
+  const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
   const w = getCurrentWindow();
+  const [p, o, i, f] = await Promise.all([w.outerPosition(), w.outerSize(), w.innerSize(), w.scaleFactor()]);
+  const r = { x: p.x, y: p.y, w: o.width, h: o.height };
+  const frame = { w: o.width - i.width, h: o.height - i.height };
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const area = (m: { position: { x: number; y: number }; size: { width: number; height: number }; workArea?: { position: { x: number; y: number }; size: { width: number; height: number } } }) => m.workArea ?? { position: m.position, size: m.size };
+  const ms = await availableMonitors();
+  const m =
+    ms.find((x) => {
+      const a = area(x);
+      return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+    }) ?? (await currentMonitor());
+  const logical = (q: Rect): SavedRect => ({ x: q.x / f, y: q.y / f, w: (q.w - frame.w) / f, h: (q.h - frame.h) / f, p: { x: q.x, y: q.y, w: q.w - frame.w, h: q.h - frame.h } });
+  if (!m) return { phys: r, logical: logical(r) };
+  const a = area(m);
+  const snapped = snapRect(r, prev, { x: a.position.x, y: a.position.y, w: a.size.width, h: a.size.height }, Math.round(gap * m.scaleFactor));
+  if (!snapped) return { phys: r, logical: logical(r) };
+  const to = { x: Math.round(snapped.x), y: Math.round(snapped.y), w: Math.round(snapped.w), h: Math.round(snapped.h) };
   applying++;
   try {
-    await w.setSize(new LogicalSize(r.w, r.h));
-    await w.setPosition(new LogicalPosition(r.x, r.y));
+    if (to.w !== r.w || to.h !== r.h) await w.setSize(new PhysicalSize(to.w - frame.w, to.h - frame.h));
+    await w.setPosition(new PhysicalPosition(to.x, to.y));
   } finally {
     setTimeout(() => applying--, 400);
   }
+  return { phys: to, logical: logical(to) };
+}
+
+/** is the centre of this physical rect inside some screen's work area? */
+async function onSomeScreen(p: Rect): Promise<boolean> {
+  const { availableMonitors } = await import('@tauri-apps/api/window');
+  const cx = p.x + p.w / 2;
+  const cy = p.y + p.h / 2;
+  return (await availableMonitors()).some((m) => {
+    const a = m.workArea ?? { position: m.position, size: m.size };
+    return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+  });
 }
 
 /** keep a remembered rect on screen (the monitor may have changed since) */
