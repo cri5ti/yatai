@@ -118,12 +118,28 @@ export const LISTS: ListDef[] = [
   { id: 'mentions', label: 'Mentions', group: 'Work items' },
 ];
 
-// the project list changes rarely: asked once an hour
+// which projects have pipelines changes rarely: worked out once an hour. Builds can only be listed per project (there
+// is no organization-wide call), so asking every project on every refresh cost one request per project each time; most
+// projects of an organization have no pipelines at all.
 let projects: { org: string; at: number; names: string[] } | null = null;
 async function projectNames(base: string): Promise<string[]> {
   if (projects && projects.org === base && Date.now() - projects.at < 3_600_000) return projects.names;
   const d = await call<{ value: { name: string }[] }>(`${base}/_apis/projects?$top=500&stateFilter=wellFormed&${V}`);
-  projects = { org: base, at: Date.now(), names: d.value.map((p) => p.name).sort() };
+  const all = d.value.map((p) => p.name).sort();
+  const withPipelines: string[] = [];
+  for (let i = 0; i < all.length; i += 6) {
+    await Promise.all(
+      all.slice(i, i + 6).map(async (name) => {
+        try {
+          const r = await call<{ count?: number; value: unknown[] }>(`${base}/${encodeURIComponent(name)}/_apis/build/definitions?$top=1&${V}`);
+          if (r.value.length) withPipelines.push(name);
+        } catch (e) {
+          if (e instanceof AuthError) throw e; // a project the token cannot read is simply left out
+        }
+      }),
+    );
+  }
+  projects = { org: base, at: Date.now(), names: withPipelines.sort() };
   return projects.names;
 }
 
