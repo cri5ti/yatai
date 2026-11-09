@@ -111,7 +111,10 @@ export function Drawer() {
   const list = useRef<HTMLDivElement>(null);
   const find = useRef<HTMLInputElement>(null);
   const [bar, setBar] = useState(false); // the filter bar
-  const [q, setQ] = useState(''); // …and what it filters by (a repo, or part of its name)
+  const [picked, setPicked] = useState<string[]>([]); // …the repositories it lets through (none picked = all)
+  const [menu, setMenu] = useState(false); // the repository drop-down is open
+  const [mq, setMq] = useState(''); // search inside the drop-down
+  const [mi, setMi] = useState(0); // highlighted row of the drop-down
   useEffect(() => {
     if (d) list.current?.focus({ preventScroll: true });
   }, [d?.kind, d?.tab]);
@@ -123,11 +126,15 @@ export function Drawer() {
   const tabs = tabsOf(d.kind);
   const all = rowsFor(s, d.kind, d.tab);
   const repos = [...new Set(all.flatMap((e) => (e.repo ? [e.repo] : [])))].sort();
-  const canFilter = repos.length > 0 || q !== '';
-  const needle = q.trim().toLowerCase();
-  const entries = needle ? all.filter((e) => e.repo?.toLowerCase().includes(needle)) : all;
-  const openBar = () => (setBar(true), requestAnimationFrame(() => find.current?.focus()));
-  const closeBar = () => (setBar(false), setQ(''), list.current?.focus({ preventScroll: true }));
+  const canFilter = repos.length > 0 || picked.length > 0;
+  const entries = picked.length ? all.filter((e) => e.repo && picked.includes(e.repo)) : all;
+  const shown = repos.filter((r) => r.toLowerCase().includes(mq.trim().toLowerCase()));
+  const count = (r: string) => all.filter((e) => e.repo === r).length;
+  const toggle = (r: string) => (setPicked((p) => (p.includes(r) ? p.filter((x) => x !== r) : [...p, r])), act.setDrawerSel(0));
+  const openMenu = () => (setMenu(true), setMq(''), setMi(0), requestAnimationFrame(() => find.current?.focus()));
+  const closeMenu = () => (setMenu(false), list.current?.focus({ preventScroll: true }));
+  const openBar = () => (setBar(true), openMenu());
+  const closeBar = () => (setBar(false), setMenu(false), setPicked([]), list.current?.focus({ preventScroll: true }));
   const block = blocked(s, d.kind);
   const ls = s.lists[`${d.kind}/${d.tab}`];
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
@@ -138,11 +145,11 @@ export function Drawer() {
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const k = e.key;
     if ((e.target as HTMLElement).tagName === 'INPUT') {
-      // typing in the filter: only Esc (clears, then closes the bar), ↑↓ and ⏎ (back to the list) are shortcuts
-      if (k === 'Escape') return stop(), q ? setQ('') : closeBar();
-      if (k === 'ArrowDown') return stop(), act.setDrawerSel(Math.min(entries.length - 1, sel + 1));
-      if (k === 'ArrowUp') return stop(), act.setDrawerSel(Math.max(0, sel - 1));
-      if (k === 'Enter') return stop(), list.current?.focus({ preventScroll: true });
+      // in the drop-down's search box: ↑↓ move, ⏎ ticks, Esc closes the drop-down (then the bar)
+      if (k === 'Escape') return stop(), mq ? setMq('') : menu ? closeMenu() : closeBar();
+      if (k === 'ArrowDown') return stop(), setMi(Math.min(shown.length - 1, mi + 1));
+      if (k === 'ArrowUp') return stop(), setMi(Math.max(0, mi - 1));
+      if (k === 'Enter' && shown[mi]) return stop(), toggle(shown[mi]);
       return;
     }
     if ((k === 'f' || k === 'F' || k === '/') && canFilter) return stop(), openBar();
@@ -177,8 +184,8 @@ export function Drawer() {
           ))}
         </div>
         {canFilter && (
-          <button className={cx('x', 'filter', (bar || needle) && 'on')} aria-label="Filter by repository" aria-pressed={bar} title="Filter by repository (F)" onClick={() => (bar ? closeBar() : openBar())}>
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill={needle ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+          <button className={cx('x', 'filter', (bar || picked.length > 0) && 'on')} aria-label="Filter by repository" aria-pressed={bar} title="Filter by repository (F)" onClick={() => (bar ? closeBar() : openBar())}>
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill={picked.length ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
               <path d="M2 3h12l-4.6 5.4V13l-2.8-1.4V8.4z" />
             </svg>
           </button>
@@ -192,14 +199,30 @@ export function Drawer() {
       </div>
       {bar && canFilter && (
         <div className="dfilter" role="search">
-          <input ref={find} value={q} spellCheck={false} placeholder="Filter by repository…" aria-label="Filter by repository" onChange={(e) => (setQ(e.target.value), act.setDrawerSel(0))} />
-          <div className="dchips">
-            {repos.map((r) => (
-              <button key={r} className={cx('chip', 'rchip', q === r && 'on')} onClick={() => (setQ(q === r ? '' : r), act.setDrawerSel(0))}>
-                {r}
-              </button>
-            ))}
-          </div>
+          <button className="dsel" aria-haspopup="listbox" aria-expanded={menu} onClick={() => (menu ? closeMenu() : openMenu())}>
+            <span>{picked.length === 0 ? 'All repositories' : picked.length === 1 ? picked[0] : `${picked.length} repositories`}</span>
+            <i aria-hidden>▾</i>
+          </button>
+          {picked.length > 0 && (
+            <button className="btn sm" onClick={() => (setPicked([]), act.setDrawerSel(0))}>
+              Clear
+            </button>
+          )}
+          {menu && (
+            <div className="dmenu" role="listbox" aria-multiselectable="true">
+              <input ref={find} value={mq} spellCheck={false} placeholder="Search repositories…" aria-label="Search repositories" onChange={(e) => (setMq(e.target.value), setMi(0))} />
+              <div className="dopts">
+                {shown.map((r, i) => (
+                  <label key={r} role="option" aria-selected={picked.includes(r)} className={cx('dopt', i === mi && 'hi')} onMouseMove={() => setMi(i)}>
+                    <input type="checkbox" checked={picked.includes(r)} onChange={() => toggle(r)} />
+                    <span>{r}</span>
+                    <small>{count(r)}</small>
+                  </label>
+                ))}
+                {!shown.length && <div className="dnone">No repository matches.</div>}
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="dlist" tabIndex={0} ref={list} data-drawer-list>
@@ -223,7 +246,7 @@ export function Drawer() {
         ) : (
           entries.length === 0 && (
             <div className="dempty">
-              {needle ? `No pull requests in “${q.trim()}”.` : 'Nothing here.'}{!needle &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
+              {picked.length ? 'Nothing in the selected repositories.' : 'Nothing here.'}{!picked.length &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
             </div>
           )
         )}

@@ -492,7 +492,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 
 /* drawer: filter by repository */
 .dhead .x.filter.on { color: var(--accent); }
-.dfilter { padding: var(--sp-3) var(--sp-5); border-bottom: var(--bw) solid var(--border); display: flex; flex-direction: column; gap: var(--sp-3); }
-.dfilter input { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 5px 9px; color: var(--text); font-size: var(--fs-md); min-width: 0; }
-.dchips { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-height: 74px; overflow-y: auto; }
-.rchip { border: 0; cursor: pointer; background: var(--surface-2); color: var(--text-muted); } .rchip:hover { color: var(--text); } .rchip.on { background: var(--accent-soft); color: var(--text); }
+.dfilter { position: relative; padding: var(--sp-3) var(--sp-5); border-bottom: var(--bw) solid var(--border); display: flex; align-items: center; gap: var(--sp-3); }
+.dsel { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 5px 9px; color: var(--text); font-size: var(--fs-md); text-align: left; }
+.dsel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dsel i { font-style: normal; color: var(--text-muted); }
+.dmenu { position: absolute; z-index: 5; left: var(--sp-5); right: var(--sp-5); top: calc(100% - 4px); background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md, var(--r-sm)); box-shadow: var(--shadow-pop); padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-3); }
+.dmenu > input { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 5px 9px; color: var(--text); font-size: var(--fs-md); min-width: 0; }
+.dopts { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
+.dopt { display: flex; align-items: center; gap: var(--sp-3); padding: 4px 6px; border-radius: var(--r-sm); font-size: var(--fs-md); cursor: pointer; }
+.dopt.hi { background: var(--hover); } .dopt input { margin: 0; } .dopt span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dopt small { color: var(--text-muted); }
+.dnone { padding: 6px; color: var(--text-muted); font-size: var(--fs-sm); }

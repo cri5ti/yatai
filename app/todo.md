@@ -41,7 +41,7 @@
 
 - [ ] Windows: dragging works: items / cards in Next and Organizer (HTML5 drag and drop, needed `dragDropEnabled: false`), and the window by its title bar
 
-- [ ] GitHub drawer: funnel icon (or F) opens a filter bar: type part of a repo name or click a repo chip; the list narrows, ↑↓ still move, Esc clears then closes the bar; the icon is filled while a filter is on
+- [ ] GitHub drawer: funnel icon (or F) opens a filter bar with a repository drop-down: tick several repos (searchable, with counts; ↑↓ ⏎ in the search box), the list narrows to them, Clear / Esc resets; the icon is filled while a filter is on
 
 ## Gaps in what's there
 
