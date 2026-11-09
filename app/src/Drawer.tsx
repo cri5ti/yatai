@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useS } from './store';
 import type { State } from './store';
@@ -19,6 +19,7 @@ interface Row {
   dim?: boolean;
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
+  repo?: string; // 'org/repo' of a pull request, for the filter
 }
 
 const TITLES: Record<string, ReactNode> = {
@@ -60,6 +61,7 @@ const rowOf = (en: PluginEntry, s: State): Row => ({
     en.title
   ),
   sub: en.sub,
+  repo: /([\w.-]+\/[\w.-]+)#\d+/.exec(en.ref)?.[1] ?? (en.sub.includes(' · ') ? en.sub.split(' · ')[0] : undefined),
   have: en.meeting ? s.meetings.some((m) => m.id === en.meeting!.id) : s.nodes.some((n) => refsOf(n).includes(en.ref)),
   dim: en.dim,
   canInbox: en.canInbox,
@@ -107,6 +109,9 @@ export function Drawer() {
   const s = useS();
   const d = s.drawer;
   const list = useRef<HTMLDivElement>(null);
+  const find = useRef<HTMLInputElement>(null);
+  const [bar, setBar] = useState(false); // the filter bar
+  const [q, setQ] = useState(''); // …and what it filters by (a repo, or part of its name)
   useEffect(() => {
     if (d) list.current?.focus({ preventScroll: true });
   }, [d?.kind, d?.tab]);
@@ -116,7 +121,13 @@ export function Drawer() {
   if (!d) return null;
 
   const tabs = tabsOf(d.kind);
-  const entries = rowsFor(s, d.kind, d.tab);
+  const all = rowsFor(s, d.kind, d.tab);
+  const repos = [...new Set(all.flatMap((e) => (e.repo ? [e.repo] : [])))].sort();
+  const canFilter = repos.length > 0 || q !== '';
+  const needle = q.trim().toLowerCase();
+  const entries = needle ? all.filter((e) => e.repo?.toLowerCase().includes(needle)) : all;
+  const openBar = () => (setBar(true), requestAnimationFrame(() => find.current?.focus()));
+  const closeBar = () => (setBar(false), setQ(''), list.current?.focus({ preventScroll: true }));
   const block = blocked(s, d.kind);
   const ls = s.lists[`${d.kind}/${d.tab}`];
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
@@ -126,6 +137,15 @@ export function Drawer() {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const k = e.key;
+    if ((e.target as HTMLElement).tagName === 'INPUT') {
+      // typing in the filter: only Esc (clears, then closes the bar), ↑↓ and ⏎ (back to the list) are shortcuts
+      if (k === 'Escape') return stop(), q ? setQ('') : closeBar();
+      if (k === 'ArrowDown') return stop(), act.setDrawerSel(Math.min(entries.length - 1, sel + 1));
+      if (k === 'ArrowUp') return stop(), act.setDrawerSel(Math.max(0, sel - 1));
+      if (k === 'Enter') return stop(), list.current?.focus({ preventScroll: true });
+      return;
+    }
+    if ((k === 'f' || k === 'F' || k === '/') && canFilter) return stop(), openBar();
     if (k === 'Escape') (stop(), act.closeDrawer());
     else if (k === 'ArrowDown') (stop(), act.setDrawerSel(Math.min(entries.length - 1, sel + 1)));
     else if (k === 'ArrowUp') (stop(), act.setDrawerSel(Math.max(0, sel - 1)));
@@ -156,6 +176,13 @@ export function Drawer() {
             </button>
           ))}
         </div>
+        {canFilter && (
+          <button className={cx('x', 'filter', (bar || needle) && 'on')} aria-label="Filter by repository" aria-pressed={bar} title="Filter by repository (F)" onClick={() => (bar ? closeBar() : openBar())}>
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill={needle ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+              <path d="M2 3h12l-4.6 5.4V13l-2.8-1.4V8.4z" />
+            </svg>
+          </button>
+        )}
         <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={() => act.refreshDrawer()}>
           ↻
         </button>
@@ -163,6 +190,18 @@ export function Drawer() {
           ✕
         </button>
       </div>
+      {bar && canFilter && (
+        <div className="dfilter" role="search">
+          <input ref={find} value={q} spellCheck={false} placeholder="Filter by repository…" aria-label="Filter by repository" onChange={(e) => (setQ(e.target.value), act.setDrawerSel(0))} />
+          <div className="dchips">
+            {repos.map((r) => (
+              <button key={r} className={cx('chip', 'rchip', q === r && 'on')} onClick={() => (setQ(q === r ? '' : r), act.setDrawerSel(0))}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="dlist" tabIndex={0} ref={list} data-drawer-list>
         {block ? (
           <div className="dempty">
@@ -184,7 +223,7 @@ export function Drawer() {
         ) : (
           entries.length === 0 && (
             <div className="dempty">
-              Nothing here.{d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo ? ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).' : ''}
+              {needle ? `No pull requests in “${q.trim()}”.` : 'Nothing here.'}{!needle &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
             </div>
           )
         )}
@@ -214,7 +253,7 @@ export function Drawer() {
         ))}
       </div>
       <div className="dfoot">
-        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
+        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
       </div>
     </div>
   );

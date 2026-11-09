@@ -489,3 +489,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .popup-body .help.mdedit { overflow: hidden; }
 .wc button.on { color: var(--accent); }
 .wc button svg { display: block; } .wc button.on:hover:not(:disabled) { color: var(--accent); }
+
+/* drawer: filter by repository */
+.dhead .x.filter.on { color: var(--accent); }
+.dfilter { padding: var(--sp-3) var(--sp-5); border-bottom: var(--bw) solid var(--border); display: flex; flex-direction: column; gap: var(--sp-3); }
+.dfilter input { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 5px 9px; color: var(--text); font-size: var(--fs-md); min-width: 0; }
+.dchips { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-height: 74px; overflow-y: auto; }
+.rchip { border: 0; cursor: pointer; background: var(--surface-2); color: var(--text-muted); } .rchip:hover { color: var(--text); } .rchip.on { background: var(--accent-soft); color: var(--text); }
