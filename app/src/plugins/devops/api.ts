@@ -2,8 +2,8 @@
 import { get } from '../../store';
 import { pluginHttp, pluginSecretSet, pluginSecretStatus } from '../../platform';
 import { AuthError } from '../types';
-import type { Snapshot } from '../types';
-import { toSnapshot } from './map';
+import type { Entry, ListDef, Snapshot } from '../types';
+import { byRunning, entryOf, toSnapshot } from './map';
 import type { AdoBuild } from './map';
 
 export const ID = 'devops';
@@ -88,4 +88,40 @@ export async function fetchBuilds(refs: string[]): Promise<Snapshot[]> {
     }
   }
   return out;
+}
+
+/* ---------- the Pipelines list: every run that is going or waiting, across the organization's projects ---------- */
+export const LISTS: ListDef[] = [{ id: 'pipelines', label: 'Pipelines' }];
+
+// the project list changes rarely: asked once an hour
+let projects: { org: string; at: number; names: string[] } | null = null;
+async function projectNames(base: string): Promise<string[]> {
+  if (projects && projects.org === base && Date.now() - projects.at < 3_600_000) return projects.names;
+  const d = await call<{ value: { name: string }[] }>(`${base}/_apis/projects?$top=500&stateFilter=wellFormed&${V}`);
+  projects = { org: base, at: Date.now(), names: d.value.map((p) => p.name).sort() };
+  return projects.names;
+}
+
+/** one request per project (six at a time); a project the token cannot read is left out */
+export async function listPipelines(): Promise<Entry[]> {
+  const { base } = org();
+  const names = await projectNames(base);
+  const found: { at: string; b: import('./map').AdoBuild }[] = [];
+  let failed: unknown = null;
+  for (let i = 0; i < names.length; i += 6) {
+    await Promise.all(
+      names.slice(i, i + 6).map(async (name) => {
+        const at = `${base.replace(/^https:\/\//, '')}/${encodeURIComponent(name)}`;
+        try {
+          const d = await call<{ value: import('./map').AdoBuild[] }>(`https://${at}/_apis/build/builds?statusFilter=inProgress,notStarted,postponed,cancelling&queryOrder=queueTimeDescending&$top=50&${V}`);
+          for (const b of d.value) found.push({ at, b });
+        } catch (e) {
+          if (e instanceof AuthError) throw e;
+          if (!(e as { gone?: boolean }).gone) failed = e;
+        }
+      }),
+    );
+  }
+  if (!found.length && failed) throw failed;
+  return found.sort((x, y) => byRunning(x.b, y.b)).map((x) => entryOf(x.at, x.b));
 }

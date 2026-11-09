@@ -55,7 +55,7 @@ export const mock: Impl = {
   ],
   async list(id) {
     if (id === 'pipelines')
-      return PIPELINES.map((p): Entry => {
+      return PIPELINES.filter((p) => ['queued', 'building'].includes(mockRun(`devops:build/${p.base}#${p.id}`))).map((p): Entry => {
         const ref = `devops:build/${p.base}#${p.id}`;
         const snap = buildSnapshot(ref, `${p.name} #${p.id}`, `${p.name} ${p.number}`, mockRun(ref));
         return { ref, title: `${p.name} ${p.number}`, sub: `${p.base.split('/').pop()} · ${p.branch} · ${p.note}`, lead: { glyph: snap.view.glyph, kind: 'build' }, text: `${buildUrl(p.base, p.id)} ${p.name} ${p.number}`, snap, canInbox: true };

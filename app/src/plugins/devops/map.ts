@@ -1,6 +1,7 @@
 /** Azure DevOps → what yatai shows. Pure: REST shapes in, snapshots out (testable without a network). */
 import type { BuildStatus } from '../../store';
-import type { Alert, Snapshot, Tone } from '../types';
+import type { Alert, Entry, Snapshot, Tone } from '../types';
+import { buildUrl, relTime } from '../../model';
 
 export const BUILD_LABELS: Record<BuildStatus, string> = { queued: 'queued', building: 'building', failed: 'failed', done: 'done', cancelled: 'cancelled' };
 const TONES: Record<BuildStatus, Tone> = { queued: 'info', building: 'info', failed: 'bad', done: 'good', cancelled: 'info' };
@@ -13,6 +14,10 @@ export interface AdoBuild {
   result?: 'none' | 'succeeded' | 'partiallySucceeded' | 'failed' | 'canceled';
   definition?: { name: string };
   sourceBranch?: string;
+  project?: { name: string };
+  requestedFor?: { displayName: string };
+  queueTime?: string;
+  startTime?: string;
 }
 
 export function statusOf(b: Pick<AdoBuild, 'status' | 'result'>): BuildStatus {
@@ -39,3 +44,25 @@ export const toSnapshot = (ref: string, b: AdoBuild): Snapshot => {
   const def = b.definition?.name ?? 'Pipeline';
   return buildSnapshot(ref, `${def} #${b.id}`, `${def} ${b.buildNumber}${b.sourceBranch ? ` (${short(b.sourceBranch)})` : ''}`, statusOf(b), { partial: b.result === 'partiallySucceeded' });
 };
+
+/** a row of the Pipelines drawer list: `base` is <host>/<org>/<project as in a url>, so the ref matches a pasted link */
+export function entryOf(base: string, b: AdoBuild): Entry {
+  const ref = `devops:build/${base}#${b.id}`;
+  const snap = toSnapshot(ref, b);
+  const st = statusOf(b);
+  const when = st === 'building' && b.startTime ? `started ${relTime(Date.parse(b.startTime))}` : b.queueTime ? `queued ${relTime(Date.parse(b.queueTime))}` : '';
+  const who = b.requestedFor?.displayName;
+  return {
+    ref,
+    title: `${b.definition?.name ?? 'Pipeline'} ${b.buildNumber}`,
+    sub: [b.project?.name ?? decodeURIComponent(base.split('/').pop() ?? ''), short(b.sourceBranch), who, when].filter(Boolean).join(' · '),
+    lead: { glyph: st, kind: 'build' },
+    text: `${buildUrl(base, String(b.id))} ${b.definition?.name ?? 'Pipeline'} ${b.buildNumber}`,
+    snap,
+    canInbox: true,
+  };
+}
+/** running first, then waiting; the most recent first within each */
+export const byRunning = (a: AdoBuild, b: AdoBuild) =>
+  (statusOf(a) === 'building' ? 0 : 1) - (statusOf(b) === 'building' ? 0 : 1) ||
+  Date.parse(b.startTime ?? b.queueTime ?? '') - Date.parse(a.startTime ?? a.queueTime ?? '');

@@ -165,4 +165,6 @@ export const PIPELINES: PipelineEntry[] = [
   { base: 'dev.azure.com/acme/Payroll', id: '4212', name: 'payroll-deploy', number: '2.4.0', branch: 'main', status: 'queued', note: 'waiting for an agent' },
   { base: 'dev.azure.com/acme/Web', id: '977', name: 'web-ci', number: '20261109.2', branch: 'main', status: 'failed', note: 'unit tests · 20m ago' },
   { base: 'dev.azure.com/acme/Web', id: '975', name: 'web-ci', number: '20261109.1', branch: 'main', status: 'done', note: '1h ago' },
+  { base: 'dev.azure.com/acme/Web', id: '981', name: 'web-e2e', number: '20261109.3', branch: 'feature/login', status: 'building', note: 'started 6m ago' },
+  { base: 'dev.azure.com/acme/Payroll', id: '4213', name: 'payroll-ci', number: '20261109.5', branch: 'main', status: 'queued', note: 'queued 1m ago' },
 ];

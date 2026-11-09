@@ -149,7 +149,7 @@ function Win() {
             <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
               <GhIcon /> GitHub
             </button>
-            <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — bring work items in" onClick={() => openDrawer('devops')}>
+            <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — pipelines and work items" onClick={() => openDrawer('devops')}>
               <span aria-hidden>◈</span> DevOps
             </button>
           </div>
@@ -164,7 +164,7 @@ function Win() {
           <div className="ugrp" role="group" aria-label="Density">
             {DENSITIES.map((_, i) => (
               <button key={i} className={s.density === i ? 'on' : ''} aria-pressed={s.density === i} title={['Tight', 'Normal', 'Roomy'][i] + ' rows'} aria-label={['Tight', 'Normal', 'Roomy'][i] + ' rows'} onClick={() => setDensity(i)}>
-                <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden>
+                <svg width="16" height="13" viewBox="0 0 12 10" aria-hidden>
                   {[0, 1, 2].map((k) => (
                     <rect key={k} x="0" y={[0.5, 3.5, 6.5][k] + (i - 1) * (k - 1) * -1.2} width="12" height="1.4" rx=".7" fill="currentColor" />
                   ))}

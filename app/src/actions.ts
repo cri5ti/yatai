@@ -6,7 +6,7 @@ import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } fro
 import { acceptProposal, rejectProposal } from './proposal';
 import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
-import { pluginById } from './plugins/registry';
+import { implFor, pluginById } from './plugins/registry';
 import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
@@ -129,7 +129,7 @@ export function bringMeeting(id: string, ahead?: { id: string; title: string; st
 export const openDrawer = (kind: DrawerKind) =>
   set((s) => {
     const p = pluginById(kind);
-    const tab = (p?.live?.lists ?? p?.mock?.lists ?? [])[0]?.id ?? '';
+    const tab = ((p && implFor(p, s)?.lists) ?? p?.live?.lists ?? p?.mock?.lists ?? [])[0]?.id ?? '';
     return { drawer: s.drawer?.kind === kind ? null : { kind, tab, sel: 0 }, menu: null };
   });
 export const closeDrawer = () => {

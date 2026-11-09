@@ -313,11 +313,13 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 
 /* ---------- display: scale (zoom) and density (row padding) ---------- */
 .win > .titlebar, .win > .content { zoom: var(--ui-scale, 1); }
-.uibar { flex: none; display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-2); height: 20px; padding: 0 var(--sp-2); border-top: var(--bw) solid var(--border); background: var(--surface); overflow: hidden; white-space: nowrap; }
+/* tall enough to hit: the buttons sit clear of the window's resize zones (7 px bottom edge, 16 px corners) */
+.uibar { flex: none; display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-3); padding: 5px 16px 8px; border-top: var(--bw) solid var(--border); background: var(--surface); overflow: hidden; white-space: nowrap; }
 .ugrp { display: flex; align-items: center; gap: 1px; }
-.ugrp + .ugrp { margin-left: 2px; padding-left: 4px; border-left: var(--bw) solid var(--border); }
+.ugrp + .ugrp { margin-left: 4px; padding-left: 8px; border-left: var(--bw) solid var(--border); }
 .ugrp button { font-variant-numeric: tabular-nums; }
-.ugrp button { height: 16px; min-width: 16px; padding: 0 3px; border-radius: var(--r-xs); color: var(--text-muted); font-size: 10px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.ugrp button { height: 26px; min-width: 26px; padding: 0 6px; border-radius: var(--r-sm, 5px); color: var(--text-muted); font-size: var(--fs-sm); line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.ugrp button:hover:not(:disabled) { background: var(--hover); }
 .ugrp button:hover:not(:disabled) { color: var(--text); }
 .ugrp button.on { background: var(--accent-soft); color: var(--accent-text); }
 .ugrp button:disabled { opacity: .3; cursor: default; }
@@ -341,7 +343,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .card.meeting.hl { background-color: var(--hl) !important; }
 
 /* ---------- source drawers (Outlook / GitHub / DevOps) ---------- */
-.uibar .drawers button { gap: 3px; padding: 0 5px; }
+.uibar .drawers { gap: 4px; }
+.uibar .drawers button { gap: 6px; padding: 0 10px; font-size: var(--fs-md); color: var(--text); }
+.uibar .drawers button > span[aria-hidden] { font-size: 1.1em; }
+.uibar .drawers .gh { width: 14px; height: 14px; }
 .uibar .drawers .gh { margin: 0; color: inherit; }
 .drawer { position: absolute; left: 0; right: 0; bottom: 20px; z-index: 6; height: min(62%, 460px); display: flex; flex-direction: column; background: var(--surface); border-top: 2px solid var(--border-strong); box-shadow: 0 -10px 30px rgba(10, 14, 40, .22); animation: drawer-up var(--dur-3) var(--ease); zoom: var(--ui-scale, 1); }
 @keyframes drawer-up { from { transform: translateY(24px); opacity: 0; } }

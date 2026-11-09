@@ -37,9 +37,9 @@ const TITLES: Record<string, ReactNode> = {
 };
 
 /** the tabs of a plugin's drawer (the mock's when only that exists, so the tabs are there before it is connected) */
-function tabsOf(kind: string): ListDef[] {
+function tabsOf(s: State, kind: string): ListDef[] {
   const p = pluginById(kind);
-  return p?.live?.lists ?? p?.mock?.lists ?? [];
+  return (p && implFor(p, s)?.lists) ?? p?.live?.lists ?? p?.mock?.lists ?? [];
 }
 
 /** why a drawer has nothing to show yet, and what to do about it */
@@ -152,7 +152,7 @@ export function Drawer() {
   }, [d?.sel]);
   if (!d) return null;
 
-  const tabs = tabsOf(d.kind);
+  const tabs = tabsOf(s, d.kind);
   const all = rowsFor(s, d.kind, d.tab);
   const repos = [...new Set(all.flatMap((e) => (e.repo ? [e.repo] : [])))].sort();
   const canFilter = repos.length > 0 || picked.length > 0;

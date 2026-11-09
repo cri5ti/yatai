@@ -47,6 +47,8 @@
 
 - [ ] Disconnect GitHub (or DevOps): PR / run links show the muted unplugged-plug mark, not a state; connected but not fetched yet: no mark; a PR the token cannot see: amber mark
 - [ ] Complete every sub-item of an item (or have GitHub resolve every thread): the item stays open until you tick it yourself; ticking it leaves the sub-items as they are
+- [ ] Footer bar: taller, with bigger source buttons (Outlook / GitHub / DevOps), scale and density; easy to click without grabbing the window's bottom edge or corners (dock and float)
+- [ ] DevOps drawer → Pipelines with a real PAT: every running / queued run across the organization, running first; ⏎ brings one in and it then follows the run's state; `requests:` rises by about one per project per refresh
 - [ ] Tray icon: purple diamond normally; a highlight anywhere → yellow tile with the purple diamond, back to purple once they are all seen; during a meeting (developer panel clock, or a real one) → blue tile with a white diamond; check it is readable in the macOS menu bar (light and dark) and the Windows tray
 - [ ] Next: the meeting in progress has a muted blue card with a blue bar; the Outlook drawer's row for it too
 - [ ] Drawers: `requests: N` at the right of the footer, rising as polls run; GitHub also shows the points left (hover: totals and reset time); with 20 PRs in Next it should stay around 60 requests an hour, plus a full fetch only when a PR changes
