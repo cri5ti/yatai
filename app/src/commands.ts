@@ -67,7 +67,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
       ? { id: 'start', label: 'Start first action', cmd: 'start', keys: '⇧Space', icon: '▶', run: () => A.startFirst(n.id) }
       : { id: 'start', label: running ? 'Pause' : 'Start', cmd: 'start', keys: '⇧Space', icon: running ? '❚❚' : '▶', run: () => A.toggleStart(n.id) },
     { id: 'focus', label: 'Start in focus mode', cmd: 'focus', keys: '⌘⇧⏎', icon: '◎', run: () => (kids ? (A.startFirst(n.id), get().current && A.startFocus(get().current!.id)) : A.startFocus(n.id)) },
-    { id: 'done', label: A.isDone(nodes, n.id) ? 'Mark not done' : kids ? 'Mark all done' : 'Mark done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes([n.id]) },
+    { id: 'done', label: A.isDone(nodes, n.id) ? 'Mark not done' : 'Mark done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes([n.id]) },
     { id: 'edit', label: 'Edit', cmd: 'edit', keys: 'F2', icon: '✎', run: () => edit(n.id) },
   ];
   if (c.card && !c.row)

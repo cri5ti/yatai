@@ -175,17 +175,11 @@ const TOOLS = FUNCS.map((t) => ({ type: 'function', ...t.function }));
 const first = (t: string) => plain(t.split('\n')[0]);
 /** a one-line title from the model renames the headline only: the notes (lines 2+) stay */
 const keepNotes = (next: string, old?: string) => (next.includes('\n') || !old?.includes('\n') ? next : next + old.slice(old.indexOf('\n')));
-const doneOf = (nodes: Node[], n: Node): boolean => {
-  const kids = nodes.filter((c) => c.parentId === n.id);
-  if (!kids.length) return n.status === 'done';
-  const live = kids.filter((k) => k.status !== 'dropped');
-  return n.status === 'done' || (live.length > 0 && live.every((k) => doneOf(nodes, k)));
-};
 const brief = (s: State, n: Node, marks: Record<string, { kind: string }> | null) => ({
   id: n.id,
   title: first(n.title),
   ...(n.title.includes('\n') ? { notes: true } : {}),
-  status: doneOf(s.nodes, n) ? 'done' : n.status,
+  status: n.status,
   ...(n.est ? { est: n.est } : {}),
   ...(n.due ? { due: n.due } : {}),
   ...(n.smart ? { smart: n.smart.source } : {}),

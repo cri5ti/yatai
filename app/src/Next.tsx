@@ -15,6 +15,7 @@ import { InlineEdit } from './Inline';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
 import { Chips, DueChip } from './Chips';
+import { SourceOff } from './Pr';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod } from './kbd';
@@ -310,6 +311,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
             <div className={cx('first', pk('title') && 'pk')}>
               {row.head && card.path.length > 1 && <span className="muted crumbs">{card.path.slice(0, -1).join(' › ')} › </span>}
               {node.smart && !isPr && <span className="src">{srcIcon[node.smart.source]}</span>}
+              {node.smart && !isPr && <SourceOff node={node} />}
               {inline(info.first)}
               {pm?.kind === 'add' && <span className="propchip">new</span>}
               <Chips node={node} />

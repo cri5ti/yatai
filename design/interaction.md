@@ -21,7 +21,7 @@ How yatai is meant to feel to use. This is the part of the original idea notes a
 ## 3. Navigating and editing
 
 - **↑↓** move between rows. **→** goes into an item (expands its note / sub-items), **←** goes back out and collapses. A whole task can be collapsed; `−` / `+` collapse or expand everything.
-- **⏎** on an action starts it; on a task starts its first action. **⇧Space** starts or pauses; **Space** toggles done; **⌘⏎** starts in focus mode.
+- **⏎** on an action starts it; on a task starts its first action. **⇧Space** starts or pauses; **Space** toggles done (only the item itself: finishing every sub-item never completes the parent, you do); **⌘⏎** starts in focus mode.
 - **F2** edits in place. **⌘[ / ⌘]** outdent / indent. **⌘↑ / ⌘↓** reorder (or drag). **⇧↑ / ⇧↓** multi-select. **⌘C / ⌘V** copy and paste as a markdown list.
 - **⌘/** opens the AI chat. **?** lists every shortcut.
 

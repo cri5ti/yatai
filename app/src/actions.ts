@@ -9,7 +9,7 @@ import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mo
 import { pluginById } from './plugins/registry';
 import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
-import { FX, ROOT, doneOf, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
+import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
 import { quietFlip } from './flip';
@@ -361,10 +361,10 @@ export function setStatus(ids: string[], status: Status, label: string) {
     return { nodes: nodes.map((n) => (t.has(n.id) ? { ...n, status, modified: Date.now() } : n)), current };
   });
 }
-/** an item shows as done when it is marked done itself — or when it has children and every leaf under it is done */
+/** an item is done when it is marked done; finishing its sub-items never completes it (the user does) */
 export const isDone = (nodes: Node[], id: string) => {
   const n = nodes.find((x) => x.id === id);
-  return !!n && (n.status === 'done' || (hasKids(nodes, id) && doneOf(nodes, id)));
+  return !!n && n.status === 'done';
 };
 
 /**
@@ -376,8 +376,7 @@ export function toggleDoneNodes(ids: string[]) {
   const known = ids.filter((id) => nodes.some((n) => n.id === id && n.status !== 'dropped'));
   if (!known.length) return;
   const allDone = known.every((id) => isDone(nodes, id));
-  // un-completing can only clear what was marked on the item itself (a parent whose children are all done stays done)
-  const targets = allDone ? known.filter((id) => nodes.find((n) => n.id === id)!.status === 'done') : known.filter((id) => !isDone(nodes, id));
+  const targets = allDone ? known : known.filter((id) => !isDone(nodes, id));
   setStatus(targets, allDone ? 'todo' : 'done', allDone ? 'Mark not done' : 'Mark done');
 }
 

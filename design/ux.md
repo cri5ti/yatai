@@ -148,3 +148,7 @@ Anything can sit at the top level, and in Next every line of an item card is a r
 ## Tray icon
 
 The tray icon says what is going on without opening yatai. It shows the app's purple diamond. On a bright yellow tile when there are changes to look at (any highlight, §1). On an Outlook-blue tile with a white diamond while you are in a meeting (one in Next, or anything on today's calendar); changes win over the meeting. In Next, the meeting in progress has the same blue, muted (and the Outlook drawer's row for it). Drawn in Rust (`tray_image`), coloured, not a template image.
+
+## No guessed states
+
+A link or smart item shows a state only when its source has reported one. Until then nothing is shown, never a default such as "to review" or "queued". When the source is not connected, it shows the "not connected" mark: a muted unplugged plug. When the source cannot see it, the same mark turns amber. The tooltip says which, and where to fix it.

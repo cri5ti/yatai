@@ -528,3 +528,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .drow.now-in { background: var(--outlook-now); }
 /* the drawers' request count */
 .dreq { float: right; color: var(--text-muted); font-variant-numeric: tabular-nums; opacity: .8; } .dreq.low { color: var(--bad); opacity: 1; }
+
+/* no known state: the source is not connected (muted), or cannot see this one (warn) */
+.prsi.off { color: var(--text-muted); } .prsi.off.warn { color: var(--warn); }

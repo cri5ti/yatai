@@ -119,14 +119,21 @@ export function refsOf(n: Node): string[] {
 }
 type Snaps = Record<string, Snapshot>;
 /** a PR's state as the GitHub plugin last reported it ('review' until it has) */
-export const prStatusOf = (snaps: Snaps, key: string): PrStatus => (snaps[`github:${key}`]?.view.glyph as PrStatus | undefined) ?? 'review';
+/** a PR's state as the GitHub plugin last reported it; null when it has not (never guessed: see NoState in Pr.tsx) */
+export const prStatusOf = (snaps: Snaps, key: string): PrStatus | null => {
+  const sn = snaps[`github:${key}`];
+  return sn && !sn.gone ? (sn.view.glyph as PrStatus) : null;
+};
 export const prCountOf = (snaps: Snaps, key: string): number | undefined => snaps[`github:${key}`]?.view.count;
 
 /** PR states that want your attention (like a smart item with a non-neutral alert) */
 export const PR_ATTENTION: PrStatus[] = ['failing', 'feedback', 'ready'];
 export function prAttention(n: Node, snaps: Snaps) {
   if (n.status === 'done') return false;
-  return prLinks(n.title.split('\n')[0]).some((l) => PR_ATTENTION.includes(prStatusOf(snaps, l.key)));
+  return prLinks(n.title.split('\n')[0]).some((l) => {
+    const st = prStatusOf(snaps, l.key);
+    return !!st && PR_ATTENTION.includes(st);
+  });
 }
 
 /** does any item in the subtree of `id` carry a highlight? (used so a collapsed parent can show it) */
@@ -248,11 +255,6 @@ export const depthOf = (nodes: Node[], id: string) => {
   }
   return d;
 };
-/** an item with children is done when all of its leaves are; a leaf is done when marked */
-export function doneOf(nodes: Node[], id: string): boolean {
-  const leaves = leavesOf(nodes, id).filter((n) => n.status !== 'dropped');
-  return leaves.length > 0 && leaves.every((n) => n.status === 'done');
-}
 
 /* ---------- the plan: ordered segments shown as cards in Next ---------- */
 
@@ -382,7 +384,7 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
       est: live.reduce((a, r) => a + (r.node!.status === 'done' ? 0 : r.node!.est ?? 0), 0),
       done,
       total: live.length,
-      allDone: owner?.status === 'done' || (!empty && done === live.length),
+      allDone: owner?.status === 'done', // marked on the item itself: finishing what is inside never completes it
     };
   };
 

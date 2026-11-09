@@ -1,6 +1,10 @@
 import { useS } from './store';
 import type { BuildStatus, PrStatus } from './store';
-import { buildStatusOf, prCountOf, prStatusOf } from './model';
+import { buildStatusOf, prCountOf, prStatusOf, smartRef } from './model';
+import type { Node, State } from './store';
+import type { Snapshot } from './plugins/types';
+import { pluginOf } from './plugins/types';
+import { implFor, pluginById } from './plugins/registry';
 import { BUILD_LABELS } from './plugins/devops/map';
 
 export const PR_STATUSES: { id: PrStatus; label: string }[] = [
@@ -82,6 +86,45 @@ export function PrState({ status, comments = DEFAULT_COMMENTS }: { status: PrSta
   );
 }
 
+/* ---------- no known state: never guess one ---------- */
+/** is this source on (connected, or the demo's mock)? */
+const sourceOn = (s: State, id: string) => {
+  const p = pluginById(id);
+  return !!p && !!implFor(p, s);
+};
+/** the "not connected" mark: an unplugged plug, as an outline (it is not a state) */
+export function Offline({ title, warn = false }: { title: string; warn?: boolean }) {
+  return (
+    <svg className={`prsi off${warn ? ' warn' : ''}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={title}>
+      <title>{title}</title>
+      <g {...line} strokeWidth="1.5">
+        <path d="M6.2 2.6v2.6M9.8 2.6v2.6" />
+        <path d="M4.6 5.2h6.8v2.4a3.4 3.4 0 0 1-6.8 0z" />
+        <path d="M8 11v2.6" />
+        <path d="M2.6 13.4L13.4 2.6" />
+      </g>
+    </svg>
+  );
+}
+/**
+ * in place of a state that is not known: the "not connected" mark when the source is off, or (warn) when it cannot see
+ * this one; nothing while it is on but has not said yet
+ */
+function NoState({ s, plugin, snap }: { s: State; plugin: string; snap?: Snapshot }) {
+  const name = pluginById(plugin)?.name ?? plugin;
+  if (!sourceOn(s, plugin)) return <Offline title={`${name} is not connected (Settings → ${name})`} />;
+  if (snap?.gone) return <Offline warn title={snap.alerts[0]?.toast ?? snap.alerts[0]?.text ?? `${name} cannot see it`} />;
+  return null;
+}
+/** beside a smart item (a work item, a pipeline, an AI session) whose source is off or cannot see it */
+export function SourceOff({ node }: { node: Node }) {
+  const s = useS();
+  const ref = smartRef(node);
+  if (!ref) return null;
+  const sn = s.snaps[ref];
+  return sn && !sn.gone ? null : <NoState s={s} plugin={pluginOf(ref)} snap={sn} />;
+}
+
 /* ---------- Azure DevOps pipeline runs ---------- */
 export const BUILD_STATUSES: { id: BuildStatus; label: string }[] = (Object.keys(BUILD_LABELS) as BuildStatus[]).map((id) => ({ id, label: BUILD_LABELS[id] }));
 const BGLYPH: Record<BuildStatus, JSX.Element> = {
@@ -111,21 +154,14 @@ export function BuildRef({ url, base, project, id }: { url: string; base: string
   const sn = s.snaps[ref];
   // a project in the url may be its id (a GUID): no use as a label
   const name = sn && !sn.gone ? sn.name : `${/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(project) ? 'run' : project} #${id}`;
-  // no state known: say why rather than guess one
-  const why = st
-    ? BUILD_LABELS[st]
-    : sn?.gone
-      ? sn.alerts[0]?.toast ?? sn.alerts[0]?.text ?? 'Azure DevOps cannot show it'
-      : !s.demo && s.accounts.devops?.state !== 'connected'
-        ? 'state unknown: DevOps is not connected (Settings → DevOps)'
-        : 'state unknown: only links on an item’s first line are followed, while the item is open';
+  const why = st ? BUILD_LABELS[st] : sourceOn(s, 'devops') && !sn ? 'not followed: only links on an open item’s first line are' : 'state not known';
   return (
     <span className={`pr bs-${st ?? 'unknown'}`}>
       <span className="ado">◇</span>
       <a href={url} target="_blank" rel="noreferrer" title={`${name} — ${why} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
         {name}
       </a>
-      {st && <BuildState status={st} />}
+      {st ? <BuildState status={st} /> : <NoState s={s} plugin="devops" snap={sn} />}
     </span>
   );
 }
@@ -137,14 +173,14 @@ export function BuildRef({ url, base, project, id }: { url: string; base: string
 export function PrRef({ url, org, repo, num, icon = true }: { url: string; org: string; repo: string; num: string; icon?: boolean }) {
   const s = useS();
   const key = `${org}/${repo}#${num}`;
-  const st: PrStatus = prStatusOf(s.snaps, key);
+  const st = prStatusOf(s.snaps, key);
   return (
-    <span className={`pr pr-${st}`}>
+    <span className={`pr pr-${st ?? 'unknown'}`}>
       {icon && <GhIcon />}
       <a href={url} target="_blank" rel="noreferrer" title={`${org}/${repo} #${num} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
         {repo}#{num}
       </a>
-      <PrState status={st} comments={prCountOf(s.snaps, key)} />
+      {st ? <PrState status={st} comments={prCountOf(s.snaps, key)} /> : <NoState s={s} plugin="github" snap={s.snaps[`github:${key}`]} />}
     </span>
   );
 }
