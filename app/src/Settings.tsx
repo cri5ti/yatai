@@ -5,6 +5,10 @@ import { aiKeyStatus, aiSetKey, isTauri } from './platform';
 import type { KeyStatus } from './platform';
 import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
+import { GhIcon } from './Pr';
+
+const GLYPH: Record<string, string> = { ai: '✦', outlook: '▦', devops: '◇' };
+const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 const EFFORTS = ['', 'none', 'minimal', 'low', 'medium', 'high'];
 
@@ -14,6 +18,7 @@ export function Settings() {
   const [key, setKey] = useState('');
   const [st, setSt] = useState<KeyStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sec, setSec] = useState('ai');
   const [tok, setTok] = useState<Record<string, string>>({});
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -24,6 +29,7 @@ export function Settings() {
   if (!s.settingsOpen) return null;
 
   const cfg = s.settings;
+  const accts = PLUGINS.filter((p) => p.auth);
   const patch = (p: Partial<typeof cfg>) => act.patchUi({ settings: { ...cfg, ...p } });
   const saveKey = async (k: string) => {
     setBusy(true);
@@ -62,7 +68,16 @@ export function Settings() {
         }}
       >
         <h3>Settings</h3>
-        <section className="set-sec">
+        <div className="set-layout">
+        <nav className="set-nav" aria-label="Sections">
+          {[{ id: 'ai', name: 'AI assistant' }, ...accts].map((x) => (
+            <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
+              <Ico id={x.id} /> {x.name}
+            </button>
+          ))}
+        </nav>
+        <div className="set-body">
+        {sec === 'ai' && <section className="set-sec">
           <header>
             <h4>AI assistant</h4>
             <span className="set-hint">⌘/ · {st == null ? '…' : st.configured ? '✓ on' : 'no key: replies are mocked'}</span>
@@ -111,8 +126,8 @@ export function Settings() {
             <span className="set-lbl">API base URL</span>
             <input value={cfg.baseUrl} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
           </div>
-        </section>
-        {PLUGINS.filter((p) => p.auth).map((p) => {
+        </section>}
+        {accts.filter((p) => p.id === sec).map((p) => {
           const acc = s.accounts[p.id];
           const state =
             !isTauri
@@ -163,6 +178,8 @@ export function Settings() {
             </section>
           );
         })}
+        </div>
+        </div>
         <div className="set-foot">
           <button className="btn" onClick={() => act.closeSettings()}>
             Done
