@@ -135,9 +135,12 @@ export async function snapWindow(prev: Rect | null, gap = 20): Promise<{ phys: R
   const { getCurrentWindow, availableMonitors, currentMonitor } = await import('@tauri-apps/api/window');
   const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
   const w = getCurrentWindow();
-  const [p, o, i, f] = await Promise.all([w.outerPosition(), w.outerSize(), w.innerSize(), w.scaleFactor()]);
-  const r = { x: p.x, y: p.y, w: o.width, h: o.height };
+  const [p, o, i, f, vis] = await Promise.all([w.outerPosition(), w.outerSize(), w.innerSize(), w.scaleFactor(), invoke<[number, number, number, number] | null>('visible_frame').catch(() => null)]);
+  const outer = { x: p.x, y: p.y, w: o.width, h: o.height };
   const frame = { w: o.width - i.width, h: o.height - i.height };
+  // snap what you see: on Windows the visible frame can be a pixel off the outer rect (it stuck out by 1 px)
+  const r = vis ? { x: vis[0], y: vis[1], w: vis[2] - vis[0], h: vis[3] - vis[1] } : outer;
+  const inset = { l: r.x - outer.x, t: r.y - outer.y, w: outer.w - r.w, h: outer.h - r.h };
   const cx = r.x + r.w / 2;
   const cy = r.y + r.h / 2;
   const area = (m: { position: { x: number; y: number }; size: { width: number; height: number }; workArea?: { position: { x: number; y: number }; size: { width: number; height: number } } }) => m.workArea ?? { position: m.position, size: m.size };
@@ -147,16 +150,23 @@ export async function snapWindow(prev: Rect | null, gap = 20): Promise<{ phys: R
       const a = area(x);
       return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
     }) ?? (await currentMonitor());
-  const logical = (q: Rect): SavedRect => ({ x: q.x / f, y: q.y / f, w: (q.w - frame.w) / f, h: (q.h - frame.h) / f, p: { x: q.x, y: q.y, w: q.w - frame.w, h: q.h - frame.h } });
+  /** a visible rect back to the window's own terms: its outer position, its inner size */
+  const toOuter = (q: Rect): Rect => ({ x: q.x - inset.l, y: q.y - inset.t, w: q.w + inset.w, h: q.h + inset.h });
+  const logical = (q: Rect): SavedRect => {
+    const o2 = toOuter(q);
+    const inner = { w: o2.w - frame.w, h: o2.h - frame.h };
+    return { x: o2.x / f, y: o2.y / f, w: inner.w / f, h: inner.h / f, p: { x: o2.x, y: o2.y, ...inner } };
+  };
   if (!m) return { phys: r, logical: logical(r) };
   const a = area(m);
   const snapped = snapRect(r, prev, { x: a.position.x, y: a.position.y, w: a.size.width, h: a.size.height }, Math.round(gap * m.scaleFactor));
   if (!snapped) return { phys: r, logical: logical(r) };
   const to = { x: Math.round(snapped.x), y: Math.round(snapped.y), w: Math.round(snapped.w), h: Math.round(snapped.h) };
+  const out = toOuter(to);
   applying++;
   try {
-    if (to.w !== r.w || to.h !== r.h) await w.setSize(new PhysicalSize(to.w - frame.w, to.h - frame.h));
-    await w.setPosition(new PhysicalPosition(to.x, to.y));
+    if (to.w !== r.w || to.h !== r.h) await w.setSize(new PhysicalSize(out.w - frame.w, out.h - frame.h));
+    await w.setPosition(new PhysicalPosition(out.x, out.y));
   } finally {
     setTimeout(() => applying--, 400);
   }

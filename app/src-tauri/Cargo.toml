@@ -29,3 +29,7 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# the visible window frame (DWM), for snapping it flush to the screen's edges
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

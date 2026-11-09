@@ -238,6 +238,29 @@ fn tray_image(mode: &str) -> Image<'static> {
     Image::new_owned(px, N, N)
 }
 
+/// The window's visible frame in physical screen px [left, top, right, bottom] (Windows: what DWM draws, which can be
+/// a pixel off the window rect of a frameless window with a shadow), or None where the window rect is what you see.
+#[tauri::command]
+fn visible_frame(window: tauri::WebviewWindow) -> Option<[i32; 4]> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+        let hwnd = window.hwnd().ok()?;
+        let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        // SAFETY: a valid window handle, and a RECT-sized buffer for this attribute
+        let hr = unsafe {
+            DwmGetWindowAttribute(hwnd.0 as _, DWMWA_EXTENDED_FRAME_BOUNDS as u32, &mut r as *mut RECT as *mut _, std::mem::size_of::<RECT>() as u32)
+        };
+        return (hr == 0).then_some([r.left, r.top, r.right, r.bottom]);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        None
+    }
+}
+
 /// the tray icon's state ("normal" / "attention" / "meeting"), as the main window decides it
 #[tauri::command]
 fn set_tray_mode(tray: State<Tray>, mode: String) {
@@ -343,6 +366,7 @@ pub fn run() {
             db_path,
             set_badge,
             set_tray_mode,
+            visible_frame,
             show_capture,
             popup_open,
             popup_close,
