@@ -5236,6 +5236,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 name = "yatai"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "keyring",
  "reqwest 0.12.28",
  "rusqlite",

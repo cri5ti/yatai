@@ -1,4 +1,5 @@
 mod ai;
+mod backup;
 mod db;
 mod plugin;
 
@@ -26,9 +27,14 @@ fn db_load(db: State<db::Db>) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-fn db_apply(db: State<db::Db>, ops: Vec<db::Op>) -> Result<(), String> {
+fn db_apply(db: State<db::Db>, bk: State<backup::Backups>, ops: Vec<db::Op>) -> Result<(), String> {
     let mut c = db.0.lock().map_err(|e| e.to_string())?;
-    db::apply(&mut c, &ops)
+    db::apply(&mut c, &ops)?;
+    // preferences (kv) don't count as activity for the backups
+    if ops.iter().any(|o| o.table() != "kv") {
+        bk.touched();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -146,7 +152,7 @@ fn shortcuts_taken(t: State<Taken>) -> Vec<&'static str> {
     t.0.clone()
 }
 
-fn data_file(app: &AppHandle) -> std::path::PathBuf {
+pub(crate) fn data_file(app: &AppHandle) -> std::path::PathBuf {
     let dir = app.path().app_data_dir().expect("no app data dir");
     std::fs::create_dir_all(&dir).ok();
     dir.join("yatai.db")
@@ -244,6 +250,8 @@ pub fn run() {
             let path = data_file(app.handle());
             let conn = db::open(&path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
             app.manage(db::Db(Mutex::new(conn)));
+            app.manage(backup::Backups::new(path.parent().expect("data dir")));
+            backup::start(app.handle());
             let tray = build_tray(app.handle())?;
             *app.state::<Tray>().0.lock().unwrap() = Some(tray);
             // another app may own a shortcut already (⌥Space is popular): yatai still starts, and says so
@@ -286,6 +294,10 @@ pub fn run() {
             shortcuts_taken,
             quit,
             open_url,
+            backup::backup_status,
+            backup::backup_set_config,
+            backup::backup_now,
+            backup::backup_reveal,
             ai::ai_key_status,
             ai::ai_set_key,
             ai::ai_post,

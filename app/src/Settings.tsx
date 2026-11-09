@@ -1,14 +1,119 @@
 import { useEffect, useRef, useState } from 'react';
 import { useS } from './store';
 import { act } from './act';
-import { aiKeyStatus, aiSetKey, isTauri } from './platform';
+import { aiKeyStatus, aiSetKey, invoke, isTauri } from './platform';
 import type { KeyStatus } from './platform';
 import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
 import { GhIcon } from './Pr';
 
-const GLYPH: Record<string, string> = { ai: '✦', outlook: '▦', devops: '◇' };
+const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
+
+interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
+interface BackupInfo { name: string; kind: 'daily' | 'frequent'; size: number; modified: number }
+interface BackupStatus { dbPath: string; dbSize: number; dir: string; config: BackupCfg; backups: BackupInfo[] }
+
+const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const EVERY = [5, 15, 30, 60];
+
+/** the database file, and its automatic backups (src-tauri/src/backup.rs does the work; this only sets the schedule) */
+function Database() {
+  const [st, setSt] = useState<BackupStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => invoke<BackupStatus>('backup_status').then(setSt, (e) => act.toast(`Backups: ${String(e)}`, 'bad'));
+  useEffect(() => void load(), []);
+  if (!isTauri) {
+    return (
+      <section className="set-sec">
+        <header><h4>Database</h4><span className="set-hint">browser build</span></header>
+        <p className="set-note">The browser build keeps the document in this browser's localStorage (key yatai-app-v1). Backups are part of the desktop app.</p>
+      </section>
+    );
+  }
+  const cfg = st?.config;
+  const patch = async (p: Partial<BackupCfg>) => {
+    if (!cfg) return;
+    try {
+      const config = await invoke<BackupCfg>('backup_set_config', { config: { ...cfg, ...p } });
+      setSt((x) => x && { ...x, config });
+      void load(); // the lists may have been trimmed
+    } catch (e) {
+      act.toast(`Backups: ${String(e)}`, 'bad');
+    }
+  };
+  const keep = (k: 'dailyKeep' | 'frequentKeep', max: number) => (
+    <input type="number" min={1} max={max} value={cfg![k]} onChange={(e) => e.target.value && patch({ [k]: Math.max(1, Math.min(max, +e.target.value | 0)) })} />
+  );
+  const now = async () => {
+    setBusy(true);
+    try {
+      await invoke('backup_now');
+      await load();
+      act.toast('Backup taken', 'good');
+    } catch (e) {
+      act.toast(`Backup: ${String(e)}`, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const count = (k: string) => st?.backups.filter((b) => b.kind === k).length ?? 0;
+  return (
+    <section className="set-sec">
+      <header>
+        <h4>Database</h4>
+        <span className="set-hint">{st ? `${bytes(st.dbSize)} · SQLite` : '…'}</span>
+      </header>
+      <div className="set-row">
+        <span className="set-lbl">Location<small>Everything lives in this one file. Quit yatai before copying or replacing it.</small></span>
+        <span className="set-key">
+          <input readOnly value={st?.dbPath ?? ''} onFocus={(e) => e.target.select()} />
+          <button className="btn sm" onClick={() => invoke('backup_reveal', { which: 'data' })}>Show</button>
+        </span>
+      </div>
+      <div className="set-row">
+        <span className="set-lbl">Daily snapshot<small>One per day, taken the first time yatai runs that day. {cfg?.daily ? `${count('daily')} kept.` : ''}</small></span>
+        <span className="set-opt">
+          <label><input type="checkbox" checked={!!cfg?.daily} disabled={!cfg} onChange={(e) => patch({ daily: e.target.checked })} /> on</label>
+          {cfg && <label className={cfg.daily ? '' : 'off'}>keep {keep('dailyKeep', 365)} days</label>}
+        </span>
+      </div>
+      <div className="set-row">
+        <span className="set-lbl">Frequent snapshot<small>At most one per interval, and only if something changed since the last one. {cfg?.frequent ? `${count('frequent')} kept.` : ''}</small></span>
+        <span className="set-opt">
+          <label><input type="checkbox" checked={!!cfg?.frequent} disabled={!cfg} onChange={(e) => patch({ frequent: e.target.checked })} /> on</label>
+          {cfg && (
+            <>
+              <label className={cfg.frequent ? '' : 'off'}>every{' '}
+                <select value={cfg.frequentEveryMin} onChange={(e) => patch({ frequentEveryMin: +e.target.value })}>
+                  {(EVERY.includes(cfg.frequentEveryMin) ? EVERY : [...EVERY, cfg.frequentEveryMin].sort((a, b) => a - b)).map((m) => <option key={m} value={m}>{m} min</option>)}
+                </select>
+              </label>
+              <label className={cfg.frequent ? '' : 'off'}>keep {keep('frequentKeep', 200)}</label>
+            </>
+          )}
+        </span>
+      </div>
+      <div className="set-row">
+        <span className="set-lbl">Backups<small>{st?.dir}</small></span>
+        <span className="set-key">
+          <button className="btn sm" disabled={busy || !cfg} onClick={now}>Back up now</button>
+          <button className="btn sm" onClick={() => invoke('backup_reveal', { which: 'backups' })}>Show folder</button>
+        </span>
+      </div>
+      {!!st?.backups.length && (
+        <ul className="set-bk" aria-label="Backups">
+          {st.backups.slice(0, 8).map((b) => (
+            <li key={b.name}><span>{b.kind === 'daily' ? 'daily' : 'snapshot'}</span><span>{when(b.modified)}</span><span>{bytes(b.size)}</span></li>
+          ))}
+          {st.backups.length > 8 && <li className="more">… and {st.backups.length - 8} older</li>}
+        </ul>
+      )}
+      <p className="set-note">To restore: quit yatai, then copy a backup over yatai.db (and delete yatai.db-wal / -shm next to it).</p>
+    </section>
+  );
+}
 
 const EFFORTS = ['', 'none', 'minimal', 'low', 'medium', 'high'];
 
@@ -70,13 +175,14 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, ...accts].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'db', name: 'Database' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
           ))}
         </nav>
         <div className="set-body">
+        {sec === 'db' && <Database />}
         {sec === 'ai' && <section className="set-sec">
           <header>
             <h4>AI assistant</h4>

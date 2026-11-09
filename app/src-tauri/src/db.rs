@@ -108,6 +108,12 @@ pub struct Op {
     del: Option<String>,
 }
 
+impl Op {
+    pub fn table(&self) -> &str {
+        &self.t
+    }
+}
+
 pub fn apply(c: &mut Connection, ops: &[Op]) -> Result<(), String> {
     let tx = c.transaction().map_err(|e| e.to_string())?;
     for op in ops {
