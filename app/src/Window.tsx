@@ -114,7 +114,9 @@ function Win() {
           </nav>
           <div className="wc">
             <button className={s.onTop ? 'on' : ''} aria-pressed={s.onTop} title={s.onTop ? 'Always on top: on' : 'Keep on top of other windows'} aria-label="Always on top" onClick={toggleOnTop}>
-              📌
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden fill={s.onTop ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round">
+                <path d="M9.5 1.8 14.2 6.5l-1.4.5-2.3 2.3.3 2.9-1 1-2.7-2.7-4 4-.7-.7 4-4L3.7 7.2l1-1 2.9.3L9.9 4.2z" />
+              </svg>
             </button>
             <button title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={toggleHelp}>
               ?

@@ -30,7 +30,7 @@
 - [ ] Developer panel: demo connectors, Load demo data, Start empty, simulated clock → Real time
 
 - [ ] Settings → Database: location shown, "Show" opens the data folder; daily / frequent snapshots appear in the list after "Back up now"; changing a keep-count trims old files at once; a frequent snapshot appears ~15 min after an edit (not after only selecting rows)
-- [ ] ⌘E in the Organizer / Next: editor opens in its own window with everything in view as markdown (Next: its items under their tasks); with a selection ⌘E takes only that (⌘⇧E = everything in view); a new line made in Next lands in Next; ⌘⏎ applies, Esc (twice when edited) cancels; light / dark follow the theme; Tab / ⇧Tab indent; Enter continues the list
+- [ ] ⌘E in the Organizer / Next: editor opens in its own window with everything in view as markdown (Next: its items under their tasks); with several items multi-selected ⌘E takes only those (⌘⇧E = everything in view); a new line made in Next lands in Next; ⌘⏎ applies, Esc (twice when edited) cancels; light / dark follow the theme; Tab / ⇧Tab indent; Enter continues the list
 - [ ] ⌘E apply: rename one line, change `@est:` / `@due:`, tick `[x]`, add and delete lines, move a block: items that were not touched keep their Next placement, timers and open / closed state; one ⌘Z undoes it all
 - [ ] ⌘C of items now includes `@est:` / `@due:`; pasting them back restores both
 

@@ -96,7 +96,7 @@ Top-level items are plain lines with a blank line between them; only sub-items a
 
 ## 6b. Edit as markdown (⌘E)
 
-⌘E opens the selected items (with their sub-items) as that same markdown in a real editor (CodeMirror) in its own window; with nothing selected, or with ⌘⇧E, everything the view shows: in Next its items with the tasks above them for context, in the Organizer the whole tree. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
+⌘E opens everything the view shows as that same markdown in a real editor (CodeMirror) in its own window; with several items multi-selected it takes only those (with their sub-items), and ⌘⇧E always takes everything: in Next its items with the tasks above them for context, in the Organizer the whole tree. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
 
 Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them (with whatever hangs below them, seen or not). Items outside the text keep their place among their siblings. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
 

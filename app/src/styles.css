@@ -488,3 +488,4 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .md-foot kbd { opacity: .7; font-family: inherit; margin-left: 4px; }
 .popup-body .help.mdedit { overflow: hidden; }
 .wc button.on { color: var(--accent); }
+.wc button svg { display: block; } .wc button.on:hover:not(:disabled) { color: var(--accent); }

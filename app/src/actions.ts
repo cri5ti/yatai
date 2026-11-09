@@ -9,7 +9,7 @@ import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mo
 import { pluginById } from './plugins/registry';
 import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
-import { FX, ROOT, doneOf, fmt, plain, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
+import { FX, ROOT, doneOf, fmt, plain, hasKids, isLoose, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
 import { quietFlip } from './flip';
@@ -421,6 +421,16 @@ export function indentItems(ids: string[], rowsOnly = false) {
           if (rows[j].depth === rows[ri].depth && rows[j].node && !sel.has(rows[j].id)) {
             parent = rows[j].node;
             break;
+          }
+        }
+        // a top-level item is a card of its own: the neighbour above is the previous top-level card
+        if (!parent && isLoose(card)) {
+          for (let k = cards.indexOf(card) - 1; k >= 0 && isLoose(cards[k]); k--) {
+            const above = cards[k].rows.find((r) => r.depth === 0);
+            if (above?.node && !sel.has(above.id)) {
+              parent = above.node;
+              break;
+            }
           }
         }
       } else {
@@ -1146,13 +1156,12 @@ export const closeSettings = () => {
 };
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
 /* ---------- edit as markdown (⌘E, see mdedit.ts) ---------- */
-/** open the editor on the selected items (with their sub-items), or, with nothing selected or `all`, on everything the view shows (Next: its rows; Organizer: the tree) */
+/** open the editor on the items picked together (several selected: those with their sub-items), or, with one or none selected or `all`, on everything the view shows (Next: its rows; Organizer: the tree) */
 export function openMdEdit(all = false) {
   const s = get();
   if (s.tab === 'inbox') return;
-  const raw = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.multi.length > 1 ? s.multi : s.nsel.row ? [s.nsel.row] : [];
-  const picked = raw.filter((id) => s.nodes.some((n) => n.id === id));
-  const selection = !all && picked.length > 0;
+  const picked = s.multi.filter((id) => s.nodes.some((n) => n.id === id));
+  const selection = !all && picked.length > 1;
   const ids = scopeFor(s.nodes, selection ? 'selection' : s.tab === 'next' ? 'next' : 'tree', picked);
   set(() => ({ mdEdit: { ids, today: s.tab === 'next' }, hidden: false, menu: null }));
 }
