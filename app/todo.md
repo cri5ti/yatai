@@ -45,6 +45,9 @@
 - [ ] Next drag: drop on a row's top / bottom edge = before / after it, middle = into it (any item, anywhere but into itself); gaps between cards move a top row's whole card, or split a sub-item out; nothing stays see-through after a drop (Next, Organizer, Inbox → Organizer)
 - [ ] Bring in from the GitHub / DevOps drawer (⏎): lands under the item picked in Next (or the Organizer's selection), or right after it when that item is itself a PR / work item; with nothing picked, top level
 
+- [ ] Right-click → Refresh on a PR / run / work item (and on several selected): "Refreshing…", then its state; works for items not in Next too
+- [ ] Outlook drawer, Today: time ranges on the left, no second line; red now-line through the meeting in progress (moves with the clock: try the developer panel's clock) or above the next meeting; past meetings faded; two overlapping meetings have an accent bar and time (Tomorrow / Next 5 days too)
+- [ ] PR details as sub-items: a PR with unresolved threads gets one sub-item per thread (`@who on file: text`, link on line 2); resolving one on GitHub checks it off within a minute; a failing check adds "Build failed: name — error" with the run link, checked off once it passes; merged → all checked. Real token: the error text is useful (annotations need Checks: read)
 - [ ] GitHub: a PR whose checks are queued / running shows the blue "checks running" icon (spinning arc); it is not announced, the result is
 - [ ] /notify (row menu: Notify me when it changes) on a PR or run item: 🔔 on the row; every change of state toasts; with yatai hidden or in the background a system notification appears (first time: the OS asks for permission; macOS / Windows); toggling again stops it; survives a restart
 - [ ] DevOps drawer → Pipelines (demo connectors): runs with their state icons; ⏎ brings one in; the developer panel's "DevOps pipeline runs" moves it queued → building → failed / done

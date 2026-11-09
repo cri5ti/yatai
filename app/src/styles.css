@@ -364,7 +364,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .dtype { color: var(--text-muted); font-size: var(--fs-xs); }
 .dempty { padding: 24px; text-align: center; color: var(--text-muted); }
 .dfoot { flex: none; padding: 3px 12px; color: var(--text-muted); font-size: var(--fs-xs); border-top: var(--bw) solid var(--border); }
-.dtime { width: 82px; flex: none; font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: var(--fs-sm); }
+.dtime { min-width: 82px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: var(--fs-sm); }
 
 /* ---------- window resizers ---------- */
 .win.resizing { transition: none !important; }
@@ -511,3 +511,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 @media (prefers-reduced-motion: reduce) { .prsi .spin { animation: none; } }
 .pr .ado { color: var(--text-muted); font-size: var(--fs-xs); margin-right: 2px; }
 .bell { font-size: var(--fs-xs); margin-right: var(--sp-2); opacity: .75; }
+
+/* Outlook drawer: past meetings fade; the now-line runs through the meeting in progress (as far as it has got) or
+   sits between meetings; a double booking is marked in the accent colour */
+.drow.dim { opacity: .45; } .drow.dim.is-sel { opacity: .7; }
+.drow.now-in::after, .drow.now-before::before, .drow.now-after::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--bad); z-index: 1; pointer-events: none;
+}
+.drow.now-in::after { top: var(--now); }
+.drow.now-before::before { top: -1px; } .drow.now-after::after { bottom: -1px; }
+.drow.clash { box-shadow: inset 3px 0 0 var(--accent); }
+.drow.clash .dtime { color: var(--accent); font-weight: var(--fw-semi); }

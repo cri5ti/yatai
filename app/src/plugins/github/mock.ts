@@ -10,12 +10,24 @@ import { LISTS } from './api';
 import { noFacts, snapshot } from './map';
 import type { Facts } from './map';
 
-const factsFor = (status: PrStatus, count: number): Facts => ({
+const SAY = [
+  'Can we rename this to something clearer?',
+  'This needs a test for the empty case.',
+  'Why not reuse the existing helper here?',
+  'Typo in the error message.',
+  'Should this be behind the feature flag?',
+];
+const FILES = ['export.ts', 'staff.ts', 'export.test.ts', 'api.ts', 'flags.ts'];
+const factsFor = (status: PrStatus, count: number, key = ''): Facts => ({
   ...noFacts,
   draft: status === 'draft',
   merged: status === 'merged',
   closed: status === 'closed',
   failing: status === 'failing' ? 'unit-tests' : null,
+  fails: status === 'failing' ? [{ name: 'unit-tests', error: 'StaffExport › exports every column: expected 12 columns, got 11 (export.test.ts:41)', url: `https://github.com/${key.split('#')[0]}/actions/runs/9100${key.split('#')[1] ?? ''}` }] : [],
+  // threads t0…t(n-1): lowering the count in the developer panel resolves the last ones
+  open: status === 'feedback' ? Array.from({ length: count }, (_, i) => ({ id: `t${i}`, author: ['priya', 'sam', 'lee'][i % 3], body: SAY[i % SAY.length], path: `src/${FILES[i % FILES.length]}`, url: `https://github.com/${key.split('#')[0]}/pull/${key.split('#')[1]}#discussion_r${1000 + i}` })) : [],
+  oid: 'abc1234',
   pending: status === 'building',
   checksOk: status !== 'building',
   threads: status === 'feedback' ? count : 0,
@@ -23,7 +35,7 @@ const factsFor = (status: PrStatus, count: number): Facts => ({
 });
 
 const snapOf = (key: string, title: string, status: PrStatus, count: number): Snapshot =>
-  snapshot(refKey('github', key), key.replace(/^[^/]+\//, ''), title, factsFor(status, count));
+  snapshot(refKey('github', key), key.replace(/^[^/]+\//, ''), title, factsFor(status, count, key));
 
 export const mock: Impl = {
   async fetch(refs) {

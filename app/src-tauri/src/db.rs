@@ -14,7 +14,7 @@ const TABLES: &[(&str, &[&str])] = &[
         "item",
         &[
             "id", "ord", "parent_id", "title", "status", "today", "open", "created", "modified", "last_run", "scheduled", "est", "due",
-            "later", "spent", "smart", "notify",
+            "later", "spent", "smart", "notify", "origin",
         ],
     ),
     ("inbox", &["id", "ord", "text", "created", "suggestion"]),
@@ -41,6 +41,8 @@ const MIGRATIONS: &[&str] = &[r#"
     CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 "#, r#"
     ALTER TABLE item ADD COLUMN notify INTEGER;
+"#, r#"
+    ALTER TABLE item ADD COLUMN origin TEXT;
 "#];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {

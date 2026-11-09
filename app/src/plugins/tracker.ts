@@ -3,8 +3,8 @@
  * stores the snapshots, and turns what changed into highlights and toasts. Only the main window runs it.
  * It never imports the actions: the main window hands it a sink.
  */
-import { get, set, subscribe, today } from '../store';
-import type { State } from '../store';
+import { get, set, subscribe, today, uid } from '../store';
+import type { Node, State } from '../store';
 import { fmt, prLinks, refsOf, setPrHost } from '../model';
 import { PLUGINS, implFor, pluginById } from './registry';
 import { AuthError, pluginOf } from './types';
@@ -70,8 +70,46 @@ function describeBareLinks(snaps: Snapshot[]) {
   if (ids.size) set(() => ({ nodes }));
 }
 
+/**
+ * What a source reports as outstanding inside a tracked item (a failing check, an unresolved review thread) is kept
+ * as sub-items of that item, one per detail, marked with `origin`. A new one is added (and highlighted); one that is
+ * no longer reported is checked off (and highlighted). Sub-items the user deleted come back only if reported anew.
+ */
+export function syncDetails(snaps: Snapshot[]) {
+  let nodes = get().nodes;
+  const touched: string[] = [];
+  const now = Date.now();
+  for (const sn of snaps) {
+    if (!sn.details || sn.gone) continue;
+    const parents = nodes.filter((n) => !n.origin && n.status !== 'done' && n.status !== 'dropped' && refsOf(n).includes(sn.ref));
+    for (const p of parents) {
+      const kids = nodes.filter((n) => n.parentId === p.id && n.origin?.startsWith(sn.ref + '|'));
+      const want = new Set(sn.details.map((d) => `${sn.ref}|${d.key}`));
+      const add: Node[] = sn.details
+        .filter((d) => !kids.some((k) => k.origin === `${sn.ref}|${d.key}`))
+        .map((d) => ({ id: uid(), parentId: p.id, title: d.url ? `${d.text}\n${d.url}` : d.text, status: 'todo', today: p.today, open: true, created: now, modified: now, origin: `${sn.ref}|${d.key}` }));
+      const close = new Set(kids.filter((k) => !want.has(k.origin!) && k.status !== 'done' && k.status !== 'dropped').map((k) => k.id));
+      if (close.size) nodes = nodes.map((n) => (close.has(n.id) ? { ...n, status: 'done', modified: now } : n));
+      if (add.length) {
+        // after the item's last descendant, so they read in the order reported
+        const sub = new Set([p.id]);
+        let at = nodes.findIndex((n) => n.id === p.id);
+        nodes.forEach((n, i) => {
+          if (n.parentId && sub.has(n.parentId)) (sub.add(n.id), (at = i));
+        });
+        nodes = [...nodes.slice(0, at + 1), ...add, ...nodes.slice(at + 1)];
+      }
+      touched.push(...add.map((n) => n.id), ...close);
+    }
+  }
+  if (!touched.length) return;
+  set(() => ({ nodes }));
+  sink.highlight(touched);
+}
+
 export function applySnapshots(snaps: Snapshot[]) {
   describeBareLinks(snaps);
+  syncDetails(snaps);
   const s = get();
   const next = { ...s.snaps };
   const hl: string[] = [];
@@ -179,6 +217,30 @@ async function runPlugin(p: Plugin) {
       oneError(p.id, e);
     }
   }
+}
+
+/** look at these refs right now, whether or not their items are in Next (the item menu's Refresh) */
+export async function refreshRefs(refs: string[]): Promise<Snapshot[]> {
+  const by = new Map<string, string[]>();
+  for (const r of refs) by.set(pluginOf(r), [...(by.get(pluginOf(r)) ?? []), r]);
+  const out: Snapshot[] = [];
+  await Promise.all(
+    [...by].map(async ([id, rs]) => {
+      const p = pluginById(id);
+      const impl = p && implFor(p, get());
+      if (!impl?.fetch) return;
+      try {
+        const snaps = await impl.fetch(rs);
+        applySnapshots(snaps);
+        out.push(...snaps);
+      } catch (e) {
+        if (e instanceof AuthError) set((st) => ({ accounts: { ...st.accounts, [id]: { ...st.accounts[id], state: 'expired' } } }));
+        lastError.delete(id); // asked for: always say why
+        oneError(id, e);
+      }
+    }),
+  );
+  return out;
 }
 
 /** run one cycle for a plugin (or all), now or when it is due */

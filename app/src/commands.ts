@@ -124,6 +124,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });
   if (c.card && !c.row)
     items.push({ id: 'fold', label: folded(c.card) ? 'Expand' : 'Collapse', cmd: 'collapse', keys: folded(c.card) ? '→' : '←', icon: '▾', run: () => A.toggleCardOpen(c.card!, folded(c.card!)) });
+  if (refsOf(n).length) items.push({ id: 'refresh', label: 'Refresh', cmd: 'refresh', icon: '↻', tip: 'Ask GitHub / DevOps about it now', run: () => void A.refreshItems([n.id]) });
   if (refsOf(n).length)
     items.push({ id: 'notify', label: n.notify ? 'Stop notifying me' : 'Notify me when it changes', cmd: 'notify', icon: n.notify ? '🔕' : '🔔', tip: 'Every change of its state (queued, building, failed, done…): a toast and a system notification when yatai is in the background', run: () => A.toggleNotify([n.id]) });
   items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
@@ -161,7 +162,10 @@ function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
     { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => ids.forEach((id) => A.toggleToday(id)) },
     { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(ids) },
     ...(ids.some((id) => { const x = get().nodes.find((n) => n.id === id); return !!x && refsOf(x).length > 0; })
-      ? [{ id: 'notify', label: 'Notify me when they change (toggle)', cmd: 'notify', icon: '🔔', run: () => A.toggleNotify(ids) }]
+      ? [
+          { id: 'refresh', label: 'Refresh', cmd: 'refresh', icon: '↻', run: () => void A.refreshItems(ids) },
+          { id: 'notify', label: 'Notify me when they change (toggle)', cmd: 'notify', icon: '🔔', run: () => A.toggleNotify(ids) },
+        ]
       : []),
     { id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate(ids) },
     { id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon(ids) },

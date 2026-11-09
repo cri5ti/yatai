@@ -7,7 +7,7 @@ import { acceptProposal, rejectProposal } from './proposal';
 import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { pluginById } from './plugins/registry';
-import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
+import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, doneOf, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
@@ -72,6 +72,15 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
+/** the item menu's Refresh: ask the sources about these items now */
+export async function refreshItems(ids: string[]) {
+  const refs = [...new Set(get().nodes.filter((n) => ids.includes(n.id)).flatMap((n) => refsOf(n)))];
+  if (!refs.length) return toast('Nothing here comes from GitHub or DevOps', 'info');
+  toast('Refreshing…', 'info');
+  const snaps = await refreshRefs(refs);
+  if (!snaps.length) return;
+  toast(snaps.length === 1 ? `${snaps[0].name}: ${snaps[0].view.label}` : `Refreshed ${snaps.length} items`, 'info');
+}
 /** developer panel: the mock DevOps moves a pipeline run on */
 export function setRunStatus(ref: string, status: BuildStatus) {
   set((s) => ({ runs: { ...s.runs, [ref]: status } }));

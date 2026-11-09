@@ -33,6 +33,15 @@ export interface Snapshot {
   rev: string; // changes when anything shown changes
   gone?: boolean; // deleted, or the token cannot see it
   desc?: string; // the PR's description (live GitHub only), used once to fill in a bare pasted link
+  /** things to act on inside it (a failing check, an unresolved review thread): kept as sub-items of the item, checked off once gone */
+  details?: Detail[];
+}
+
+/** one outstanding thing a source reports; `key` is stable while it is outstanding */
+export interface Detail {
+  key: string;
+  text: string; // the sub-item's headline
+  url?: string; // where to look (the run, the comment): goes on the sub-item's second line
 }
 
 /** the left-hand mark of a drawer row */
@@ -50,6 +59,7 @@ export interface Entry {
   smart?: string; // brought in as a smart item of this source ('workitem'); PRs are just links
   dim?: boolean;
   meeting?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }; // a calendar entry: brought in as a meeting card on its day
+  clash?: boolean; // a calendar entry that overlaps another one (double booked)
   canInbox: boolean;
 }
 

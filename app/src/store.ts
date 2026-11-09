@@ -27,6 +27,7 @@ export interface Node {
   due?: string; // yyyy-mm-dd
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
+  origin?: string; // made by yatai from what a source reported: '<ref>|<detail key>' (a failing check, a review thread); checked off when it is no longer outstanding
   notify?: boolean; // tell me about every change of what it tracks (a PR, a pipeline run): toast + OS notification
   smart?: { source: SmartSource; ref?: string }; // ref: what the plugin tracks ('devops:wi/18233'); older items derive it (model.ts refsOf)
 }

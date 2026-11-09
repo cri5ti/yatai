@@ -59,7 +59,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 
 | Drawer | Tabs | Brings in |
 |---|---|---|
-| **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row) |
+| **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row). One line per meeting with its time range. Today has a red now-line: through the meeting in progress, as far as it has got, or between meetings (gaps are not drawn to scale). Past meetings are faded; double bookings get an accent bar and time |
 | **GitHub** | Assigned to me · My PRs · Mentions | An item whose text is the PR link (rendered per §2) |
 | **DevOps** | Pipelines · Mentions · My work items · Created by me | A run link (tracked like a PR), or a work-item (smart) item |
 

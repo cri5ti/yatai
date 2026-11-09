@@ -211,6 +211,12 @@ The existing `Flags` / developer-panel toggles keep working **as the mock plugin
 
 Any item that tracks something (a PR link, a run link, a smart item) has **Notify me when it changes** in its menu (`/notify`; several selected items toggle together). It is saved on the item (`notify`). For such an item, every change of state counts: GitHub's *checks running*, a run going queued → building → done. Normally only what wants attention counts. Each change is a toast and a highlight, as always. When yatai is hidden or not in front, it is also a **system notification** (`tauri-plugin-notification`; it asks for permission the first time). Rows that notify show a 🔔.
 
+**Refresh** (same menus, `/refresh`) asks the sources about the selected items right away, whether or not they are in Next, and says what came back.
+
+### 6.2 Details become sub-items
+
+A snapshot can carry `details`: the things to act on inside a tracked item, each with a stable key. GitHub reports each **failing check**, with its first real error (a failure annotation that is not just "exit code 1", else the check's title) and a link to the run; its key includes the head commit, so a failure on a later commit is a new one. It also reports each **unresolved review thread**, by its first comment (`@who on file: text`, linked). The tracker (`syncDetails`) keeps one sub-item per detail under every open item that tracks the ref. It marks them with `origin` (`<ref>|<key>`), puts the link on the second line (comment links never count as the PR itself), and highlights new ones. When a detail is no longer reported (the check passes, the thread is resolved, the PR is merged or closed), its sub-item is **checked off** and highlighted. Nothing is reopened or deleted: a sub-item you remove comes back only if it is reported anew.
+
 ## 7. Data model changes
 
 Small and additive; fits `design.md` §7 (`smart_binding`, `event`).

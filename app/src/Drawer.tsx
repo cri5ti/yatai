@@ -8,6 +8,7 @@ import { BuildState, GhIcon, PrState } from './Pr';
 import { cx } from './kbd';
 import { isTauri } from './platform';
 import { pluginById, implFor } from './plugins/registry';
+import { clashes, range } from './plugins/outlook/days';
 import type { Entry as PluginEntry, ListDef } from './plugins/types';
 
 interface Row {
@@ -20,6 +21,9 @@ interface Row {
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
   repo?: string; // 'org/repo' of a pull request, for the filter
+  clash?: boolean; // a double-booked meeting
+  /** where "now" is: a line inside this row (0–1 of the way through it), or just above / below it */
+  now?: number | 'before' | 'after';
 }
 
 const TITLES: Record<string, ReactNode> = {
@@ -64,6 +68,7 @@ const rowOf = (en: PluginEntry, s: State): Row => ({
   repo: /([\w.-]+\/[\w.-]+)#\d+/.exec(en.ref)?.[1] ?? (en.sub.includes(' · ') ? en.sub.split(' · ')[0] : undefined),
   have: en.meeting ? s.meetings.some((m) => m.id === en.meeting!.id) : s.nodes.some((n) => refsOf(n).includes(en.ref)),
   dim: en.dim,
+  clash: en.clash,
   canInbox: en.canInbox,
   add: (to) => (en.meeting ? act.bringMeeting(en.meeting.id, en.meeting) : act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to)),
 });
@@ -75,31 +80,42 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
   if (kind === 'outlook' && tab === 'today') {
     // a calendar plugin lists today's agenda
     const mine = new Map(s.meetings.map((m) => [m.id, m]));
-    return (s.agenda[kind] ?? allAgenda(s))
+    const evs = (s.agenda[kind] ?? allAgenda(s))
       .filter((e) => (e.day ?? s.day) === s.day)
       .filter((e) => !e.cancelled || mine.has(e.id))
-      .sort((a, b) => a.start - b.start)
-      .map((e) => {
-        const have = mine.get(e.id);
-        const minsAway = e.start - s.clock;
-        const state = minsAway > 0 ? 'upcoming' : minsAway + e.durationMin > 0 ? 'now' : 'done';
-        const from = have && have.start !== e.start ? have.start : undefined;
-        return {
-          id: e.id,
-          lead: <span className="dtime">{fmt(e.start)}</span>,
-          title: (
-            <>
-              {e.title}
-              {from != null && <span className="chip warn">moved from {fmt(from)}</span>}
-            </>
-          ),
-          sub: `${e.durationMin} min · ${e.where}${e.cancelled ? ' · cancelled' : state === 'now' ? ' · in progress' : state === 'done' ? ' · ended' : ''}`,
-          have: !!have,
-          dim: state === 'done',
-          canInbox: false,
-          add: () => act.bringMeeting(e.id),
-        };
-      });
+      .sort((a, b) => a.start - b.start);
+    const clash = clashes(evs.filter((e) => !e.cancelled));
+    const rows: Row[] = evs.map((e) => {
+      const have = mine.get(e.id);
+      const minsAway = e.start - s.clock;
+      const state = minsAway > 0 ? 'upcoming' : minsAway + e.durationMin > 0 ? 'now' : 'done';
+      const from = have && have.start !== e.start ? have.start : undefined;
+      return {
+        id: e.id,
+        lead: <span className="dtime">{range(e)}</span>,
+        title: (
+          <>
+            {e.title}
+            {from != null && <span className="chip warn">moved from {fmt(from)}</span>}
+            {e.cancelled && <span className="chip info">cancelled</span>}
+          </>
+        ),
+        sub: '',
+        have: !!have,
+        dim: state === 'done' || e.cancelled,
+        clash: clash.has(e.id),
+        // in a meeting: the line runs through it, as far as it has got; between meetings: above the next one
+        now: state === 'now' ? (s.clock - e.start) / e.durationMin : undefined,
+        canInbox: false,
+        add: () => act.bringMeeting(e.id),
+      };
+    });
+    if (!rows.some((r) => typeof r.now === 'number')) {
+      const next = evs.findIndex((e) => e.start > s.clock);
+      if (next >= 0) rows[next].now = 'before';
+      else if (rows.length) rows[rows.length - 1].now = 'after';
+    }
+    return rows;
   }
   return (s.lists[`${kind}/${tab}`]?.entries ?? []).map((en) => rowOf(en, s));
 }
@@ -251,11 +267,18 @@ export function Drawer() {
           )
         )}
         {entries.map((en, i) => (
-          <div key={en.id} className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim')} onClick={() => act.setDrawerSel(i)} onDoubleClick={() => !en.have && en.add('next')}>
+          <div
+            key={en.id}
+            className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim', en.clash && 'clash', en.now != null && `now-${typeof en.now === 'number' ? 'in' : en.now}`)}
+            style={typeof en.now === 'number' ? ({ ['--now' as string]: `${Math.round(en.now * 100)}%` } as React.CSSProperties) : undefined}
+            title={en.clash ? 'Double booked: overlaps another meeting' : undefined}
+            onClick={() => act.setDrawerSel(i)}
+            onDoubleClick={() => !en.have && en.add('next')}
+          >
             {en.lead}
             <div className="dmain">
               <div className="dt">{en.title}</div>
-              <div className="ds">{en.sub}</div>
+              {en.sub && <div className="ds">{en.sub}</div>}
             </div>
             {en.have ? (
               <span className="dhave">✓ in yatai</span>

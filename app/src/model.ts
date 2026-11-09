@@ -59,10 +59,12 @@ export function prLinks(text: string): PrLink[] {
   const re = new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g');
   const out: PrLink[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) out.push({ key: `${m[1]}/${m[2]}#${m[3]}`, org: m[1], repo: m[2], num: m[3], url: m[0] });
+  while ((m = re.exec(text))) if (!notThePr(m[0])) out.push({ key: `${m[1]}/${m[2]}#${m[3]}`, org: m[1], repo: m[2], num: m[3], url: m[0] });
   return out;
 }
-export const prMatch = (url: string) => new RegExp('^' + prSrc()).exec(url);
+/** a link into a PR's conversation (a review comment, a review) points at a comment, not at the PR */
+const notThePr = (url: string) => /#(discussion_r|issuecomment-|pullrequestreview-)/.test(url);
+export const prMatch = (url: string) => (notThePr(url) ? null : new RegExp('^' + prSrc()).exec(url));
 export const prUrl = (org: string, repo: string, num: string) => `https://${prHost}/${org}/${repo}/pull/${num}`;
 /** text for places that cannot render a link: PR urls become repo#123 */
 export const plain = (text: string) => text.replace(new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g'), (_, _o, r, n) => `${r}#${n}`);
