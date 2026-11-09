@@ -62,65 +62,83 @@ export function Settings() {
         }}
       >
         <h3>Settings</h3>
-        <div className="lh">AI assistant (⌘/)</div>
-        {isTauri ? (
-          <label className="set-row">
-            <span>OpenAI API key</span>
-            <span className="set-key">
-              <input
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={st?.configured ? (st.source === 'env' ? 'set from the environment (.env)' : '•••••••• in the keychain') : 'sk-…'}
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && key.trim() && (e.preventDefault(), void saveKey(key))}
-              />
-              <button className="btn sm" disabled={busy || !key.trim()} onClick={() => saveKey(key)}>
-                Save
-              </button>
-              {st?.source === 'keychain' && (
-                <button className="btn sm" disabled={busy} onClick={() => saveKey('')}>
-                  Remove
+        <section className="set-sec">
+          <header>
+            <h4>AI assistant</h4>
+            <span className="set-hint">⌘/ · {st == null ? '…' : st.configured ? '✓ on' : 'no key: replies are mocked'}</span>
+          </header>
+          {isTauri ? (
+            <div className="set-row">
+              <span className="set-lbl">OpenAI API key<small>Kept in the OS keychain, never shown again.</small></span>
+              <span className="set-key">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={st?.configured ? (st.source === 'env' ? 'set from the environment (.env)' : '•••••••• in the keychain') : 'sk-…'}
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && key.trim() && (e.preventDefault(), void saveKey(key))}
+                />
+                <button className="btn sm" disabled={busy || !key.trim()} onClick={() => saveKey(key)}>
+                  Save
                 </button>
-              )}
-            </span>
-          </label>
-        ) : (
-          <p className="set-note">In the browser build the key comes from OPENAI_API_KEY in app/.env (added by the dev server).</p>
-        )}
-        <p className="set-note">{st == null ? '…' : st.configured ? '✓ The assistant is on.' : 'No key: the assistant gives mocked replies.'}</p>
-        <label className="set-row">
-          <span>Model</span>
-          <input value={cfg.model} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ model: e.target.value })} placeholder="gpt-4.1-mini" />
-        </label>
-        <label className="set-row">
-          <span>Reasoning effort</span>
-          <select value={cfg.effort} disabled={!isTauri} onChange={(e) => patch({ effort: e.target.value })}>
-            {EFFORTS.map((x) => (
-              <option key={x} value={x}>
-                {x || 'model default'}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="set-row">
-          <span>API base URL</span>
-          <input value={cfg.baseUrl} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
-        </label>
-        <div className="lh">Accounts</div>
+                {st?.source === 'keychain' && (
+                  <button className="btn sm" disabled={busy} onClick={() => saveKey('')}>
+                    Remove
+                  </button>
+                )}
+              </span>
+            </div>
+          ) : (
+            <p className="set-note">In the browser build the key comes from OPENAI_API_KEY in app/.env (added by the dev server).</p>
+          )}
+          <div className="set-row">
+            <span className="set-lbl">Model</span>
+            <input value={cfg.model} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ model: e.target.value })} placeholder="gpt-4.1-mini" />
+          </div>
+          <div className="set-row">
+            <span className="set-lbl">Reasoning effort</span>
+            <select value={cfg.effort} disabled={!isTauri} onChange={(e) => patch({ effort: e.target.value })}>
+              {EFFORTS.map((x) => (
+                <option key={x} value={x}>
+                  {x || 'model default'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="set-row">
+            <span className="set-lbl">API base URL</span>
+            <input value={cfg.baseUrl} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
+          </div>
+        </section>
         {PLUGINS.filter((p) => p.auth).map((p) => {
           const acc = s.accounts[p.id];
+          const state =
+            !isTauri
+              ? 'needs the desktop app'
+              : acc?.state === 'connected'
+                ? `✓ connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : ''}`
+                : acc?.state === 'expired'
+                  ? 'token rejected'
+                  : 'not connected';
           return (
-            <div key={p.id}>
+            <section className="set-sec" key={p.id}>
+              <header>
+                <h4>{p.name}</h4>
+                <span className="set-hint">{state}</span>
+              </header>
               {p.id === 'github' && (
-                <label className="set-row">
-                  <span>GitHub host</span>
+                <div className="set-row">
+                  <span className="set-lbl">GitHub host</span>
                   <input value={cfg.githubHost} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ githubHost: e.target.value })} placeholder="github.com (or ghe.example.com)" />
-                </label>
+                </div>
               )}
-              <label className="set-row">
-                <span>{p.auth!.field.label}</span>
+              <div className="set-row">
+                <span className="set-lbl">
+                  {p.auth!.field.label}
+                  <small>{acc?.state === 'expired' ? `${p.name} rejected it: paste a new one.` : p.auth!.field.help} Kept in the OS keychain.</small>
+                </span>
                 <span className="set-key">
                   <input
                     type="password"
@@ -141,18 +159,8 @@ export function Settings() {
                     </button>
                   )}
                 </span>
-              </label>
-              <p className="set-note">
-                {!isTauri
-                  ? 'Accounts need the desktop app.'
-                  : acc?.state === 'connected'
-                    ? `✓ Connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : ''}.`
-                    : acc?.state === 'expired'
-                      ? `${p.name} rejected it: paste a new one.`
-                      : `Not connected. ${p.auth!.field.help}`}{' '}
-                It stays in the OS keychain.
-              </p>
-            </div>
+              </div>
+            </section>
           );
         })}
         <div className="set-foot">

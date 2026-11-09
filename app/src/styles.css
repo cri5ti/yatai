@@ -426,12 +426,21 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .cal-day.hi { background: var(--accent); color: var(--on-accent); opacity: 1; font-weight: var(--fw-semi); }
 
 /* ---------- settings (⌘,) ---------- */
-.settings { width: min(520px, calc(100vw - 24px)); }
-.set-row { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-4) 12px; font-size: var(--fs-sm); color: var(--text-muted); }
-.set-row input, .set-row select { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 5px 8px; color: var(--text); min-width: 0; }
-.set-key { display: flex; gap: var(--sp-3); } .set-key input { flex: 1; }
-.set-note { margin: var(--sp-2) 12px; font-size: var(--fs-sm); color: var(--text-muted); }
-.set-foot { display: flex; justify-content: flex-end; margin-top: var(--sp-6); }
+.settings { width: min(760px, calc(100vw - 24px)); max-height: 88vh; padding: var(--sp-7) var(--sp-8, 28px); }
+.settings > h3 { font-size: var(--fs-lg); margin-bottom: var(--sp-5); }
+.set-sec { border: var(--bw) solid var(--border); border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-6); margin-bottom: var(--sp-5); }
+.set-sec > header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-5); padding-bottom: var(--sp-3); border-bottom: var(--bw) solid var(--border); }
+.set-sec h4 { margin: 0; font-size: var(--fs-md); }
+.set-hint { font-size: var(--fs-sm); color: var(--text-muted); }
+.set-row { display: grid; grid-template-columns: 200px 1fr; align-items: center; gap: var(--sp-5); padding: var(--sp-4) 0; font-size: var(--fs-md); }
+.set-row + .set-row { border-top: var(--bw) solid var(--border); }
+.set-lbl { display: flex; flex-direction: column; gap: 2px; color: var(--text); }
+.set-lbl small { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.35; }
+.set-row input, .set-row select { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 7px 10px; color: var(--text); min-width: 0; font-size: var(--fs-md); }
+.set-key { display: flex; gap: var(--sp-3); min-width: 0; } .set-key input { flex: 1; }
+.set-note { margin: var(--sp-4) 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.set-foot { display: flex; justify-content: flex-end; margin-top: var(--sp-5); }
+@media (max-width: 640px) { .set-row { grid-template-columns: 1fr; gap: var(--sp-2); } }
 .dempty .btn { margin-top: var(--sp-5); }
 
 /* ---------- the quick-capture window (its own OS window) ---------- */

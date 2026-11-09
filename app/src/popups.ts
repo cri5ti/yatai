@@ -27,7 +27,7 @@ export interface PopupSpec extends Placement {
 }
 
 export const VIEWS = {
-  settings: { open: (s) => s.settingsOpen, close: 'closeSettings', place: 'center', w: 520, h: 440 },
+  settings: { open: (s) => s.settingsOpen, close: 'closeSettings', place: 'center', w: 760, h: 720 },
   help: { open: (s) => s.help, close: 'toggleHelp', place: 'center', w: 640, h: 700, blurCloses: true },
   ai: { open: (s) => !!s.ai, close: 'closeAi', place: 'beside', align: 'bottom', w: 460, h: 560 },
   drawer: { open: (s) => !!s.drawer && effLayout(s) !== 'pill', close: 'closeDrawer', place: 'beside', align: 'bottom', w: 460, h: 480 },
