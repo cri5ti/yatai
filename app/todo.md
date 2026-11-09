@@ -39,6 +39,8 @@
 
 - [ ] Settings: one footer (fixed, not scrolling away): edits are held until Save (keys, tokens, model, backup schedule all together); Discard / Esc throws them away; Remove (key / token) and Back up now still act at once
 
+- [ ] Windows: dragging works: items / cards in Next and Organizer (HTML5 drag and drop, needed `dragDropEnabled: false`), and the window by its title bar
+
 ## Gaps in what's there
 
 - [ ] Popups: their size / position is not remembered (always placed beside the main window)

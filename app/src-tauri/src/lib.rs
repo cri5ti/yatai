@@ -84,6 +84,8 @@ async fn popup_open(app: AppHandle, view: String, x: f64, y: f64, w: f64, h: f64
     WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("popup.html".into()))
         .title("yatai")
         .decorations(false)
+        // WebView2 would swallow in-page drag and drop (items, cards) for its file-drop handler
+        .disable_drag_drop_handler()
         .shadow(true)
         .skip_taskbar(true)
         .visible(false)
