@@ -45,6 +45,9 @@
 - [ ] Next drag: drop on a row's top / bottom edge = before / after it, middle = into it (any item, anywhere but into itself); gaps between cards move a top row's whole card, or split a sub-item out; nothing stays see-through after a drop (Next, Organizer, Inbox → Organizer)
 - [ ] Bring in from the GitHub / DevOps drawer (⏎): lands under the item picked in Next (or the Organizer's selection), or right after it when that item is itself a PR / work item; with nothing picked, top level
 
+- [ ] Tray icon: purple diamond normally; a highlight anywhere → yellow tile with the purple diamond, back to purple once they are all seen; during a meeting (developer panel clock, or a real one) → blue tile with a white diamond; check it is readable in the macOS menu bar (light and dark) and the Windows tray
+- [ ] Next: the meeting in progress has a muted blue card with a blue bar; the Outlook drawer's row for it too
+- [ ] Drawers: `requests: N` at the right of the footer, rising as polls run; GitHub also shows the points left (hover: totals and reset time); with 20 PRs in Next it should stay around 60 requests an hour, plus a full fetch only when a PR changes
 - [ ] Right-click → Refresh on a PR / run / work item (and on several selected): "Refreshing…", then its state; works for items not in Next too
 - [ ] Outlook drawer, Today: time ranges on the left, no second line; red now-line through the meeting in progress (moves with the clock: try the developer panel's clock) or above the next meeting; past meetings faded; two overlapping meetings have an accent bar and time (Tomorrow / Next 5 days too)
 - [ ] PR details as sub-items: a PR with unresolved threads gets one sub-item per thread (`@who on file: text`, link on line 2); resolving one on GitHub checks it off within a minute; a failing check adds "Build failed: name — error" with the run link, checked off once it passes; merged → all checked. Real token: the error text is useful (annotations need Checks: read)
@@ -56,6 +59,7 @@
 
 ## Gaps in what's there
 
+- [ ] GitHub: back off on a rate limit (wait for `retry-after` / `resetAt` instead of retrying at the normal interval)
 - [ ] Popups: their size / position is not remembered (always placed beside the main window)
 - [ ] Popups on Windows / Linux: owned windows do not follow the main one when it moves; Wayland ignores window positions
 - [ ] Popups are square-cornered (rounded + see-through needs `macOSPrivateApi`)

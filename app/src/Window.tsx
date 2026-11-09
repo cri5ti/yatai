@@ -15,7 +15,8 @@ import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
 import { DevPanel } from './Controls';
 import { Help } from './Help';
-import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setOnTop, setVisible, startDrag, windowRect } from './platform';
+import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setOnTop, setTrayMode, setVisible, startDrag, windowRect } from './platform';
+import { trayMode } from './model';
 import type { Edge } from './platform';
 
 
@@ -58,6 +59,8 @@ function useOsWindow() {
     return () => (clearTimeout(t), off?.());
   }, []);
   useEffect(() => void setBadge(s.inbox.length), [s.inbox.length]);
+  const tray = trayMode(s);
+  useEffect(() => void setTrayMode(tray), [tray]);
 }
 
 /* ---------- the yatai window ---------- */

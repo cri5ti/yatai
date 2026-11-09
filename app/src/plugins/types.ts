@@ -35,6 +35,8 @@ export interface Snapshot {
   desc?: string; // the PR's description (live GitHub only), used once to fill in a bare pasted link
   /** things to act on inside it (a failing check, an unresolved review thread): kept as sub-items of the item, checked off once gone */
   details?: Detail[];
+  /** what the cheap poll saw when the details were last fetched: while it is the same, the details are not asked for again */
+  basis?: string;
 }
 
 /** one outstanding thing a source reports; `key` is stable while it is outstanding */
@@ -84,8 +86,8 @@ export class AuthError extends Error {}
 
 /** what an implementation (live or mock) provides; any subset */
 export interface Impl {
-  /** live state for the refs tracked in Next: one batched call */
-  fetch?(refs: string[]): Promise<Snapshot[]>;
+  /** live state for the refs tracked in Next: one batched call. `force`: the user asked (Refresh): fetch everything, details too */
+  fetch?(refs: string[], opts?: { force?: boolean }): Promise<Snapshot[]>;
   lists?: ListDef[];
   list?(id: string): Promise<Entry[]>;
   agenda?(day: string): Promise<AgendaEvent[]>;

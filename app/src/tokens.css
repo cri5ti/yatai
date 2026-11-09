@@ -68,6 +68,7 @@
   --border-strong: #c3c8d6;
   --hover: rgba(70, 80, 120, 0.08);
   --appt: #e3effb; /* Outlook-style appointment blue */
+  --outlook: #0078d4; --outlook-now: #cde3f6; /* a meeting in progress: a deeper, still muted tint of it */
   --text: #1b1f2a;
   --text-muted: #7a8194;
   --accent: #5b5bd6;
@@ -113,6 +114,7 @@
   --border-strong: #4a5066;
   --hover: rgba(255, 255, 255, 0.07);
   --appt: #1b2b42;
+  --outlook: #3a96dd; --outlook-now: #1d3a5c;
   --text: #e7e9f1;
   --text-muted: #8b92a8;
   --accent: #8b8bff;

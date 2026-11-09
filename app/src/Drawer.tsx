@@ -120,6 +120,19 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
   return (s.lists[`${kind}/${tab}`]?.entries ?? []).map((en) => rowOf(en, s));
 }
 
+/** a tiny "requests: 12" (in the last hour), and what is left of the quota when the source says */
+function ReqCount({ r }: { r?: State['reqs'][string] }) {
+  const n = r?.at.filter((t) => t > Date.now() - 3_600_000).length ?? 0;
+  const q = r?.quota;
+  const tip = `${n} request${n === 1 ? '' : 's'} in the last hour, ${r?.total ?? 0} since yatai started${q ? ` · ${q.left} of ${q.limit} GitHub points left, resets ${new Date(q.reset).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  return (
+    <span className={cx('dreq', q && q.left < q.limit * 0.1 && 'low')} title={tip}>
+      requests: {n}
+      {q ? ` · ${q.left.toLocaleString()} left` : ''}
+    </span>
+  );
+}
+
 /** a pop-up over the bottom of the window: browse a source, bring things in (⏎ → Next, I → Inbox) */
 export function Drawer() {
   const s = useS();
@@ -300,6 +313,7 @@ export function Drawer() {
       </div>
       <div className="dfoot">
         <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
+        <ReqCount r={s.reqs[d.kind]} />
       </div>
     </div>
   );

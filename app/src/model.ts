@@ -193,6 +193,15 @@ export const inLabel = (m: Pick<EffMeeting, 'minsAway' | 'dayOffset' | 'day'>) =
 
 export const allAgenda = (s: Pick<State, 'agenda'>): AgendaEvent[] => Object.values(s.agenda).flat();
 
+/** am I in a meeting right now? (one in Next, or anything on today's calendar) */
+export const inMeeting = (s: Pick<State, 'agenda' | 'meetings' | 'clock' | 'day'>) =>
+  meetingsFor(s).some((m) => m.state === 'now' && m.dayOffset === 0) ||
+  allAgenda(s).some((e) => !e.cancelled && (e.day ?? s.day) === s.day && e.start <= s.clock && s.clock < e.start + e.durationMin);
+
+/** the tray icon: changes to look at beat being in a meeting */
+export const trayMode = (s: Pick<State, 'agenda' | 'meetings' | 'clock' | 'day' | 'hl'>): 'normal' | 'attention' | 'meeting' =>
+  Object.keys(s.hl).length ? 'attention' : inMeeting(s) ? 'meeting' : 'normal';
+
 /** the meetings in Next; `movedTo` is where the calendar moved one (the tracker sets it when the agenda changes) */
 export function meetingsFor(s: Pick<State, 'meetings' | 'clock' | 'day'>): EffMeeting[] {
   return s.meetings

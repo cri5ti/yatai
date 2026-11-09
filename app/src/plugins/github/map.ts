@@ -72,7 +72,37 @@ export function snapshot(ref: string, name: string, title: string, f: Facts): Sn
   return { ref, name, title, view, alerts, details, rev: JSON.stringify([view.glyph, view.count, alerts.map((a) => a.key), title, details.map((d) => d.key + d.text)]) };
 }
 
-/** the GraphQL fields every PR query asks for */
+/**
+ * The cheap fields, asked for every PR on every poll (about 3 GraphQL "requests" per PR, i.e. ~0.03 points):
+ * enough for the state, the counts and to notice that something changed.
+ */
+export const PR_LIGHT = `fragment F on PullRequest {
+  number title body url state isDraft merged mergeable reviewDecision updatedAt
+  author { login }
+  repository { nameWithOwner }
+  reviewThreads(first: 100) { nodes { isResolved } }
+  commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 50) { nodes {
+    __typename
+    ... on CheckRun { name status conclusion }
+    ... on StatusContext { context state }
+  } } } } } }
+}`;
+
+/** what the light fields say; a different value means the PR changed and its details are worth fetching again */
+export function basisOf(p: GqlPr): string {
+  const roll = p.commits.nodes[0]?.commit.statusCheckRollup;
+  return JSON.stringify([
+    p.state, p.isDraft, p.merged, p.mergeable, p.reviewDecision, p.updatedAt,
+    p.reviewThreads.nodes.filter((t) => !t.isResolved).length,
+    p.commits.nodes[0]?.commit.oid, roll?.state,
+    (roll?.contexts.nodes ?? []).map((c) => (c ? `${c.name ?? c.context}:${c.status ?? ''}:${c.conclusion ?? c.state ?? ''}` : '')),
+  ]);
+}
+
+/**
+ * Everything, details included (thread comments, check annotations: ~1.5 points per PR). Only asked for a PR that is
+ * new, whose light fields changed, or that the user refreshed.
+ */
 export const PR_FIELDS = `fragment F on PullRequest {
   number title body url state isDraft merged mergeable reviewDecision updatedAt
   author { login }
@@ -182,5 +212,12 @@ export function cleanBody(b: string | undefined): string {
   const t = (b ?? '').replace(/\r/g, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
   return t.length > 1500 ? t.slice(0, 1500).replace(/\s+\S*$/, '') + ' …' : t;
 }
-export const toSnapshot = (p: GqlPr): Snapshot => ({ ...snapshot(refKey('github', prId(p)), shortName(p), p.title, factsOf(p)), desc: cleanBody(p.body) });
+/**
+ * `full`: fetched with PR_FIELDS, so it carries the details and the basis they were fetched at. A light snapshot (the
+ * drawer lists) has neither: no details means "not known", never "none outstanding".
+ */
+export const toSnapshot = (p: GqlPr, full = true): Snapshot => {
+  const sn = { ...snapshot(refKey('github', prId(p)), shortName(p), p.title, factsOf(p)), desc: cleanBody(p.body) };
+  return full ? { ...sn, basis: basisOf(p) } : { ...sn, details: undefined };
+};
 export const ago = (iso: string) => relTime(Date.parse(iso));

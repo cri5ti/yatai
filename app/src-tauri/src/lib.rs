@@ -180,20 +180,71 @@ fn open_capture(app: &AppHandle) {
     }
 }
 
-/// a small diamond, drawn rather than shipped (template image: macOS tints it for the menu bar)
-fn tray_image() -> Image<'static> {
+/// the tray icon, drawn rather than shipped:
+/// - "normal": the app's purple diamond (its gradient) on nothing
+/// - "attention": something changed (highlights): the purple diamond on a bright yellow tile
+/// - "meeting": you are in a meeting: a white diamond on an Outlook-blue tile
+fn tray_image(mode: &str) -> Image<'static> {
     const N: u32 = 36;
     let mut px = vec![0u8; (N * N * 4) as usize];
     let c = (N as f32 - 1.0) / 2.0;
+    let tile: Option<[f32; 3]> = match mode {
+        "attention" => Some([255.0, 214.0, 10.0]),
+        "meeting" => Some([0.0, 120.0, 212.0]),
+        _ => None,
+    };
+    // the diamond is smaller on a tile, so the tile shows around it
+    let half = if tile.is_some() { c - 8.0 } else { c - 3.0 };
     for y in 0..N {
         for x in 0..N {
-            let d = (x as f32 - c).abs() + (y as f32 - c).abs();
-            let a = ((c - 3.0 - d) * 1.5).clamp(0.0, 1.0); // anti-aliased edge
+            let (fx, fy) = (x as f32, y as f32);
+            let mut rgb = [0.0f32; 3];
+            let mut a = 0.0f32;
+            if let Some(t) = tile {
+                // a rounded square, anti-aliased (signed distance to a box with corner radius r)
+                let r = 8.0;
+                let qx = (fx - c).abs() - (c - 0.5 - r);
+                let qy = (fy - c).abs() - (c - 0.5 - r);
+                let out = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt() + qx.max(qy).min(0.0) - r;
+                a = (0.5 - out).clamp(0.0, 1.0);
+                rgb = t;
+            }
+            let d = (fx - c).abs() + (fy - c).abs();
+            let da = ((half - d) * 1.5).clamp(0.0, 1.0);
+            if da > 0.0 {
+                let col = match mode {
+                    "meeting" => [255.0, 255.0, 255.0],
+                    "attention" => [106.0, 85.0, 213.0],
+                    _ => {
+                        // the app icon's gradient, #4f5bd5 → #8a4fd5 along the diagonal
+                        let t = ((fx + fy) / (2.0 * (N as f32 - 1.0))).clamp(0.0, 1.0);
+                        [79.0 + (138.0 - 79.0) * t, 91.0 + (79.0 - 91.0) * t, 213.0]
+                    }
+                };
+                // diamond over the tile
+                let oa = da + a * (1.0 - da);
+                for k in 0..3 {
+                    rgb[k] = if oa > 0.0 { (col[k] * da + rgb[k] * a * (1.0 - da)) / oa } else { 0.0 };
+                }
+                a = oa;
+            }
             let i = ((y * N + x) * 4) as usize;
+            px[i] = rgb[0] as u8;
+            px[i + 1] = rgb[1] as u8;
+            px[i + 2] = rgb[2] as u8;
             px[i + 3] = (a * 255.0) as u8;
         }
     }
     Image::new_owned(px, N, N)
+}
+
+/// the tray icon's state ("normal" / "attention" / "meeting"), as the main window decides it
+#[tauri::command]
+fn set_tray_mode(tray: State<Tray>, mode: String) {
+    if let Some(t) = tray.0.lock().ok().and_then(|t| t.clone()) {
+        let _ = t.set_icon(Some(tray_image(&mode)));
+        let _ = t.set_icon_as_template(false);
+    }
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
@@ -205,8 +256,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let sep = || PredefinedMenuItem::separator(app);
     let menu = Menu::with_items(app, &[&show, &capture, &sep()?, &settings, &dev, &sep()?, &quit])?;
     TrayIconBuilder::with_id("yatai")
-        .icon(tray_image())
-        .icon_as_template(true)
+        .icon(tray_image("normal"))
+        .icon_as_template(false)
         .tooltip("yatai")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -291,6 +342,7 @@ pub fn run() {
             db_apply,
             db_path,
             set_badge,
+            set_tray_mode,
             show_capture,
             popup_open,
             popup_close,

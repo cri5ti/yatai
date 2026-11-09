@@ -261,16 +261,22 @@ export const pluginSecretStatus = (plugin: string): Promise<SecretStatus> =>
 export const pluginSecretSet = (plugin: string, host: string, token: string) => invoke<SecretStatus>('plugin_secret_set', { plugin, host, token });
 
 /** GET the url stored as the plugin's secret (never readable from the page) */
-export const pluginGetSecretUrl = (plugin: string) => invoke<HttpRes>('plugin_get_secret_url', { plugin });
+export const pluginGetSecretUrl = (plugin: string) => (requests.count(plugin), invoke<HttpRes>('plugin_get_secret_url', { plugin }));
+/** the tray icon: 'normal', 'attention' (changes to look at) or 'meeting' (in one now) */
+export const setTrayMode = (mode: 'normal' | 'attention' | 'meeting') => isTauri && invoke('set_tray_mode', { mode }).catch(() => {});
 
 export interface HttpRes {
   status: number;
   headers: Record<string, string>;
   body: string;
 }
+/** every request a plugin makes over the network, counted (the drawers show it); the tracker sets the counter */
+export const requests = { count: (_plugin: string) => {} };
+
 /** an https request made by Rust; `auth` adds the plugin's token (only to the host it was stored for) */
 export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean; scheme?: 'bearer' | 'basic' }): Promise<HttpRes> {
   if (!isTauri) throw new Error('This source needs the desktop app');
+  requests.count(plugin);
   return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth, scheme: req.scheme } });
 }
 

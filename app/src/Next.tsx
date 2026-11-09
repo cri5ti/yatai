@@ -397,7 +397,7 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
   return (
     <section
       ref={ref}
-      className={cx('card', card.kind, isLoose(card) && 'loose', card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', picked && !cardSel && 'is-multi', live && 'has-live', hlIds.length > 0 && 'hl', hcls, x.dragId === card.key && 'dragging')}
+      className={cx('card', card.kind, card.meeting?.state === 'now' && card.meeting.dayOffset === 0 && 'inprogress', isLoose(card) && 'loose', card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', picked && !cardSel && 'is-multi', live && 'has-live', hlIds.length > 0 && 'hl', hcls, x.dragId === card.key && 'dragging')}
       data-fc={card.key}
       data-sel={cardSel || undefined}
       onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}

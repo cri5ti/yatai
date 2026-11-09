@@ -8,7 +8,9 @@ import type { Node, State } from '../store';
 import { fmt, prLinks, refsOf, setPrHost } from '../model';
 import { PLUGINS, implFor, pluginById } from './registry';
 import { AuthError, pluginOf } from './types';
-import type { AgendaEvent, Alert, Plugin, Snapshot, Tone } from './types';
+import type { AgendaEvent, Alert, Impl, Plugin, Snapshot, Tone } from './types';
+import { requests } from '../platform';
+import { countRequest } from './requests';
 
 export interface Sink {
   toast(text: string, tone: Tone): void;
@@ -181,8 +183,9 @@ const oneError = (id: string, e: unknown) => {
 
 async function runPlugin(p: Plugin) {
   const s = get();
-  const impl = implFor(p, s);
-  if (!impl) return;
+  const base = implFor(p, s);
+  if (!base) return;
+  const impl = counted(p, base);
   const refs = trackedRefs(s).get(p.id) ?? [];
   const drawer = s.drawer?.kind === p.id ? s.drawer : null;
   try {
@@ -219,6 +222,17 @@ async function runPlugin(p: Plugin) {
   }
 }
 
+/** the mocks make no requests: count each of their calls as one, so the numbers mean something in the demo too */
+const counted = (p: Plugin, impl: Impl): Impl =>
+  impl !== p.mock
+    ? impl
+    : {
+        ...impl,
+        fetch: impl.fetch && ((refs, o) => (countRequest(p.id), impl.fetch!(refs, o))),
+        list: impl.list && ((id) => (countRequest(p.id), impl.list!(id))),
+        agenda: impl.agenda && ((d) => (countRequest(p.id), impl.agenda!(d))),
+      };
+
 /** look at these refs right now, whether or not their items are in Next (the item menu's Refresh) */
 export async function refreshRefs(refs: string[]): Promise<Snapshot[]> {
   const by = new Map<string, string[]>();
@@ -227,10 +241,11 @@ export async function refreshRefs(refs: string[]): Promise<Snapshot[]> {
   await Promise.all(
     [...by].map(async ([id, rs]) => {
       const p = pluginById(id);
-      const impl = p && implFor(p, get());
-      if (!impl?.fetch) return;
+      const base = p && implFor(p, get());
+      if (!p || !base?.fetch) return;
+      const impl = counted(p, base);
       try {
-        const snaps = await impl.fetch(rs);
+        const snaps = await impl.fetch!(rs, { force: true });
         applySnapshots(snaps);
         out.push(...snaps);
       } catch (e) {
@@ -305,6 +320,7 @@ export function followHost() {
 /** start the loop in the main window */
 export function startTracker(s: Sink) {
   sink = s;
+  requests.count = countRequest;
   followHost();
   void refreshAccounts().then(() => cycle());
   setInterval(() => void cycle(undefined, false), 10_000);

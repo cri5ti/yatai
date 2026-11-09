@@ -5,6 +5,11 @@ export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
 /** what the (mocked) GitHub connector reports for a pull request */
 export type PrStatus = 'draft' | 'review' | 'building' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export interface ReqCount {
+  at: number[]; // the last hour's
+  total: number;
+  quota?: { left: number; limit: number; reset: number };
+}
 /** an Azure DevOps pipeline run (build) */
 export type BuildStatus = 'queued' | 'building' | 'failed' | 'done' | 'cancelled';
 /** the id of the plugin whose drawer is open ('outlook', 'github', 'devops', …) */
@@ -213,6 +218,8 @@ export interface State extends Doc {
   prs: Record<string, PrStatus>; // the MOCK GitHub's truth ('org/repo#123' -> status), set from the developer panel
   prc: Record<string, number>; // …and its unresolved review comments
   runs: Record<string, BuildStatus>; // the MOCK DevOps's truth (ref -> status), set from the developer panel
+  /** plugin id -> requests made (times in the last hour, total since start) and, where the source says, its quota */
+  reqs: Record<string, ReqCount>;
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
@@ -380,6 +387,7 @@ export function initialState(): State {
     prs: {},
     prc: {},
     runs: {},
+    reqs: {},
     snaps: {},
     agenda: {},
     lists: {},
