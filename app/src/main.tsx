@@ -4,7 +4,7 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { acceptAi, capture, openMdEdit, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
@@ -105,6 +105,8 @@ function App() {
         if (k === ',') return (e.preventDefault(), openSettings());
         if (e.shiftKey && k.toLowerCase() === 'd') return (e.preventDefault(), toggleDev());
         if (k === '/') return (e.preventDefault(), get().ai ? closeAi() : openAi(contextId()));
+        if (k.toLowerCase() === 'e' && !e.shiftKey && !isEditable(e.target)) return (e.preventDefault(), openMdEdit());
+        if (k.toLowerCase() === 'e' && e.shiftKey && !isEditable(e.target)) return (e.preventDefault(), openMdEdit(true));
         if (isEditable(e.target)) return; // let text fields keep their own undo
         if (k.toLowerCase() === 'z') return (e.preventDefault(), e.shiftKey ? redo() : undo());
         if (k.toLowerCase() === 'y') return (e.preventDefault(), redo());

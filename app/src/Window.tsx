@@ -12,6 +12,7 @@ import { DENSITIES, SCALES } from './store';
 import { Drawer } from './Drawer';
 import { GhIcon } from './Pr';
 import { Settings } from './Settings';
+import { MdEditor } from './MdEditorLazy';
 import { DevPanel } from './Controls';
 import { Help } from './Help';
 import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setVisible, startDrag, windowRect } from './platform';
@@ -228,6 +229,7 @@ export function Shell() {
           <AiPop />
           <Help />
           <Settings />
+          <MdEditor />
           {s.dev && <DevPanel />}
         </>
       )}

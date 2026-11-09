@@ -32,6 +32,7 @@ src/              UI (from poc/src) + platform.ts (Tauri vs browser), persist.ts
                   popups.ts / popup.tsx / act.ts: popup windows (add one: a line in VIEWS + its component in popup.tsx)
 src-tauri/src/    lib.rs  shell: windows, tray, global shortcuts, quit-after-flush
                   db.rs   schema + migrations (PRAGMA user_version), whitelisted row writes
+                  backup.rs  daily / frequent snapshots of the db (Settings → Database)
                   ai.rs   keychain + the OpenAI request
 ```
 

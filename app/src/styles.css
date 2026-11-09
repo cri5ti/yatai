@@ -472,3 +472,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .popup-body .controls { position: fixed; inset: 0; width: auto; border-left: 0; box-shadow: none; animation: none; }
 /* the headers move the window */
 .popup-body .ai-head, .popup-body .dhead, .popup-body .dev-head, .popup-body .help > h3 { cursor: grab; }
+
+/* ⌘E: edit as markdown */
+.help.mdedit { width: min(760px, calc(100vw - 24px)); height: min(640px, 84vh); max-height: none; display: flex; flex-direction: column; gap: var(--sp-3); overflow: hidden; }
+.help.mdedit > h3 { margin: 0; } .help.mdedit > h3 small { margin-left: var(--sp-3); font-weight: normal; color: var(--text-muted); font-size: var(--fs-sm); }
+.md-host { flex: 1; min-height: 0; border: var(--bw) solid var(--border); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+.md-host .cm-editor { height: 100%; }
+.md-hint { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; } .md-hint code { font-family: var(--font-mono); }
+.md-foot { display: flex; align-items: center; gap: var(--sp-3); } .md-foot .btn { padding: 5px 12px; }
+.md-stat { flex: 1; font-size: var(--fs-sm); color: var(--text-muted); } .md-stat.warn { color: var(--bad); }
+.md-foot kbd { opacity: .7; font-family: inherit; margin-left: 4px; }
+.popup-body .help.mdedit { overflow: hidden; }

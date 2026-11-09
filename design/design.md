@@ -80,7 +80,7 @@ AI is always a suggestion, never a silent change: proposals are shown in place a
 
 - **Stack:** Tauri 2 + Vite + React + TypeScript, Bun as package manager. Nearly all logic is TypeScript; Rust is for the shell and for anything that holds a secret.
 - **State:** one immutable store; every data change goes through `commit` (undo/redo). The main window owns the state; popup windows get a copy and send actions back by name.
-- **Persistence:** SQLite; only changed rows are written, shortly after a change, and flushed on hide / quit. UI preferences are one JSON value. The browser build (used for development and headless checks) uses localStorage.
+- **Persistence:** SQLite; only changed rows are written, shortly after a change, and flushed on hide / quit. UI preferences are one JSON value. Rust keeps snapshots of the file (`VACUUM INTO`, in `backups/` beside it): one per day and one every N minutes if the document changed, each kind with its own keep-count, set in Settings → Database. The browser build (used for development and headless checks) uses localStorage.
 - **Secrets:** tokens and API keys live in the OS keychain and are attached to requests in Rust; the page never reads them back.
 - **Polling:** a loop in the main window asks each plugin about what is in Next (see [plugins.md](plugins.md)); there is no push channel to a desktop app.
 

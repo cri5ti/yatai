@@ -194,6 +194,7 @@ export interface State extends Doc {
   dev: boolean; // developer panel open
   settings: Settings;
   settingsOpen: boolean;
+  mdEdit: { ids: string[] } | null; // the markdown editor (⌘E) is open on these consecutive sibling items
   aiKey: boolean; // an OpenAI key is configured (asked at startup and after Settings changes it; not saved)
   layout: Layout;
   prevLayout: Layout;
@@ -358,6 +359,7 @@ export function initialState(): State {
     dev: false,
     settings: { ...DEFAULT_SETTINGS },
     settingsOpen: false,
+    mdEdit: null,
     aiKey: false,
     layout: 'dock',
     prevLayout: 'dock',
@@ -405,7 +407,7 @@ export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'or
 /** state that is not saved: it starts fresh every launch */
 export const TRANSIENT = {
   drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, proposal: null, help: false, edit: null, ins: null,
-  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false, lists: {}, accounts: {},
+  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false, mdEdit: null, lists: {}, accounts: {},
 } satisfies Partial<State>;
 export { minutesNow, today };
 

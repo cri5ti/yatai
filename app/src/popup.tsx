@@ -13,6 +13,7 @@ import { emitTo, listen, openLinksWithModifier, startDrag } from './platform';
 import { VIEWS, isView, viewOfLabel, wanted } from './popups';
 import type { View } from './popups';
 import { Settings } from './Settings';
+import { MdEditor } from './MdEditorLazy';
 import { Help } from './Help';
 import { AiPop } from './AiPop';
 import { Drawer } from './Drawer';
@@ -25,7 +26,7 @@ import { DevPanel } from './Controls';
 const win = getCurrentWindow();
 const view = viewOfLabel(win.label);
 
-const COMPONENTS: Record<View, ComponentType> = { settings: Settings, help: Help, ai: AiPop, drawer: Drawer, dev: DevPanel };
+const COMPONENTS: Record<View, ComponentType> = { settings: Settings, edit: MdEditor, help: Help, ai: AiPop, drawer: Drawer, dev: DevPanel };
 
 const closeMe = () => void emitTo('main', 'yatai://popup-closed', view);
 const focusMain = () => void TauriWindow.getByLabel('main').then((m) => m?.setFocus());

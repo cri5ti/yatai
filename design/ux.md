@@ -84,10 +84,18 @@ Enter adds below, ⇧Enter above (inline editor, chaining), F2 edits, multi-line
     - [ ] Write the spec
       extra title lines are indented
       - [x] A finished sub-item      ([-] = dropped)
+    - [ ] Estimated and dated @est:1h30m @due:2026-11-12
 
 - **Next / Organizer:** pasted below the selected item as siblings (on a card header: into that card). In Next they are also put in Next. One undo removes the whole paste.
 - **Inbox:** one entry per top-level item; its sub-items travel as a bullet list inside the entry.
 - Plain lines and `*` / `+` / `1.` bullets paste too (one item per line).
+- **Metadata** rides at the end of the first line: `@est:` (45m, 1h, 1h30m, 1.5h) and `@due:` (yyyy-mm-dd). #tags are plain text in the title.
+
+## 6b. Edit as markdown (⌘E)
+
+⌘E opens the selected items (consecutive siblings, with their sub-items; nothing selected = everything) as that same markdown in a real editor (CodeMirror) in its own window; ⌘⇧E always takes everything. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
+
+Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
 
 ## 7. Top-level items have no group
 

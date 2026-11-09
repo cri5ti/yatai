@@ -29,6 +29,11 @@
 - [ ] Dark mode carries over to the capture window
 - [ ] Developer panel: demo connectors, Load demo data, Start empty, simulated clock → Real time
 
+- [ ] Settings → Database: location shown, "Show" opens the data folder; daily / frequent snapshots appear in the list after "Back up now"; changing a keep-count trims old files at once; a frequent snapshot appears ~15 min after an edit (not after only selecting rows)
+- [ ] ⌘E in the Organizer / Next: editor opens in its own window with the selection (or everything) as markdown; ⌘⇧E = everything; ⌘⏎ applies, Esc (twice when edited) cancels; light / dark follow the theme; Tab / ⇧Tab indent; Enter continues the list
+- [ ] ⌘E apply: rename one line, change `@est:` / `@due:`, tick `[x]`, add and delete lines, move a block: items that were not touched keep their Next placement, timers and open / closed state; one ⌘Z undoes it all
+- [ ] ⌘C of items now includes `@est:` / `@due:`; pasting them back restores both
+
 ## Gaps in what's there
 
 - [ ] Popups: their size / position is not remembered (always placed beside the main window)
@@ -40,7 +45,9 @@
 - [ ] Dock → large for the Organizer has lost the POC's animation (animate the window size, or accept it)
 - [ ] Undo history is memory-only and is cleared at the day rollover
 - [ ] Done items stay in Next forever: decide what a new day does with them (archive? hide after N days?)
-- [ ] "Start empty" / "Load demo data" can't be undone: confirm first, or back up the db
+- [ ] "Start empty" / "Load demo data" can't be undone: confirm first, or take a snapshot first (backups exist now: `backup_now`)
+- [ ] Restore a backup from Settings (today: quit, copy the file over yatai.db)
+- [ ] Markdown editor: tags are only text in the title (no tag field on items yet); `@today` / recurrence are not in the format
 - [ ] Migrate POC data: export from the POC's localStorage → import into the app (maybe a markdown paste is enough)
 - [ ] Windows: never run; check frameless resize edges, tray, ⌥ shortcuts, WebView2 differences
 - [ ] Linux: tray needs libappindicator; untested

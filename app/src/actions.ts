@@ -1,4 +1,5 @@
 import { countItems } from './clip';
+import { planEdit, scopeRoots } from './mdedit';
 import type { ClipItem } from './clip';
 import { DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
 import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
@@ -1143,6 +1144,39 @@ export const closeSettings = () => {
   focusArea();
 };
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
+/* ---------- edit as markdown (⌘E, see mdedit.ts) ---------- */
+/** open the editor on the selected items (consecutive siblings, with their sub-items), or on everything */
+export function openMdEdit(whole = false) {
+  const s = get();
+  if (s.tab === 'inbox') return;
+  const picked = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.nsel.row ? [s.nsel.row] : [];
+  const roots = scopeRoots(s.nodes, whole ? [] : picked);
+  if (!roots) return toast('Select consecutive sibling items (or nothing, for everything) to edit as text', 'warn');
+  set(() => ({ mdEdit: { ids: roots }, hidden: false, menu: null }));
+}
+export const closeMdEdit = () => {
+  set(() => ({ mdEdit: null }));
+  focusArea();
+};
+/** replace the text of these items by `text`: only what differs is touched, as one undo step */
+export function applyMarkdown(roots: string[], text: string) {
+  const s = get();
+  const plan = planEdit(s.nodes, roots, text, (id) => isDone(s.nodes, id));
+  if (plan.same) {
+    toast('No changes');
+    return closeMdEdit();
+  }
+  commit('Edit as markdown', (st) => {
+    let nodes = plan.nodes;
+    let current = st.current;
+    if (current && plan.removedIds.includes(current.id)) current = null;
+    else if (current && plan.restated.includes(current.id)) (nodes = stopCurrent(nodes, current, Date.now()), (current = null));
+    return { nodes, current, mdEdit: null, multi: [], anchor: null };
+  });
+  const { added, removed, changed, moved } = plan.stats;
+  toast(['Applied', [added && `${added} added`, changed && `${changed} changed`, moved && `${moved} moved`, removed && `${removed} removed`].filter(Boolean).join(', ')].filter(Boolean).join(': '), 'good');
+  focusArea();
+}
 export const patchUi = (p: Partial<State>) => set(() => p);
 export const refreshAi = () => refreshAiKey();
 /** Settings → Accounts: keep the token in the keychain, check it, start tracking */
@@ -1203,7 +1237,7 @@ export function pasteItems(tree: ClipItem[], at: { parentId: string | null; afte
   const tops: Node[] = [];
   const build = (items: ClipItem[], parentId: string | null, top: boolean) =>
     items.forEach((it) => {
-      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo' });
+      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo', ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}) });
       made.push(n);
       if (top) tops.push(n);
       build(it.kids, n.id, false);
