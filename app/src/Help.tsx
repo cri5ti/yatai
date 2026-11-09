@@ -9,7 +9,7 @@ const HELP: [string, [string, string][]][] = [
       ['⌥Y', 'Show / hide yatai — from any app (or click the tray icon)'],
       ['⌘1 ⌘2 ⌘3', 'Next · Inbox · Organizer'],
       ['⌘,', 'Settings (AI, accounts, database backups)'],
-      ['⌘E  ·  ⌘⇧E', 'Edit the selected items (with their sub-items) · everything, as markdown text — only what you change is changed'],
+      ['⌘E  ·  ⌘⇧E', 'Edit everything in view (Next: its items; Organizer: the tree) · only the selected items, as markdown text — only what you change is changed'],
       ['↑ ↓ ← →', 'Navigate everything'],
       ['⏎  ·  ⇧⏎', 'Add a new item below · above the selection (⏎ again keeps adding; ⏎ or Esc on a blank field stops)'],
       ['⌘↑ ⌘↓', 'Reorder (animated) — or drag'],

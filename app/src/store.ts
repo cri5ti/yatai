@@ -195,7 +195,7 @@ export interface State extends Doc {
   settings: Settings;
   settingsOpen: boolean;
   onTop: boolean; // keep the window above other windows
-  mdEdit: { ids: string[] } | null; // the markdown editor (⌘E) is open on these consecutive sibling items
+  mdEdit: { ids: string[]; today: boolean } | null; // the markdown editor (⌘E) is open on these items (today: new lines go to Next)
   aiKey: boolean; // an OpenAI key is configured (asked at startup and after Settings changes it; not saved)
   layout: Layout;
   prevLayout: Layout;

@@ -93,9 +93,9 @@ Enter adds below, ⇧Enter above (inline editor, chaining), F2 edits, multi-line
 
 ## 6b. Edit as markdown (⌘E)
 
-⌘E opens the selected items (consecutive siblings, with their sub-items; nothing selected = everything) as that same markdown in a real editor (CodeMirror) in its own window; ⌘⇧E always takes everything. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
+⌘E opens everything the view shows as that same markdown in a real editor (CodeMirror) in its own window: in Next its items with the tasks above them for context, in the Organizer the whole tree. ⌘⇧E takes only the selected items with their sub-items. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
 
-Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
+Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them (with whatever hangs below them, seen or not). Items outside the text keep their place among their siblings. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
 
 ## 7. Top-level items have no group
 

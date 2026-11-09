@@ -9,7 +9,7 @@
  *  2. between those anchors, an edited line is the old item it most resembles (same words), or the only one there;
  *  3. what is left matches by identical title anywhere, so an item moved to another place keeps its identity.
  */
-import { parseMarkdown, toMarkdown, treeOf } from './clip';
+import { parseMarkdown, toMarkdown } from './clip';
 import type { ClipItem } from './clip';
 import type { Node, Status } from './store';
 import { uid } from './store';
@@ -34,39 +34,60 @@ const markOf = (it: ClipItem) => (it.done ? 'x' : it.dropped ? '-' : ' ');
 const lineKey = (e: Entry) => `${e.depth}|${markOf(e.item)}|${e.item.title}|${e.item.est ?? ''}|${e.item.due ?? ''}`;
 const bodyKey = (e: Entry) => lineKey(e).slice(String(e.depth).length);
 
-/** the roots a ⌘E on `ids` edits: the selected items when they are consecutive siblings, none selected = the whole tree; null = not editable together */
-export function scopeRoots(nodes: Node[], ids: string[]): string[] | null {
-  const sel = new Set(ids);
+/** which items a ⌘E edits: what the view shows (Next: its rows and the tasks above them; Organizer: the whole tree), or just the selection with its sub-items */
+export function scopeFor(nodes: Node[], view: 'next' | 'tree' | 'selection', picked: string[] = []): string[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const covered = (n: Node) => {
-    for (let p = n.parentId ? byId.get(n.parentId) : undefined; p; p = p.parentId ? byId.get(p.parentId) : undefined) if (sel.has(p.id)) return true;
-    return false;
+  const up = (n: Node, f: (x: Node) => void) => {
+    for (let p = n.parentId ? byId.get(n.parentId) : undefined; p; p = p.parentId ? byId.get(p.parentId) : undefined) f(p);
   };
-  const tops = nodes.filter((n) => sel.has(n.id) && !covered(n));
-  if (!tops.length) return nodes.filter((n) => n.parentId === null).map((n) => n.id);
-  const parent = tops[0].parentId;
-  if (tops.some((n) => n.parentId !== parent)) return null;
-  const sibs = nodes.filter((n) => n.parentId === parent);
-  const first = sibs.findIndex((n) => n.id === tops[0].id);
-  return tops.every((n, i) => sibs[first + i]?.id === n.id) ? tops.map((n) => n.id) : null;
+  const out = new Set<string>();
+  if (view === 'next') {
+    for (const n of nodes) if (n.today) (out.add(n.id), up(n, (p) => out.add(p.id)));
+  } else if (view === 'tree') {
+    // everything under a top-level item (items hanging off a meeting belong to Next, not to the tree)
+    for (const n of nodes) {
+      let top = n;
+      up(n, (p) => (top = p));
+      if (top.parentId === null) out.add(n.id);
+    }
+  } else {
+    const sel = new Set(picked);
+    for (const n of nodes) {
+      if (sel.has(n.id)) out.add(n.id);
+      else up(n, (p) => sel.has(p.id) && out.add(n.id));
+    }
+  }
+  return nodes.filter((n) => out.has(n.id)).map((n) => n.id);
 }
 
-/** the text for these roots */
-export function exportScope(nodes: Node[], roots: string[], isDone: (id: string) => boolean): string {
-  return toMarkdown(treeOf(nodes, roots, isDone));
-}
-
-function oldEntries(nodes: Node[], roots: string[], isDone: (id: string) => boolean): Entry[] {
+/** the scope as a forest: its items, children in document order (an item whose parent is not in the scope is a root) */
+function forest(nodes: Node[], scope: Set<string>) {
   const kids = new Map<string | null, Node[]>();
-  for (const n of nodes) kids.set(n.parentId, [...(kids.get(n.parentId) ?? []), n]);
+  const roots: Node[] = [];
+  for (const n of nodes) {
+    if (!scope.has(n.id)) continue;
+    if (n.parentId && scope.has(n.parentId)) kids.set(n.parentId, [...(kids.get(n.parentId) ?? []), n]);
+    else roots.push(n);
+  }
+  return { roots, kids };
+}
+
+/** the text for these items */
+export function exportScope(nodes: Node[], scope: string[], isDone: (id: string) => boolean): string {
+  const { roots, kids } = forest(nodes, new Set(scope));
+  const build = (n: Node): ClipItem => ({ title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, kids: (kids.get(n.id) ?? []).map(build) });
+  return toMarkdown(roots.map(build));
+}
+
+function oldEntries(nodes: Node[], scope: Set<string>, isDone: (id: string) => boolean): Entry[] {
+  const { roots, kids } = forest(nodes, scope);
   const out: Entry[] = [];
   const walk = (n: Node, depth: number, parent: number) => {
     const item: ClipItem = { title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, kids: [] };
     const at = out.push({ depth, parent, item, node: n }) - 1;
     for (const c of kids.get(n.id) ?? []) walk(c, depth + 1, at);
   };
-  const want = new Set(roots);
-  nodes.filter((n) => want.has(n.id)).forEach((n) => walk(n, 0, -1));
+  roots.forEach((n) => walk(n, 0, -1));
   return out;
 }
 
@@ -149,7 +170,7 @@ function match(olds: Entry[], news: Entry[]): number[] {
 
 export interface EditStats {
   added: number;
-  removed: number;
+  removed: number; // deleted items, sub-items that were not in the text included
   changed: number; // text, estimate, due date or done / dropped changed
   moved: number; // under another parent, or at another depth
 }
@@ -163,26 +184,30 @@ export interface EditPlan {
 }
 
 /**
- * What the items become when the text of `roots` (see scopeRoots) is replaced by `text`.
- * `parentId` is where the roots hang (null = top level).
+ * What the items become when the text of `scope` (see scopeFor) is replaced by `text`. Everything outside the scope stays
+ * as it is (an item deleted from the text takes its sub-items with it, seen or not). `today`: new items are put in Next.
  */
-export function planEdit(nodes: Node[], roots: string[], text: string, isDone: (id: string) => boolean, mint: () => string = uid, now = Date.now()): EditPlan {
-  const parentId = nodes.find((n) => n.id === roots[0])?.parentId ?? null;
-  const olds = oldEntries(nodes, roots, isDone);
+export function planEdit(nodes: Node[], scope: string[], text: string, isDone: (id: string) => boolean, today = false, mint: () => string = uid, now = Date.now()): EditPlan {
+  const inScope = new Set(scope);
+  const olds = oldEntries(nodes, inScope, isDone);
   const news = flat(parseMarkdown(text));
   const to = match(olds, news);
   const stats: EditStats = { added: 0, removed: 0, changed: 0, moved: 0 };
   const restated: string[] = [];
 
+  // where a top-level line goes: the parent it had if it was already a top-level one, else the parent all of them share
+  const rootParents = new Set(olds.filter((e) => e.parent < 0).map((e) => e.node!.parentId));
+  const common = rootParents.size === 1 ? [...rootParents][0] : null;
+
   const ids = news.map((_, i) => (to[i] >= 0 ? olds[to[i]].node!.id : mint()));
   const made = news.map((e, i): Node => {
-    const parent = e.parent >= 0 ? ids[e.parent] : parentId;
     const old = to[i] >= 0 ? olds[to[i]] : null;
+    const parent = e.parent >= 0 ? ids[e.parent] : old && old.parent < 0 ? old.node!.parentId : common;
     const it = e.item;
     if (!old) {
       stats.added++;
       const status: Status = it.done ? 'done' : it.dropped ? 'dropped' : 'todo';
-      return { id: ids[i], parentId: parent, title: it.title, status, today: false, open: true, created: now, modified: now, ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}) };
+      return { id: ids[i], parentId: parent, title: it.title, status, today, open: true, created: now, modified: now, ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}) };
     }
     const n = old.node!;
     const textSame = bodyKey(e) === bodyKey(old);
@@ -206,17 +231,68 @@ export function planEdit(nodes: Node[], roots: string[], text: string, isDone: (
   const opened = new Set(news.flatMap((e, i) => (to[i] < 0 && e.parent >= 0 ? [ids[e.parent]] : [])));
   const out = made.map((n) => (opened.has(n.id) && !n.open ? { ...n, open: true } : n));
 
+  // lines that are gone delete their items, and whatever hangs below them outside the text
   const kept = new Set(ids);
-  const removedIds = olds.filter((e) => !kept.has(e.node!.id)).map((e) => e.node!.id);
-  stats.removed = removedIds.length;
+  const kill = new Set(olds.filter((e) => !kept.has(e.node!.id)).map((e) => e.node!.id));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const n of nodes) if (!kill.has(n.id) && !kept.has(n.id) && n.parentId && kill.has(n.parentId)) (kill.add(n.id), (grew = true));
+  }
+  stats.removed = kill.size;
 
-  // put the result where the first old item was, the rest of the document untouched
-  const scope = new Set(olds.map((e) => e.node!.id));
-  const rest = nodes.filter((n) => !scope.has(n.id));
-  const first = nodes.findIndex((n) => scope.has(n.id));
-  const at = first < 0 ? rest.length : nodes.slice(0, first).filter((n) => !scope.has(n.id)).length;
-  rest.splice(at, 0, ...out);
+  // every untouched item stays where it is; the others go right after the line above them (same parent), or before the one below
+  const byNew = new Map(out.map((n) => [n.id, n]));
+  let arr = nodes.filter((n) => !kill.has(n.id)).map((n) => byNew.get(n.id) ?? n);
+  const oldPrev = new Map<string, string | null>(); // previous in-scope sibling before the edit
+  const lastOf = new Map<string | null, string>();
+  for (const n of nodes) {
+    if (!inScope.has(n.id)) continue;
+    oldPrev.set(n.id, lastOf.get(n.parentId) ?? null);
+    lastOf.set(n.parentId, n.id);
+  }
+  const oldParent = new Map(nodes.map((n) => [n.id, n.parentId]));
+  const sibling = (i: number, dir: 1 | -1) => {
+    for (let j = i + dir; j >= 0 && j < news.length; j += dir) if (news[j].parent === news[i].parent && news[j].depth === news[i].depth && (news[i].parent >= 0 || byNew.get(ids[j])!.parentId === byNew.get(ids[i])!.parentId)) return j;
+    return -1;
+  };
+  const hasOld = new Set(nodes.map((n) => n.id));
+  const block = (a: Node[], id: string) => {
+    const set = new Set([id]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const n of a) if (n.parentId && set.has(n.parentId) && !set.has(n.id)) (set.add(n.id), (grew = true));
+    }
+    return set;
+  };
+  const endOf = (a: Node[], id: string) => {
+    const b = block(a, id);
+    let k = -1;
+    a.forEach((n, i) => b.has(n.id) && (k = i));
+    return k;
+  };
+  const stays: boolean[] = [];
+  news.forEach((_, i) => {
+    const id = ids[i];
+    const node = byNew.get(id)!;
+    const pj = sibling(i, -1);
+    const nj = sibling(i, 1);
+    const p = pj >= 0 ? ids[pj] : null;
+    stays[i] = hasOld.has(id) && oldParent.get(id) === node.parentId && (oldPrev.get(id) ?? null) === p && (pj < 0 || stays[pj]);
+    if (stays[i]) return;
+    let moving: Node[] = [node];
+    if (hasOld.has(id)) {
+      const b = block(arr, id);
+      moving = arr.filter((n) => b.has(n.id));
+      arr = arr.filter((n) => !b.has(n.id));
+    }
+    let at: number;
+    if (p) at = endOf(arr, p) + 1;
+    else if (nj >= 0 && arr.some((n) => n.id === ids[nj])) at = arr.findIndex((n) => n.id === ids[nj]);
+    else if (node.parentId && arr.some((n) => n.id === node.parentId)) at = endOf(arr, node.parentId) + 1;
+    else at = arr.length;
+    arr.splice(at, 0, ...moving);
+  });
 
-  const same = rest.length === nodes.length && rest.every((n, i) => n === nodes[i]);
-  return { nodes: rest, stats, same, restated, removedIds };
+  const same = arr.length === nodes.length && arr.every((n, i) => n === nodes[i]);
+  return { nodes: arr, stats, same, restated, removedIds: [...kill] };
 }

@@ -34,10 +34,10 @@ const colours = HighlightStyle.define([
 /** ⌘E: the items as markdown text (the copy / paste format) in a real editor; Apply changes only what differs */
 export function MdEditor() {
   const s = useS();
-  return s.mdEdit ? <Editor roots={s.mdEdit.ids} /> : null;
+  return s.mdEdit ? <Editor roots={s.mdEdit.ids} today={s.mdEdit.today} /> : null;
 }
 
-function Editor({ roots }: { roots: string[] }) {
+function Editor({ roots, today }: { roots: string[]; today: boolean }) {
   const s = useS();
   const initial = useMemo(() => exportScope(s.nodes, roots, (id) => isDone(s.nodes, id)), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [text, setText] = useState(initial);
@@ -47,9 +47,9 @@ function Editor({ roots }: { roots: string[] }) {
   const latest = useRef({ text, initial, roots, armed });
   latest.current = { text, initial, roots, armed };
 
-  const plan = useMemo(() => planEdit(s.nodes, roots, text, (id) => isDone(s.nodes, id), () => '·'), [s.nodes, roots, text]);
+  const plan = useMemo(() => planEdit(s.nodes, roots, text, (id) => isDone(s.nodes, id), today, () => '·'), [s.nodes, roots, text]);
   const dirty = text !== initial;
-  const apply = () => act.applyMarkdown(latest.current.roots, latest.current.text);
+  const apply = () => act.applyMarkdown(latest.current.roots, latest.current.text, today);
   const cancel = () => {
     const l = latest.current;
     if (l.text !== l.initial && !l.armed) return setArmed(true);
@@ -92,7 +92,7 @@ function Editor({ roots }: { roots: string[] }) {
 
   const { added, removed, changed, moved } = plan.stats;
   const parts = [changed && `${changed} changed`, added && `${added} added`, moved && `${moved} moved`, removed && `${removed} removed`].filter(Boolean);
-  const scope = roots.length === 1 ? 'this item' : roots.length === s.nodes.filter((n) => n.parentId === null).length ? 'everything' : `${roots.length} items`;
+  const scope = `${roots.length} item${roots.length === 1 ? '' : 's'}`;
 
   return (
     <div className="ai-veil" onMouseDown={() => cancel()}>

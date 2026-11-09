@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useS } from './store';
+import { get, useS } from './store';
 import { act } from './act';
 import { aiKeyStatus, aiSetKey, invoke, isTauri } from './platform';
 import type { KeyStatus } from './platform';
@@ -19,10 +19,10 @@ const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', d
 const EVERY = [5, 15, 30, 60];
 
 /** the database file, and its automatic backups (src-tauri/src/backup.rs does the work; this only sets the schedule) */
-function Database() {
+function Database({ draft, onLoad, onChange }: { draft: BackupCfg | null; onLoad: (c: BackupCfg) => void; onChange: (p: Partial<BackupCfg>) => void }) {
   const [st, setSt] = useState<BackupStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const load = () => invoke<BackupStatus>('backup_status').then(setSt, (e) => act.toast(`Backups: ${String(e)}`, 'bad'));
+  const load = () => invoke<BackupStatus>('backup_status').then((x) => (setSt(x), onLoad(x.config)), (e) => act.toast(`Backups: ${String(e)}`, 'bad'));
   useEffect(() => void load(), []);
   if (!isTauri) {
     return (
@@ -32,17 +32,8 @@ function Database() {
       </section>
     );
   }
-  const cfg = st?.config;
-  const patch = async (p: Partial<BackupCfg>) => {
-    if (!cfg) return;
-    try {
-      const config = await invoke<BackupCfg>('backup_set_config', { config: { ...cfg, ...p } });
-      setSt((x) => x && { ...x, config });
-      void load(); // the lists may have been trimmed
-    } catch (e) {
-      act.toast(`Backups: ${String(e)}`, 'bad');
-    }
-  };
+  const cfg = draft ?? undefined;
+  const patch = (p: Partial<BackupCfg>) => onChange(p);
   const keep = (k: 'dailyKeep' | 'frequentKeep', max: number) => (
     <input type="number" min={1} max={max} value={cfg![k]} onChange={(e) => e.target.value && patch({ [k]: Math.max(1, Math.min(max, +e.target.value | 0)) })} />
   );
@@ -50,7 +41,7 @@ function Database() {
     setBusy(true);
     try {
       await invoke('backup_now');
-      await load();
+      setSt(await invoke<BackupStatus>('backup_status'));
       act.toast('Backup taken', 'good');
     } catch (e) {
       act.toast(`Backup: ${String(e)}`, 'bad');
@@ -73,14 +64,14 @@ function Database() {
         </span>
       </div>
       <div className="set-row">
-        <span className="set-lbl">Daily snapshot<small>One per day, taken the first time yatai runs that day. {cfg?.daily ? `${count('daily')} kept.` : ''}</small></span>
+        <span className="set-lbl">Daily snapshot<small>One per day, taken the first time yatai runs that day. {count('daily')} kept now.</small></span>
         <span className="set-opt">
           <label><input type="checkbox" checked={!!cfg?.daily} disabled={!cfg} onChange={(e) => patch({ daily: e.target.checked })} /> on</label>
           {cfg && <label className={cfg.daily ? '' : 'off'}>keep {keep('dailyKeep', 365)} days</label>}
         </span>
       </div>
       <div className="set-row">
-        <span className="set-lbl">Frequent snapshot<small>At most one per interval, and only if something changed since the last one. {cfg?.frequent ? `${count('frequent')} kept.` : ''}</small></span>
+        <span className="set-lbl">Frequent snapshot<small>At most one per interval, and only if something changed since the last one. {count('frequent')} kept now.</small></span>
         <span className="set-opt">
           <label><input type="checkbox" checked={!!cfg?.frequent} disabled={!cfg} onChange={(e) => patch({ frequent: e.target.checked })} /> on</label>
           {cfg && (
@@ -125,39 +116,55 @@ export function Settings() {
   const [busy, setBusy] = useState(false);
   const [sec, setSec] = useState('ai');
   const [tok, setTok] = useState<Record<string, string>>({});
+  const [d, setD] = useState<typeof s.settings | null>(null); // the edited copy of the settings
+  const [bk, setBk] = useState<{ base: BackupCfg | null; draft: BackupCfg | null }>({ base: null, draft: null });
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!s.settingsOpen) return (setKey(''), setTok({}));
+    if (!s.settingsOpen) return (setKey(''), setTok({}), setD(null), setBk({ base: null, draft: null }));
+    setD({ ...get().settings });
     void aiKeyStatus().then(setSt);
     requestAnimationFrame(() => box.current?.querySelector<HTMLElement>('input, select')?.focus());
   }, [s.settingsOpen]);
   if (!s.settingsOpen) return null;
 
-  const cfg = s.settings;
+  const cfg = d ?? s.settings;
   const accts = PLUGINS.filter((p) => p.auth);
-  const patch = (p: Partial<typeof cfg>) => act.patchUi({ settings: { ...cfg, ...p } });
-  const saveKey = async (k: string) => {
+  const patch = (p: Partial<typeof cfg>) => setD({ ...cfg, ...p });
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const dirty = !same(cfg, s.settings) || !!key.trim() || Object.values(tok).some((t) => t?.trim()) || (!!bk.draft && !same(bk.draft, bk.base));
+
+  /** keys and tokens go to the keychain, the rest of the settings and the backup schedule are stored: all together, or nothing */
+  const save = async () => {
     setBusy(true);
     try {
-      setSt(await aiSetKey(k));
-      setKey('');
+      if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
+      if (bk.draft && !same(bk.draft, bk.base)) await invoke('backup_set_config', { config: bk.draft });
+      if (key.trim()) {
+        setSt(await aiSetKey(key));
+        act.refreshAi();
+      }
+      for (const [id, t] of Object.entries(tok)) if (t?.trim()) await act.connectPlugin(id, t);
+      act.toast('Settings saved', 'good');
+      act.closeSettings();
+    } catch (e) {
+      act.toast(`Could not save: ${String(e)}`, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removeKey = async () => {
+    setBusy(true);
+    try {
+      setSt(await aiSetKey(''));
       act.refreshAi();
-      act.toast(k ? 'API key saved to the keychain' : 'API key removed', 'good');
+      act.toast('API key removed', 'info');
     } catch (e) {
       act.toast(`Keychain: ${String(e)}`, 'bad');
     } finally {
       setBusy(false);
     }
   };
-
-  const saveTok = async (id: string) => {
-    const t = tok[id];
-    if (!t?.trim()) return;
-    setBusy(true);
-    await act.connectPlugin(id, t);
-    setTok({ ...tok, [id]: '' });
-    setBusy(false);
-  };
+  const enter = (e: React.KeyboardEvent) => e.key === 'Enter' && dirty && (e.preventDefault(), void save());
 
   return (
     <div className="ai-veil" onMouseDown={() => act.closeSettings()}>
@@ -169,7 +176,7 @@ export function Settings() {
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Escape') (e.preventDefault(), act.closeSettings());
+          if (e.key === 'Escape') (e.preventDefault(), act.closeSettings()); // discards the edits
         }}
       >
         <h3>Settings</h3>
@@ -182,7 +189,7 @@ export function Settings() {
           ))}
         </nav>
         <div className="set-body">
-        {sec === 'db' && <Database />}
+        {sec === 'db' && <Database draft={bk.draft} onLoad={(c) => setBk((x) => (x.base ? x : { base: c, draft: c }))} onChange={(p) => setBk((x) => x.draft ? { ...x, draft: { ...x.draft, ...p } } : x)} />}
         {sec === 'ai' && <section className="set-sec">
           <header>
             <h4>AI assistant</h4>
@@ -199,13 +206,10 @@ export function Settings() {
                   placeholder={st?.configured ? (st.source === 'env' ? 'set from the environment (.env)' : '•••••••• in the keychain') : 'sk-…'}
                   value={key}
                   onChange={(e) => setKey(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && key.trim() && (e.preventDefault(), void saveKey(key))}
+                  onKeyDown={enter}
                 />
-                <button className="btn sm" disabled={busy || !key.trim()} onClick={() => saveKey(key)}>
-                  Save
-                </button>
                 {st?.source === 'keychain' && (
-                  <button className="btn sm" disabled={busy} onClick={() => saveKey('')}>
+                  <button className="btn sm" disabled={busy} onClick={removeKey}>
                     Remove
                   </button>
                 )}
@@ -269,11 +273,8 @@ export function Settings() {
                     placeholder={acc?.state === 'connected' ? '•••••••• in the keychain' : p.auth!.field.placeholder}
                     value={tok[p.id] ?? ''}
                     onChange={(e) => setTok({ ...tok, [p.id]: e.target.value })}
-                    onKeyDown={(e) => e.key === 'Enter' && tok[p.id]?.trim() && (e.preventDefault(), saveTok(p.id))}
+                    onKeyDown={enter}
                   />
-                  <button className="btn sm" disabled={busy || !tok[p.id]?.trim()} onClick={() => saveTok(p.id)}>
-                    Save
-                  </button>
                   {acc?.state !== 'none' && acc?.state != null && (
                     <button className="btn sm" disabled={busy} onClick={() => void act.disconnectPlugin(p.id)}>
                       Remove
@@ -287,9 +288,21 @@ export function Settings() {
         </div>
         </div>
         <div className="set-foot">
-          <button className="btn" onClick={() => act.closeSettings()}>
-            Done
-          </button>
+          <span className="set-dirty">{dirty ? 'Unsaved changes' : ''}</span>
+          {dirty ? (
+            <>
+              <button className="btn" disabled={busy} onClick={() => act.closeSettings()}>
+                Discard
+              </button>
+              <button className="btn primary" disabled={busy} onClick={() => void save()}>
+                Save
+              </button>
+            </>
+          ) : (
+            <button className="btn" onClick={() => act.closeSettings()}>
+              Close
+            </button>
+          )}
         </div>
       </div>
     </div>

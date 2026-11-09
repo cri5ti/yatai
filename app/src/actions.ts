@@ -1,5 +1,5 @@
 import { countItems } from './clip';
-import { planEdit, scopeRoots } from './mdedit';
+import { planEdit, scopeFor } from './mdedit';
 import type { ClipItem } from './clip';
 import { DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
 import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
@@ -1146,23 +1146,23 @@ export const closeSettings = () => {
 };
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
 /* ---------- edit as markdown (⌘E, see mdedit.ts) ---------- */
-/** open the editor on the selected items (consecutive siblings, with their sub-items), or on everything */
-export function openMdEdit(whole = false) {
+/** open the editor on everything the view shows (Next: its rows; Organizer: the tree), or with `selection` only on the selected items */
+export function openMdEdit(selection = false) {
   const s = get();
   if (s.tab === 'inbox') return;
-  const picked = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.nsel.row ? [s.nsel.row] : [];
-  const roots = scopeRoots(s.nodes, whole ? [] : picked);
-  if (!roots) return toast('Select consecutive sibling items (or nothing, for everything) to edit as text', 'warn');
-  set(() => ({ mdEdit: { ids: roots }, hidden: false, menu: null }));
+  const picked = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.multi.length > 1 ? s.multi : s.nsel.row ? [s.nsel.row] : [];
+  if (selection && !picked.some((id) => s.nodes.some((n) => n.id === id))) return toast('Select an item first (⌘E edits everything in view)', 'info');
+  const ids = scopeFor(s.nodes, selection ? 'selection' : s.tab === 'next' ? 'next' : 'tree', picked);
+  set(() => ({ mdEdit: { ids, today: s.tab === 'next' }, hidden: false, menu: null }));
 }
 export const closeMdEdit = () => {
   set(() => ({ mdEdit: null }));
   focusArea();
 };
 /** replace the text of these items by `text`: only what differs is touched, as one undo step */
-export function applyMarkdown(roots: string[], text: string) {
+export function applyMarkdown(scope: string[], text: string, today = false) {
   const s = get();
-  const plan = planEdit(s.nodes, roots, text, (id) => isDone(s.nodes, id));
+  const plan = planEdit(s.nodes, scope, text, (id) => isDone(s.nodes, id), today);
   if (plan.same) {
     toast('No changes');
     return closeMdEdit();
