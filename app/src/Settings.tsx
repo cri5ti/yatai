@@ -6,6 +6,7 @@ import type { KeyStatus } from './platform';
 import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
 import { GhIcon } from './Pr';
+import { Guide } from './guides';
 
 const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
@@ -290,6 +291,7 @@ export function Settings() {
                   )}
                 </span>
               </div>
+              <Guide id={p.id} cfg={cfg} connected={acc?.state === 'connected'} />
             </section>
           );
         })}

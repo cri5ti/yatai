@@ -10,7 +10,7 @@ export const github: Plugin = {
   id: 'github',
   name: 'GitHub',
   auth: {
-    field: { label: 'GitHub token', placeholder: 'personal access token', help: 'A fine-grained token with read access to pull requests, checks, commit statuses and metadata is enough (it must be able to see the private repositories you want).' },
+    field: { label: 'GitHub token', placeholder: 'personal access token', help: 'Read access to pull requests, checks and commit statuses of the repositories you follow.' },
     configured: async () => (await status()).configured, who: whoAmI, connect, disconnect: async () => void (await disconnect()),
   },
   match: (text) => prLinks(text).map((l) => refKey('github', l.key)),

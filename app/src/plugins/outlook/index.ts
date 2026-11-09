@@ -46,7 +46,7 @@ export const outlook: Plugin = {
     field: {
       label: 'Calendar link (ICS)',
       placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics',
-      help: 'Outlook on the web → Settings → Calendar → Shared calendars → Publish a calendar → choose “Can view all details” → copy the ICS link. Anyone with the link can read the calendar, so yatai keeps it in the keychain. Outlook refreshes a published calendar slowly (minutes to hours).',
+      help: 'Your published calendar’s ICS link. Outlook refreshes a published calendar slowly (minutes to hours).',
     },
     configured: async () => (await pluginSecretStatus(ID)).configured,
     async who() {

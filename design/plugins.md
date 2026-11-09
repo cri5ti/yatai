@@ -207,6 +207,10 @@ Example, GitHub PR with a red check and 3 unresolved threads:
 The existing `Flags` / developer-panel toggles keep working **as the mock plugins' input**: toggling "PR build failing" changes what the mock GitHub plugin returns on its next `fetch`, then the normal diff produces the highlight and toast. The mock path therefore exercises the same code as the live path.
 
 
+### 6.0 Getting the credentials
+
+Settings shows, under each account, **How to get it** (`app/src/guides.tsx`), open until the account is connected. GitHub: `gh auth token [--hostname <host>]` (the GitHub CLI's own token: quick but broad), or a fine-grained token (Pull requests / Commit statuses / Checks / Metadata, read-only), plus the SAML SSO note. DevOps: the Personal access tokens page (Build: Read), or the Azure CLI (`az rest` on the PAT lifecycle API with a `pat.json` body, valid 90 days). Outlook: Publish a calendar → the ICS link (there is no CLI route without an admin's consent for Graph). Placeholders are filled from what the user typed (host, organization); nothing company-specific is written in.
+
 ### 6.1 Notify me when it changes
 
 Any item that tracks something (a PR link, a run link, a smart item) has **Notify me when it changes** in its menu (`/notify`; several selected items toggle together). It is saved on the item (`notify`). For such an item, every change of state counts: GitHub's *checks running*, a run going queued → building → done. Normally only what wants attention counts. Each change is a toast and a highlight, as always. When yatai is hidden or not in front, it is also a **system notification** (`tauri-plugin-notification`; it asks for permission the first time). Rows that notify show a 🔔.

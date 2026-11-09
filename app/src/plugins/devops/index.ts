@@ -12,7 +12,7 @@ export const devops: Plugin = {
   id: 'devops',
   name: 'DevOps',
   auth: {
-    field: { label: 'Personal access token', placeholder: 'Azure DevOps PAT', help: 'A token with Build (Read) scope for the organization above is enough.' },
+    field: { label: 'Personal access token', placeholder: 'Azure DevOps PAT', help: 'Build (Read) scope, for the organization above.' },
     configured, who: whoAmI, connect, disconnect,
   },
   match: (text) => buildLinks(text).map((l) => `devops:build/${l.key}`),
