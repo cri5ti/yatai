@@ -99,7 +99,7 @@ Applying is a **diff, not a re-creation**: the text has no ids, so lines are mat
 
 ## 7. Top-level items have no group
 
-Anything can sit at the top level. In Next, top-level items are just rows with no card header (there is no "Items" group), aligned to the left edge. There are no empty "new card" shells either: Enter / ⇧Enter on a card header add the first item *inside* that card, and a new item with nothing to anchor to is a plain top-level row. Indent / outdent therefore always have a neighbour to work with.
+Anything can sit at the top level. In Next, top-level items are just rows with no card header (there is no "Items" group), aligned to the left edge. Each top-level item is its own header-less card (a separator line between them, drag / ⌘↑↓ move it like any card); they are never grouped into one shared card. There are no empty "new card" shells either: Enter / ⇧Enter on a card header add the first item *inside* that card, and a new item with nothing to anchor to is a plain top-level row. Indent / outdent therefore always have a neighbour to work with.
 
 ## 8. Removing things
 

@@ -11,7 +11,7 @@ import type { Doc, InboxItem, Meeting, Node, Seg, State } from './store';
 
 /** state that is saved besides the document (everything not in TRANSIENT and not part of Doc) */
 const UI_KEYS = [
-  'flags', 'clock', 'clockSpeed', 'clockManual', 'day', 'demo', 'settings', 'layout', 'prevLayout', 'tab', 'focus', 'focusSpeed', 'dark',
+  'flags', 'clock', 'clockSpeed', 'clockManual', 'day', 'demo', 'settings', 'layout', 'prevLayout', 'onTop', 'tab', 'focus', 'focusSpeed', 'dark',
   'prs', 'prc', 'snaps', 'agenda', 'hl', 'bounds', 'scale', 'density', 'showApps', 'aiDelay', 'sel', 'nsel', 'isel', 'expanded',
 ] as const satisfies readonly (keyof State)[];
 /** (the real-time clock is not worth a write every 15 s: only a simulated one is kept) */

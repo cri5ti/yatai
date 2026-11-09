@@ -39,6 +39,7 @@ export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: n
     else delete b[layout];
     return { bounds: b };
   });
+export const toggleOnTop = () => set((s) => ({ onTop: !s.onTop }));
 export const toggleHidden = () => set((s) => ({ hidden: !s.hidden }));
 export const openCapture = () => set(() => ({ capture: true }));
 export const closeCapture = () => set(() => ({ capture: false }));

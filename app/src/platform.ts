@@ -52,15 +52,17 @@ export const isApplying = () => applying > 0;
  * Put the OS window where a layout says: dock = right edge, full height · float = medium, top right ·
  * max = large · pill = small, always on top. A saved rect (the user moved / resized it) wins.
  */
-export async function applyLayout(layout: Layout, saved: Partial<Record<string, Rect>>, ended: boolean) {
+export async function applyLayout(layout: Layout, saved: Partial<Record<string, Rect>>, ended: boolean, onTop = false) {
   if (!isTauri) return;
   const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window');
   const w = getCurrentWindow();
   const wa = await workArea();
   let r: Rect;
+  // (older versions saved only the dock's width, with x = y = 0)
+  const d = saved.dock && (saved.dock.x !== 0 || saved.dock.y !== 0) ? saved.dock : null;
   if (layout === 'dock') {
     const width = Math.min(saved.dock?.w ?? DEFAULT.dock, wa.w);
-    r = { x: wa.x + wa.w - width, y: wa.y, w: width, h: wa.h };
+    r = d ? fit(d, wa) : { x: wa.x + wa.w - width, y: wa.y, w: width, h: wa.h };
   } else if (layout === 'pill') {
     const h = ended ? PILL.ended : PILL.h;
     r = { x: wa.x + wa.w - PILL.w - 24, y: wa.y + 24, w: PILL.w, h };
@@ -74,7 +76,7 @@ export async function applyLayout(layout: Layout, saved: Partial<Record<string, 
   }
   applying++;
   try {
-    await w.setAlwaysOnTop(layout === 'pill');
+    await w.setAlwaysOnTop(layout === 'pill' || onTop);
     await w.setResizable(layout !== 'pill');
     await w.setSize(new LogicalSize(r.w, r.h));
     await w.setPosition(new LogicalPosition(r.x, r.y));
@@ -130,6 +132,12 @@ export async function onWindowChange(fn: () => void): Promise<() => void> {
   const a = await w.onMoved(fn);
   const b = await w.onResized(fn);
   return () => (a(), b());
+}
+
+export async function setOnTop(on: boolean) {
+  if (!isTauri) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().setAlwaysOnTop(on);
 }
 
 export async function setVisible(show: boolean) {

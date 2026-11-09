@@ -34,6 +34,9 @@
 - [ ] ⌘E apply: rename one line, change `@est:` / `@due:`, tick `[x]`, add and delete lines, move a block: items that were not touched keep their Next placement, timers and open / closed state; one ⌘Z undoes it all
 - [ ] ⌘C of items now includes `@est:` / `@due:`; pasting them back restores both
 
+- [ ] Next: pressing Enter repeatedly on a fresh start gives separate top-level items with separator lines; each drags / moves (⌘↑↓) on its own; indent / outdent still nests
+- [ ] Window: the dock can be dragged by the title bar and resized from any edge; it keeps its place; ⧉ toggles docked ↔ full width and each remembers its own position; 📌 keeps the window on top (remembered); no undo / redo buttons in the title bar (⌘Z still works)
+
 ## Gaps in what's there
 
 - [ ] Popups: their size / position is not remembered (always placed beside the main window)

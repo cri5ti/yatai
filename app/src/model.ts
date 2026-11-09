@@ -256,7 +256,8 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
   };
   const place = (owner: string, id: string) => {
     const sg = lastSegOf(owner);
-    if (sg) sg.items.push(id);
+    // top-level items are never grouped: each one is its own (header-less) card
+    if (sg && owner !== ROOT) sg.items.push(id);
     else segs.push({ id: 's_' + owner, owner, items: [id] });
   };
 
@@ -272,6 +273,13 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
       seen.add(FX + m.id);
       place(m.id, FX + m.id);
     }
+  }
+
+  // top-level rows: one card each (a stored card holding several is split in place, keeping the order)
+  for (let i = 0; i < segs.length; i++) {
+    const sg = segs[i];
+    if (sg.owner !== ROOT || sg.items.length < 2) continue;
+    segs.splice(i, 1, ...sg.items.map((id, k) => (k === 0 ? { ...sg, items: [id] } : { id: 's_' + id, owner: ROOT, items: [id] })));
   }
 
   // prune empties: an owner keeps one empty segment only if it was created on purpose and has nothing else

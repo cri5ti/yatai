@@ -800,7 +800,7 @@ export function Next() {
           <InlineEdit
             chain
             onCommit={(t, chain) => {
-              const loose = m.cards.find(isLoose);
+              const loose = [...m.cards].reverse().find(isLoose);
               const last = loose?.rows.filter((r) => r.depth === 0).pop()?.id ?? null;
               const id = addAction(ROOT, loose?.seg?.id, last, t);
               set(() => ({ ins: chain ? { kind: 'action', owner: ROOT, seg: loose?.seg?.id ?? 's_' + ROOT, after: id } : null }));

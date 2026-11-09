@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { effLayout, get, useS } from './store';
-import type { Layout, State, Tab } from './store';
+import type { State, Tab } from './store';
 import { Next } from './Next';
 import { Inbox } from './Inbox';
 import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
 import { AiPop, ProposalBar } from './AiPop';
-import { capture, closeCapture, setBounds, dismissToast, openDrawer, openSettings, redo, setDensity, setLayout, setScale, setTab, toggleHelp, toggleHidden, undo } from './actions';
+import { capture, closeCapture, setBounds, dismissToast, openDrawer, openSettings, setDensity, setLayout, setScale, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { DENSITIES, SCALES } from './store';
 import { Drawer } from './Drawer';
 import { GhIcon } from './Pr';
@@ -15,11 +15,12 @@ import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
 import { DevPanel } from './Controls';
 import { Help } from './Help';
-import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setVisible, startDrag, windowRect } from './platform';
+import { applyLayout, isApplying, isMac, isTauri, onWindowChange, setBadge, setOnTop, setVisible, startDrag, windowRect } from './platform';
 import type { Edge } from './platform';
 
 
-const DIRS: Record<string, Edge[]> = { dock: ['w'], float: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'], max: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] };
+const ALL: Edge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+const DIRS: Record<string, Edge[]> = { dock: ALL, float: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'], max: ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] };
 
 /**
  * The OS window follows the layout: placed and sized when the layout changes (or a focus session ends and the pill grows),
@@ -31,7 +32,7 @@ function useOsWindow() {
   const ended = !!s.focus?.ended;
   const shown = useRef(false);
   useEffect(() => {
-    void applyLayout(layout, get().bounds, ended).then(() => {
+    void applyLayout(layout, get().bounds, ended, get().onTop).then(() => {
       if (!shown.current && !get().hidden) {
         shown.current = true;
         void setVisible(true);
@@ -39,6 +40,7 @@ function useOsWindow() {
     });
   }, [layout, ended]);
   useEffect(() => void (shown.current && setVisible(!s.hidden)), [s.hidden]);
+  useEffect(() => void setOnTop(s.onTop || layout === 'pill'), [s.onTop, layout]);
   // remember a move / resize the user made (not the ones applyLayout makes)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined;
@@ -50,10 +52,7 @@ function useOsWindow() {
         const l = effLayout(get());
         const r = await windowRect();
         if (!r || isApplying() || (l !== 'dock' && l !== 'float' && l !== 'max')) return;
-        if (l !== 'dock') return setBounds(l, r);
-        // the dock keeps only its width: it goes straight back to the right edge, full height
-        setBounds(l, { ...r, x: 0, y: 0 });
-        void applyLayout('dock', get().bounds, false);
+        setBounds(l, r);
       }, 300);
     }).then((u) => (off = u));
     return () => (clearTimeout(t), off?.());
@@ -72,13 +71,12 @@ function Win() {
   const drag = (kind: Edge | 'move') => (e: React.PointerEvent) => {
     if (e.button !== 0 || !key) return;
     // the tab bar stretches across the title bar: only its buttons are buttons, the empty part drags the window
-    if (kind === 'move' && ((e.target as HTMLElement).closest('button') || key === 'dock')) return;
+    if (kind === 'move' && (e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
     void startDrag(kind, e.nativeEvent);
   };
   const pill = layout === 'pill';
   const endedFocus = !!s.focus?.ended;
-  const cycle: Layout[] = ['dock', 'float', 'max', 'pill'];
   const tabs: { id: Tab; label: string }[] = [
     { id: 'next', label: 'Next' },
     { id: 'inbox', label: 'Inbox' },
@@ -115,11 +113,8 @@ function Win() {
             ))}
           </nav>
           <div className="wc">
-            <button title={s.past.length ? `Undo: ${s.past[s.past.length - 1].label} (⌘Z)` : 'Nothing to undo'} aria-label="Undo" disabled={!s.past.length} onClick={undo}>
-              ↶
-            </button>
-            <button title={s.future.length ? `Redo: ${s.future[0].label} (⌘⇧Z)` : 'Nothing to redo'} aria-label="Redo" disabled={!s.future.length} onClick={redo}>
-              ↷
+            <button className={s.onTop ? 'on' : ''} aria-pressed={s.onTop} title={s.onTop ? 'Always on top: on' : 'Keep on top of other windows'} aria-label="Always on top" onClick={toggleOnTop}>
+              📌
             </button>
             <button title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={toggleHelp}>
               ?
@@ -127,7 +122,7 @@ function Win() {
             <button title="Settings (⌘,)" aria-label="Settings" onClick={openSettings}>
               ⚙
             </button>
-            <button title="Cycle layout" aria-label="Cycle layout" onClick={() => setLayout(cycle[(cycle.indexOf(s.layout) + 1) % cycle.length])}>
+            <button title={layout === 'max' ? 'Back to the docked window' : 'Full-width window'} aria-label="Toggle docked / full width" onClick={() => setLayout(layout === 'max' ? 'dock' : 'max')}>
               ⧉
             </button>
             <button title="Hide to tray" aria-label="Hide to tray" onClick={toggleHidden}>
