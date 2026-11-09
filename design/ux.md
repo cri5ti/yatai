@@ -81,10 +81,13 @@ Enter adds below, ⇧Enter above (inline editor, chaining), F2 edits, multi-line
 
 ⌘C copies the selected items (or the one under the cursor) as a nested markdown list with their sub-items; ⌘V pastes that format back into the structure, in any view.
 
-    - [ ] Write the spec
+    [ ] Write the spec
       extra title lines are indented
       - [x] A finished sub-item      ([-] = dropped)
-    - [ ] Estimated and dated @est:1h30m @due:2026-11-12
+
+    [ ] Estimated and dated @est:1h30m @due:2026-11-12
+
+Top-level items are plain lines with a blank line between them; only sub-items are bullets.
 
 - **Next / Organizer:** pasted below the selected item as siblings (on a card header: into that card). In Next they are also put in Next. One undo removes the whole paste.
 - **Inbox:** one entry per top-level item; its sub-items travel as a bullet list inside the entry.
@@ -93,7 +96,7 @@ Enter adds below, ⇧Enter above (inline editor, chaining), F2 edits, multi-line
 
 ## 6b. Edit as markdown (⌘E)
 
-⌘E opens everything the view shows as that same markdown in a real editor (CodeMirror) in its own window: in Next its items with the tasks above them for context, in the Organizer the whole tree. ⌘⇧E takes only the selected items with their sub-items. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
+⌘E opens the selected items (with their sub-items) as that same markdown in a real editor (CodeMirror) in its own window; with nothing selected, or with ⌘⇧E, everything the view shows: in Next its items with the tasks above them for context, in the Organizer the whole tree. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
 
 Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them (with whatever hangs below them, seen or not). Items outside the text keep their place among their siblings. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
 

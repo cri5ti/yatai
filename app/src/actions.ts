@@ -1146,12 +1146,13 @@ export const closeSettings = () => {
 };
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
 /* ---------- edit as markdown (⌘E, see mdedit.ts) ---------- */
-/** open the editor on everything the view shows (Next: its rows; Organizer: the tree), or with `selection` only on the selected items */
-export function openMdEdit(selection = false) {
+/** open the editor on the selected items (with their sub-items), or, with nothing selected or `all`, on everything the view shows (Next: its rows; Organizer: the tree) */
+export function openMdEdit(all = false) {
   const s = get();
   if (s.tab === 'inbox') return;
-  const picked = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.multi.length > 1 ? s.multi : s.nsel.row ? [s.nsel.row] : [];
-  if (selection && !picked.some((id) => s.nodes.some((n) => n.id === id))) return toast('Select an item first (⌘E edits everything in view)', 'info');
+  const raw = s.tab === 'organizer' ? (s.multi.length > 1 ? s.multi : s.sel ? [s.sel] : []) : s.multi.length > 1 ? s.multi : s.nsel.row ? [s.nsel.row] : [];
+  const picked = raw.filter((id) => s.nodes.some((n) => n.id === id));
+  const selection = !all && picked.length > 0;
   const ids = scopeFor(s.nodes, selection ? 'selection' : s.tab === 'next' ? 'next' : 'tree', picked);
   set(() => ({ mdEdit: { ids, today: s.tab === 'next' }, hidden: false, menu: null }));
 }

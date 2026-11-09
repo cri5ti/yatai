@@ -69,7 +69,7 @@ function Editor({ roots, today }: { roots: string[]; today: boolean }) {
           indentUnit.of('  '),
           markdown({ base: markdownLanguage }),
           syntaxHighlighting(colours),
-          placeholder('One item per line: - [ ] Title @est:1h @due:2026-11-12'),
+          placeholder('[ ] Title @est:1h @due:2026-11-12'),
           look,
           keymap.of([
             { key: 'Mod-Enter', run: () => (apply(), true) },
@@ -102,7 +102,7 @@ function Editor({ roots, today }: { roots: string[]; today: boolean }) {
         </h3>
         <div className="md-host" ref={host} />
         <div className="md-hint">
-          <code>- [ ] Title @est:1h30m @due:2026-11-12</code> · <code>[x]</code> done · <code>[-]</code> dropped · indent = sub-item · #tags stay in the title. Everything else on an item (today, timers, links) is kept.
+          <code>[ ] Title @est:1h30m @due:2026-11-12</code> · <code>[x]</code> done · <code>[-]</code> dropped · blank line between top-level items · indented <code>- [ ]</code> = sub-item · #tags stay in the title. Everything else on an item (today, timers, links) is kept.
         </div>
         <div className="md-foot">
           <span className={`md-stat${removed ? ' warn' : ''}`}>{armed ? 'Discard your edits? Esc again to discard.' : parts.length ? parts.join(' · ') : dirty ? 'No difference yet' : 'No changes'}</span>
