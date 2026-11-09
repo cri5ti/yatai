@@ -577,3 +577,22 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .sk-line.sm { height: 8px; margin-top: 6px; }
 @keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+/* the Outlook drawer's day schedule */
+.sched { position: relative; margin: 4px 0; }
+.swork { position: absolute; left: 48px; right: 0; background: color-mix(in srgb, var(--appt) 45%, transparent); pointer-events: none; }
+.shour { position: absolute; left: 0; right: 0; height: 0; border-top: var(--bw) solid var(--border); pointer-events: none; }
+.shour span { position: absolute; top: -8px; left: 8px; font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; background: var(--surface); padding-right: 4px; }
+.sblock { position: absolute; overflow: hidden; padding: 3px 7px; border-radius: var(--r-xs); background: var(--appt); box-shadow: inset 3px 0 0 var(--outlook); font-size: var(--fs-sm); line-height: 1.25; cursor: default; }
+.sblock .stitle { font-weight: var(--fw-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sblock .stitle .chip { font-size: var(--fs-xs); }
+.sblock .stime { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sblock.short { display: flex; gap: 6px; align-items: baseline; padding-top: 1px; padding-bottom: 1px; } .sblock.short .stitle { flex: 1; min-width: 0; }
+.sblock.is-sel { outline: 2px solid var(--focus); outline-offset: -1px; }
+.sblock.dim { opacity: .45; } .sblock.dim.is-sel { opacity: .7; }
+.sblock.have { background: color-mix(in srgb, var(--appt) 50%, var(--surface)); }
+.sblock.clash { box-shadow: inset 3px 0 0 var(--accent); } .sblock.clash .stime { color: var(--accent); font-weight: var(--fw-semi); }
+.snow { position: absolute; left: 48px; right: 0; height: 2px; background: var(--bad); z-index: 2; pointer-events: none; }
+.snow::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+.dhead .viewtoggle.on { color: var(--accent); }
+.set-hours { display: inline-flex; align-items: center; gap: var(--sp-3); } .set-hours span { color: var(--text-muted); font-size: var(--fs-sm); }

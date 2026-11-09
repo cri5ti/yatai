@@ -9,6 +9,11 @@ import { GhIcon } from './Pr';
 import { Guide } from './guides';
 import { DisplayControls } from './display';
 
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const mins = (v: string) => {
+  const [h, m] = v.split(':').map(Number);
+  return h * 60 + (m || 0);
+};
 const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
@@ -273,6 +278,18 @@ export function Settings() {
                 <div className="set-row">
                   <span className="set-lbl">GitHub host</span>
                   <input value={cfg.githubHost} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ githubHost: e.target.value })} placeholder="github.com (or ghe.example.com)" />
+                </div>
+              )}
+              {p.id === 'outlook' && (
+                <div className="set-row">
+                  <span className="set-lbl">
+                    Working hours<small>The schedule view fits them on 80% of the drawer. A published calendar does not carry them.</small>
+                  </span>
+                  <span className="set-hours">
+                    <input type="time" value={hhmm(cfg.workStart)} onChange={(e) => e.target.value && patch({ workStart: mins(e.target.value) })} />
+                    <span>to</span>
+                    <input type="time" value={hhmm(cfg.workEnd)} onChange={(e) => e.target.value && patch({ workEnd: Math.max(mins(e.target.value), cfg.workStart + 60) })} />
+                  </span>
                 </div>
               )}
               {p.id === 'devops' && (

@@ -192,6 +192,8 @@ export interface Settings {
   baseUrl: string; // '' = https://api.openai.com/v1
   githubHost: string; // '' = github.com; else a GitHub Enterprise host (its token is in the keychain)
   devopsOrg: string; // Azure DevOps organization: 'acme', 'dev.azure.com/acme' or 'acme.visualstudio.com' (its token is in the keychain)
+  workStart: number; // working hours, minutes of the day (the Outlook schedule fits them on 80% of the drawer)
+  workEnd: number;
 }
 
 export interface State extends Doc {
@@ -222,6 +224,7 @@ export interface State extends Doc {
   reqs: Record<string, ReqCount>;
   /** where the user last put each popup window (logical px): 'settings', 'ai', … and one per drawer: 'drawer:github' */
   popups: Record<string, { x: number; y: number; w: number; h: number }>;
+  outlookView: 'list' | 'day'; // the Outlook drawer: a list, or the day plotted by the hour
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
@@ -356,7 +359,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '' };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60 };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
@@ -391,6 +394,7 @@ export function initialState(): State {
     runs: {},
     reqs: {},
     popups: {},
+    outlookView: 'list',
     snaps: {},
     agenda: {},
     lists: {},

@@ -73,6 +73,8 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
+/** the Outlook drawer: list ↔ day schedule */
+export const setOutlookView = (v: 'list' | 'day') => set(() => ({ outlookView: v }));
 /** a popup window was moved / resized by the user: remember it under its key (the main window's own placing is ignored) */
 export function setPopupRect(view: string, key: string, r: { x: number; y: number; w: number; h: number }) {
   if (Date.now() - (placedAt[view] ?? 0) < 1200) return;

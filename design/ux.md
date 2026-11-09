@@ -165,3 +165,7 @@ UI scale and row density are behind the **Aa** button at the right of the footer
 ## Popup windows keep their place
 
 Settings, help, the AI chat, the developer panel and the drawers open where you last put them (moved or resized), kept per drawer source: the GitHub, Outlook and DevOps drawers each have their own place. A place that is no longer on any screen is dropped, and the popup goes back beside the main window. Popups you never moved still follow the main window. The drawers carry no title: the tabs (and, for DevOps, the Builds · Work items row) are the header, and dragging it moves the window.
+
+## Outlook: list or schedule
+
+On the Today and Tomorrow tabs a small button in the drawer's header (or V) switches between the list and the day **plotted by the hour**. Working hours (Settings → Outlook, 9:00–18:00 unless set: a published calendar does not carry them) fill 80% of the drawer's height. Earlier or later meetings widen the range by whole hours, and it opens at the start of the working day (today: just before now). Overlapping meetings sit side by side; a double booking has the accent colour; past meetings are faded; today has the red now-line. ↑↓, ⏎ and double-click work as in the list. The choice is remembered. Next 5 days stays a list.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useS } from './store';
+import { get, useS } from './store';
 import type { State } from './store';
 import { act } from './act';
 import { allAgenda, fmt, refsOf, relTime } from './model';
@@ -9,6 +9,7 @@ import { cx } from './kbd';
 import { isTauri } from './platform';
 import { pluginById, implFor } from './plugins/registry';
 import { clashes, range } from './plugins/outlook/days';
+import { Schedule } from './Schedule';
 import type { Entry as PluginEntry, ListDef } from './plugins/types';
 
 interface Row {
@@ -22,6 +23,7 @@ interface Row {
   canInbox: boolean;
   repo?: string; // 'org/repo' of a pull request, for the filter
   clash?: boolean; // a double-booked meeting
+  at?: { start: number; dur: number }; // a meeting's time (the schedule view plots it)
   /** where "now" is: a line inside this row (0–1 of the way through it), or just above / below it */
   now?: number | 'before' | 'after';
 }
@@ -60,6 +62,7 @@ const rowOf = (en: PluginEntry, s: State): Row => ({
   have: en.meeting ? s.meetings.some((m) => m.id === en.meeting!.id) : s.nodes.some((n) => refsOf(n).includes(en.ref)),
   dim: en.dim,
   clash: en.clash,
+  at: en.meeting ? { start: en.meeting.start, dur: en.meeting.durationMin } : undefined,
   canInbox: en.canInbox,
   add: (to) => (en.meeting ? act.bringMeeting(en.meeting.id, en.meeting) : act.bringIn({ title: en.text, ref: en.ref, smart: en.smart, snap: en.snap }, to)),
 });
@@ -95,6 +98,7 @@ function rowsFor(s: State, kind: string, tab: string): Row[] {
         have: !!have,
         dim: state === 'done' || e.cancelled,
         clash: clash.has(e.id),
+        at: { start: e.start, dur: e.durationMin },
         // in a meeting: the line runs through it, as far as it has got; between meetings: above the next one
         now: state === 'now' ? (s.clock - e.start) / e.durationMin : undefined,
         canInbox: false,
@@ -165,13 +169,36 @@ export function Drawer() {
   const [mq, setMq] = useState(''); // search inside the drop-down
   const [mi, setMi] = useState(0); // highlighted row of the drop-down
   const [manual, setManual] = useState(false); // a refresh the user asked for is running: show placeholders
+  const [listH, setListH] = useState(400); // the list's height: the schedule fits the working hours on 80% of it
+  useEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setListH(el.clientHeight || 400));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [d?.kind]);
   const refresh = () => (setManual(true), act.refreshDrawer());
   useEffect(() => {
     if (d) list.current?.focus({ preventScroll: true });
   }, [d?.kind, d?.tab]);
   useEffect(() => {
-    list.current?.querySelector('.drow.is-sel')?.scrollIntoView({ block: 'nearest' });
+    list.current?.querySelector('.drow.is-sel, .sblock.is-sel')?.scrollIntoView({ block: 'nearest' });
   }, [d?.sel]);
+  // the schedule opens at the start of the working day (today: a little before now, if that is later)
+  const plotKey = d && d.kind === 'outlook' && (d.tab === 'today' || d.tab === 'tomorrow') && s.outlookView === 'day' ? d.tab : '';
+  useEffect(() => {
+    if (!plotKey) return;
+    requestAnimationFrame(() => {
+      const el = list.current;
+      const sc = el?.querySelector<HTMLElement>('.sched');
+      if (!el || !sc) return;
+      const from = Number(sc.dataset.schedFrom);
+      const ppm = Number(sc.dataset.schedPpm);
+      const st = get().settings;
+      const at = plotKey === 'today' ? Math.max(st.workStart, get().clock - 45) : st.workStart;
+      el.scrollTop = Math.max(0, (at - from) * ppm - 0.05 * el.clientHeight);
+    });
+  }, [plotKey, listH]);
   // a manual refresh's placeholders go once that list stops loading (hooks stay above the early return)
   const busy = !!(d && s.lists[`${d.kind}/${d.tab}`]?.loading);
   const seenBusy = useRef(false);
@@ -205,10 +232,17 @@ export function Drawer() {
   const block = blocked(s, d.kind);
   const ls = s.lists[`${d.kind}/${d.tab}`];
   const skeleton = showSkeleton(s, d, !!block, manual);
+  // the day schedule: Outlook's single-day tabs, when chosen (V or the header button)
+  const canPlot = d.kind === 'outlook' && (d.tab === 'today' || d.tab === 'tomorrow');
+  const dayView = canPlot && s.outlookView === 'day';
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
   const cur = entries[sel];
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (canPlot && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'v' && !(e.target as HTMLElement).closest('input')) {
+      e.preventDefault();
+      return act.setOutlookView(dayView ? 'list' : 'day');
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const stop = () => (e.preventDefault(), e.stopPropagation());
     const k = e.key;
@@ -264,6 +298,27 @@ export function Drawer() {
             <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill={picked.length ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
               <path d="M2 3h12l-4.6 5.4V13l-2.8-1.4V8.4z" />
             </svg>
+          </button>
+        )}
+        {canPlot && (
+          <button
+            className={cx('x', 'viewtoggle', dayView && 'on')}
+            aria-label={dayView ? 'Show as a list' : 'Show as a schedule'}
+            aria-pressed={dayView}
+            title={dayView ? 'List (V)' : 'Schedule by the hour (V)'}
+            onClick={() => act.setOutlookView(dayView ? 'list' : 'day')}
+          >
+            {dayView ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M3 4h10M3 8h10M3 12h10" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+                <path d="M2.5 6h11M6 6v7.5" />
+                <rect x="7.5" y="7.5" width="4.5" height="3" rx=".6" fill="currentColor" stroke="none" />
+              </svg>
+            )}
           </button>
         )}
         <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={refresh}>
@@ -326,7 +381,18 @@ export function Drawer() {
             </div>
           )
         )}
-        {!skeleton && entries.map((en, i) => (
+        {!skeleton && dayView && (
+          <Schedule
+            rows={entries.filter((en): en is Row & { at: { start: number; dur: number } } => !!en.at)}
+            sel={sel}
+            height={listH}
+            work={{ start: s.settings.workStart, end: s.settings.workEnd }}
+            now={d.tab === 'today' ? s.clock : null}
+            onSelect={(i) => act.setDrawerSel(i)}
+            onAdd={(i) => entries[i]?.add('next')}
+          />
+        )}
+        {!skeleton && !dayView && entries.map((en, i) => (
           <div
             key={en.id}
             className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim', en.clash && 'clash', en.now != null && `now-${typeof en.now === 'number' ? 'in' : en.now}`)}
