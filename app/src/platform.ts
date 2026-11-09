@@ -35,7 +35,7 @@ export type Rect = { x: number; y: number; w: number; h: number };
 const PILL = { w: 360, h: 84, ended: 330 };
 const DEFAULT = { dock: 372, float: { w: 560, h: 660 } };
 /** physical → logical, and the area the OS leaves free for windows (no menu bar / taskbar / dock) */
-async function workArea() {
+export async function workArea() {
   const { currentMonitor, primaryMonitor } = await import('@tauri-apps/api/window');
   const m = (await currentMonitor()) ?? (await primaryMonitor());
   if (!m) return { x: 0, y: 0, w: 1440, h: 900 };
@@ -85,6 +85,45 @@ export async function applyLayout(layout: Layout, saved: Partial<Record<string, 
     setTimeout(() => applying--, 400);
   }
 }
+/**
+ * Snap to the screen's edges: within `gap` px of an edge, the window goes flush with it. After a move the window
+ * shifts (left or right, top or bottom); after a resize only the edges that moved stretch to the screen's edge.
+ * `prev` is the rect before the change (null: treat it as a move). Null when nothing needs to change. Pure.
+ */
+export function snapRect(r: Rect, prev: Rect | null, wa: Rect, gap = 20): Rect | null {
+  const L = wa.x, R = wa.x + wa.w, T = wa.y, B = wa.y + wa.h;
+  const near = (a: number, b: number) => Math.abs(a - b) <= gap;
+  const moved = (a: number, b: number) => Math.abs(a - b) > 1;
+  let { x, y, w, h } = r;
+  const resized = !!prev && (moved(prev.w, r.w) || moved(prev.h, r.h));
+  if (!resized) {
+    if (near(x, L)) x = L;
+    else if (near(x + w, R)) x = R - w;
+    if (near(y, T)) y = T;
+    else if (near(y + h, B)) y = B - h;
+  } else {
+    if (moved(r.x, prev!.x) && near(x, L)) (w += x - L), (x = L);
+    if (moved(r.x + r.w, prev!.x + prev!.w) && near(x + w, R)) w = R - x;
+    if (moved(r.y, prev!.y) && near(y, T)) (h += y - T), (y = T);
+    if (moved(r.y + r.h, prev!.y + prev!.h) && near(y + h, B)) h = B - y;
+  }
+  const same = Math.abs(x - r.x) < 0.5 && Math.abs(y - r.y) < 0.5 && Math.abs(w - r.w) < 0.5 && Math.abs(h - r.h) < 0.5;
+  return same ? null : { x, y, w, h };
+}
+/** put the window exactly there (not remembered as the user's own move: the caller saves it) */
+export async function placeWindow(r: Rect) {
+  if (!isTauri) return;
+  const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window');
+  const w = getCurrentWindow();
+  applying++;
+  try {
+    await w.setSize(new LogicalSize(r.w, r.h));
+    await w.setPosition(new LogicalPosition(r.x, r.y));
+  } finally {
+    setTimeout(() => applying--, 400);
+  }
+}
+
 /** keep a remembered rect on screen (the monitor may have changed since) */
 function fit(r: Rect, wa: Rect): Rect {
   const w = Math.min(r.w, wa.w);

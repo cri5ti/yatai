@@ -70,6 +70,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** â€
 
 ## 4. Window: resizable, and views that grow with it
 
+- **Snapping:** let go of a move or resize within 20 px of a screen edge (the free area: no menu bar, taskbar or Dock) and the window goes flush with it. A move shifts the window there; a resize stretches only the edge you dragged.
 - **Resize** by dragging any edge or corner (the dock only has its left edge); **move** a floating / maximised window by its title bar. Double-click an edge or the title bar to reset. Each layout remembers its own size.
 - **Views respond to width, not to a mode.** Cards flow into columns, the Organizer grows table columns, and the **Inbox shows the Organizer beside it** once there is room: drag inbox items (several at once) onto a row to file them under it, between rows to file them as siblings, or onto empty space for top level.
 
@@ -152,3 +153,7 @@ The tray icon says what is going on without opening yatai. It shows the app's pu
 ## No guessed states
 
 A link or smart item shows a state only when its source has reported one. Until then nothing is shown, never a default such as "to review" or "queued". When the source is not connected, it shows the "not connected" mark: a muted unplugged plug. When the source cannot see it, the same mark turns amber. The tooltip says which, and where to fix it.
+
+## Scrollbars
+
+The lists (Next, Inbox, Organizer, the drawers) always keep their vertical scrollbar, even when everything fits. A scrollbar that comes and goes changes the width, and every row would re-wrap.

@@ -108,7 +108,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .orow .rchev.ghost { display: inline-block; opacity: 0; }
 
 /* ---------- NEXT: cards ---------- */
-.cards { flex: 1; overflow-y: auto; outline: none; min-height: 0; background: var(--surface); user-select: none; }
+.cards { flex: 1; overflow-y: scroll; scrollbar-gutter: stable; outline: none; min-height: 0; background: var(--surface); user-select: none; }
 .cards > .cols { column-width: 420px; column-gap: 0; column-rule: var(--bw) solid var(--border); }
 .cardwrap { break-inside: avoid; }
 .card { background: var(--surface); border-bottom: var(--bw) solid var(--border); position: relative; transition: opacity var(--dur-2); animation: enter var(--dur-3) var(--ease); }
@@ -213,7 +213,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .capture:focus { outline: 2px solid var(--focus); outline-offset: -2px; }
 .inbox-body { flex: 1; min-height: 0; display: flex; flex-direction: row; }
 .inbox { min-height: 0; }
-.ilist { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; outline: none; }
+.ilist { flex: 1; overflow-y: scroll; scrollbar-gutter: stable; min-height: 0; display: flex; flex-direction: column; outline: none; }
 .irow { display: flex; gap: var(--sp-4); align-items: flex-start; border-bottom: var(--bw) solid var(--border); padding: calc(4px * var(--dens, 1)) 12px; cursor: default; animation: enter var(--dur-2) var(--ease); }
 .irow.draft { padding-right: 18px; } .irow.draft:hover { background: none; }
 .irow .first { line-height: var(--lh-body); overflow-wrap: anywhere; } .irow .body { font-size: var(--fs-sm); color: var(--text-muted); }
@@ -237,7 +237,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .tk { color: var(--text-muted); font-size: 10.5px; font-weight: var(--fw-regular); }
 
 /* ---------- ORGANIZER ---------- */
-.tree { flex: 1; overflow-y: auto; outline: none; background: var(--surface); min-height: 0; user-select: none; }
+.tree { flex: 1; overflow-y: scroll; scrollbar-gutter: stable; outline: none; background: var(--surface); min-height: 0; user-select: none; }
 .orow { position: relative; display: flex; align-items: center; gap: var(--sp-3); padding: calc(3px * var(--dens, 1)) 12px calc(3px * var(--dens, 1)) calc(12px + var(--d, 0) * 16px); min-height: calc(14px + 12px * var(--dens, 1)); }
 .orow:not(.has-kids) > .check { margin-left: 17px; }
 .orow.top > .ttl { font-weight: var(--fw-semi); }
@@ -357,7 +357,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 @keyframes spin { to { transform: rotate(360deg); } }
 .dtabs button { padding: 5px 9px; color: var(--text-muted); border-bottom: 2px solid transparent; border-radius: var(--r-xs) var(--r-xs) 0 0; }
 .dtabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: var(--fw-semi); }
-.dlist { flex: 1; overflow-y: auto; outline: none; min-height: 0; user-select: none; }
+.dlist { flex: 1; overflow-y: scroll; scrollbar-gutter: stable; outline: none; min-height: 0; user-select: none; }
 .drow { position: relative; display: flex; align-items: center; gap: var(--sp-4); padding: calc(5px * var(--dens, 1)) 12px; border-bottom: var(--bw) solid var(--border); }
 .drow .dmain { flex: 1; min-width: 0; }
 .drow .dt { line-height: var(--lh-body); overflow-wrap: anywhere; }
@@ -549,3 +549,4 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .set-cmd pre { flex: 1; min-width: 0; margin: 0; padding: 6px 8px; border-radius: var(--r-xs); background: var(--surface); border: var(--bw) solid var(--border); font-size: var(--fs-xs); white-space: pre-wrap; word-break: break-all; user-select: text; }
 .set-link { padding: 0; border: 0; background: none; color: var(--accent-text); cursor: pointer; font: inherit; } .set-link:hover { text-decoration: underline; }
 .set-cmd-label { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--text-muted); font-weight: var(--fw-semi); }
+/* the lists always keep their scrollbar (overflow-y: scroll): a scrollbar coming and going would re-wrap every row */
