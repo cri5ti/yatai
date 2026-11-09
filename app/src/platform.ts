@@ -173,6 +173,18 @@ export async function snapWindow(prev: Rect | null, gap = 20): Promise<{ phys: R
   return { phys: to, logical: logical(to) };
 }
 
+/** is the centre of this logical rect on some screen? (each screen judged at its own scale) */
+export async function logicalOnScreen(r: Rect): Promise<boolean> {
+  if (!isTauri) return false;
+  const { availableMonitors } = await import('@tauri-apps/api/window');
+  return (await availableMonitors()).some((m) => {
+    const a = m.workArea ?? { position: m.position, size: m.size };
+    const cx = (r.x + r.w / 2) * m.scaleFactor;
+    const cy = (r.y + r.h / 2) * m.scaleFactor;
+    return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+  });
+}
+
 /** is the centre of this physical rect inside some screen's work area? */
 async function onSomeScreen(p: Rect): Promise<boolean> {
   const { availableMonitors } = await import('@tauri-apps/api/window');

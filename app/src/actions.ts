@@ -7,6 +7,7 @@ import { acceptProposal, rejectProposal } from './proposal';
 import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { implFor, pluginById } from './plugins/registry';
+import { placedAt } from './popupguard';
 import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
@@ -72,6 +73,11 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
+/** a popup window was moved / resized by the user: remember it under its key (the main window's own placing is ignored) */
+export function setPopupRect(view: string, key: string, r: { x: number; y: number; w: number; h: number }) {
+  if (Date.now() - (placedAt[view] ?? 0) < 1200) return;
+  set((s) => ({ popups: { ...s.popups, [key]: r } }));
+}
 /** the item menu's Refresh: ask the sources about these items now */
 export async function refreshItems(ids: string[]) {
   const refs = [...new Set(get().nodes.filter((n) => ids.includes(n.id)).flatMap((n) => refsOf(n)))];

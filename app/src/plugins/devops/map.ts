@@ -18,6 +18,7 @@ export interface AdoBuild {
   requestedFor?: { displayName: string };
   queueTime?: string;
   startTime?: string;
+  finishTime?: string;
 }
 
 export function statusOf(b: Pick<AdoBuild, 'status' | 'result'>): BuildStatus {
@@ -50,7 +51,14 @@ export function entryOf(base: string, b: AdoBuild): Entry {
   const ref = `devops:build/${base}#${b.id}`;
   const snap = toSnapshot(ref, b);
   const st = statusOf(b);
-  const when = st === 'building' && b.startTime ? `started ${relTime(Date.parse(b.startTime))}` : b.queueTime ? `queued ${relTime(Date.parse(b.queueTime))}` : '';
+  const when =
+    b.finishTime && b.status === 'completed'
+      ? `finished ${relTime(Date.parse(b.finishTime))}`
+      : st === 'building' && b.startTime
+        ? `started ${relTime(Date.parse(b.startTime))}`
+        : b.queueTime
+          ? `queued ${relTime(Date.parse(b.queueTime))}`
+          : '';
   const who = b.requestedFor?.displayName;
   return {
     ref,
@@ -113,3 +121,13 @@ export const WIQL: Record<string, string> = {
   following: `SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@Follows) ORDER BY [System.ChangedDate] DESC`,
   mentions: `SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@RecentMentions) ORDER BY [System.ChangedDate] DESC`,
 };
+
+/** the Builds lists: which runs (statusFilter) and in what order */
+export const BUILD_LISTS: Record<string, { filter: string; order: string; today?: boolean; top: number }> = {
+  pending: { filter: 'notStarted,postponed', order: 'queueTimeDescending', top: 50 },
+  running: { filter: 'inProgress,cancelling', order: 'startTimeDescending', top: 50 },
+  recent: { filter: 'completed', order: 'finishTimeDescending', today: true, top: 20 },
+};
+/** newest first, by the time that matters for the list */
+export const byNewest = (a: AdoBuild, b: AdoBuild) =>
+  Date.parse(b.finishTime ?? b.startTime ?? b.queueTime ?? '') - Date.parse(a.finishTime ?? a.startTime ?? a.queueTime ?? '');

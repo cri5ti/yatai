@@ -26,15 +26,6 @@ interface Row {
   now?: number | 'before' | 'after';
 }
 
-const TITLES: Record<string, ReactNode> = {
-  outlook: <>📅 Outlook</>,
-  github: (
-    <>
-      <GhIcon /> GitHub
-    </>
-  ),
-  devops: <>◈ DevOps</>,
-};
 
 /** the tabs of a plugin's drawer (the mock's when only that exists, so the tabs are there before it is connected) */
 function tabsOf(s: State, kind: string): ListDef[] {
@@ -153,6 +144,9 @@ export function Drawer() {
   if (!d) return null;
 
   const tabs = tabsOf(s, d.kind);
+  // groups of tabs (DevOps: Builds · Work items): a first row, the tabs of the group the open one is in below it
+  const groups = [...new Set(tabs.flatMap((t) => (t.group ? [t.group] : [])))];
+  const group = tabs.find((t) => t.id === d.tab)?.group ?? groups[0];
   const all = rowsFor(s, d.kind, d.tab);
   const repos = [...new Set(all.flatMap((e) => (e.repo ? [e.repo] : [])))].sort();
   const canFilter = repos.length > 0 || picked.length > 0;
@@ -203,10 +197,18 @@ export function Drawer() {
 
   return (
     <div className={`drawer drawer-${d.kind}`} role="dialog" aria-label={`${d.kind} — bring things in`} onKeyDown={onKey}>
+      {groups.length > 1 && (
+        <div className="dgroups" role="tablist" aria-label="Kinds">
+          {groups.map((g) => (
+            <button key={g} role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => act.setDrawerTab(tabs.find((t) => t.group === g)!.id)}>
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="dhead">
-        <span className="dtitle">{(TITLES[d.kind] ?? d.kind)}</span>
         <div className="dtabs" role="tablist">
-          {tabs.map((t) => (
+          {tabs.filter((t) => !group || t.group === group).map((t) => (
             <button key={t.id} role="tab" aria-selected={d.tab === t.id} className={d.tab === t.id ? 'on' : ''} onClick={() => act.setDrawerTab(t.id)}>
               {t.label}
             </button>

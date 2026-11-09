@@ -68,6 +68,8 @@ export interface Entry {
 export interface ListDef {
   id: string;
   label: string;
+  /** lists of one kind under a first row of their own (DevOps: Builds · Work items) */
+  group?: string;
 }
 
 /** a meeting from a calendar-like plugin (minutes of the day) */

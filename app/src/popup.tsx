@@ -9,8 +9,8 @@ import { followHost } from './plugins/tracker';
 import type { State } from './store';
 import { act } from './act';
 import { isEditable, mod } from './kbd';
-import { emitTo, listen, openLinksWithModifier, startDrag } from './platform';
-import { VIEWS, isView, viewOfLabel, wanted } from './popups';
+import { emitTo, listen, openLinksWithModifier, startDrag, onWindowChange, windowRect } from './platform';
+import { VIEWS, isView, viewOfLabel, wanted, popupKey } from './popups';
 import type { View } from './popups';
 import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
@@ -107,5 +107,15 @@ async function boot() {
       );
   });
   await emitTo('main', 'yatai://popup-hello', view);
+  // remember where the user puts this window (the main window ignores the moves its own placing causes)
+  let t: ReturnType<typeof setTimeout> | undefined;
+  void onWindowChange(() => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const r = await windowRect();
+      const s = get();
+      if (r && isView(view) && wanted(view, s)) act.setPopupRect(view, popupKey(view, s), r);
+    }, 400);
+  });
 }
 void boot();

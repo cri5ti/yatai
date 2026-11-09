@@ -54,6 +54,8 @@
 - [ ] Window snapping: drag the window to within 20 px of any screen edge and let go → flush with it (left / right / top / bottom, below the menu bar / above the taskbar); resize an edge close to the screen's → it stretches to it; 21 px away → left alone; the snapped place is what is remembered. Check it does not jump while you are still holding the mouse (it settles 300 ms after the last move)
 - [ ] Next / Inbox / Organizer / drawers: the vertical scrollbar is always there (Windows), so rows no longer re-wrap as the list grows or shrinks
 - [ ] DevOps drawer with a real PAT (Build: Read + Work Items: Read): Assigned to me / Created by me / Following / Mentions list real work items; ⏎ brings one in as a smart item; changing its state in Azure DevOps shows within a minute (chip + toast). A PAT without Work Items: Read says so in the list
+- [ ] Popups remember where you put them: move / resize the GitHub drawer, close it, open it again → same place; the Outlook and DevOps drawers each keep their own place (switch between them with the footer buttons); settings, AI chat, help and the developer panel too; quit and relaunch → still there; unplug the screen it was on → back beside the main window. A drawer never moved still follows the main window
+- [ ] Drawers: no title in the header any more (only the tabs, still draggable). DevOps: a first row Builds · Work items, the tabs of that group below (Builds: Pending / Running / Recent, today's last 20 finished; Work items: Assigned to me / Created by me / Following / Mentions); ←→ still walks every tab
 - [ ] Tray icon: purple diamond normally; a highlight anywhere → yellow tile with the purple diamond, back to purple once they are all seen; during a meeting (developer panel clock, or a real one) → blue tile with a white diamond; check it is readable in the macOS menu bar (light and dark) and the Windows tray
 - [ ] Next: the meeting in progress has a muted blue card with a blue bar; the Outlook drawer's row for it too
 - [ ] Drawers: `requests: N` at the right of the footer, rising as polls run; GitHub also shows the points left (hover: totals and reset time); with 20 PRs in Next it should stay around 60 requests an hour, plus a full fetch only when a PR changes
@@ -69,7 +71,6 @@
 ## Gaps in what's there
 
 - [ ] GitHub: back off on a rate limit (wait for `retry-after` / `resetAt` instead of retrying at the normal interval)
-- [ ] Popups: their size / position is not remembered (always placed beside the main window)
 - [ ] Popups on Windows / Linux: owned windows do not follow the main one when it moves; Wayland ignores window positions
 - [ ] Popups are square-cornered (rounded + see-through needs `macOSPrivateApi`)
 - [ ] Context menus could become native menus (Tauri menu API) instead of in-page

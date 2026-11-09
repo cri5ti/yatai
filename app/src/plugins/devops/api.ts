@@ -3,7 +3,7 @@ import { get } from '../../store';
 import { pluginHttp, pluginSecretSet, pluginSecretStatus } from '../../platform';
 import { AuthError } from '../types';
 import type { Entry, ListDef, Snapshot } from '../types';
-import { WIQL, WI_FIELDS, byRunning, entryOf, toSnapshot, wiEntry, wiSnapshot } from './map';
+import { BUILD_LISTS, WIQL, WI_FIELDS, byNewest, entryOf, toSnapshot, wiEntry, wiSnapshot } from './map';
 import type { AdoWorkItem } from './map';
 import type { AdoBuild } from './map';
 
@@ -109,11 +109,13 @@ export async function fetchBuilds(refs: string[]): Promise<Snapshot[]> {
 
 /* ---------- the Pipelines list: every run that is going or waiting, across the organization's projects ---------- */
 export const LISTS: ListDef[] = [
-  { id: 'pipelines', label: 'Pipelines' },
-  { id: 'mine', label: 'Assigned to me' },
-  { id: 'created', label: 'Created by me' },
-  { id: 'following', label: 'Following' },
-  { id: 'mentions', label: 'Mentions' },
+  { id: 'pending', label: 'Pending', group: 'Builds' },
+  { id: 'running', label: 'Running', group: 'Builds' },
+  { id: 'recent', label: 'Recent', group: 'Builds' },
+  { id: 'mine', label: 'Assigned to me', group: 'Work items' },
+  { id: 'created', label: 'Created by me', group: 'Work items' },
+  { id: 'following', label: 'Following', group: 'Work items' },
+  { id: 'mentions', label: 'Mentions', group: 'Work items' },
 ];
 
 // the project list changes rarely: asked once an hour
@@ -125,18 +127,26 @@ async function projectNames(base: string): Promise<string[]> {
   return projects.names;
 }
 
-/** one request per project (six at a time); a project the token cannot read is left out */
-export async function listPipelines(): Promise<Entry[]> {
+/**
+ * A Builds list (pending / running / recent: today's finished runs, the latest 20): one request per project, six at
+ * a time; a project the token cannot read is left out.
+ */
+export async function listBuilds(kind: string): Promise<Entry[]> {
+  const spec = BUILD_LISTS[kind];
+  if (!spec) return [];
   const { base } = org();
   const names = await projectNames(base);
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
   const found: { at: string; b: import('./map').AdoBuild }[] = [];
   let failed: unknown = null;
   for (let i = 0; i < names.length; i += 6) {
     await Promise.all(
       names.slice(i, i + 6).map(async (name) => {
         const at = `${base.replace(/^https:\/\//, '')}/${encodeURIComponent(name)}`;
+        const q = `statusFilter=${spec.filter}&queryOrder=${spec.order}&$top=${spec.top}${spec.today ? `&minTime=${encodeURIComponent(since.toISOString())}` : ''}`;
         try {
-          const d = await call<{ value: import('./map').AdoBuild[] }>(`https://${at}/_apis/build/builds?statusFilter=inProgress,notStarted,postponed,cancelling&queryOrder=queueTimeDescending&$top=50&${V}`);
+          const d = await call<{ value: import('./map').AdoBuild[] }>(`https://${at}/_apis/build/builds?${q}&${V}`);
           for (const b of d.value) found.push({ at, b });
         } catch (e) {
           if (e instanceof AuthError) throw e;
@@ -146,7 +156,10 @@ export async function listPipelines(): Promise<Entry[]> {
     );
   }
   if (!found.length && failed) throw failed;
-  return found.sort((x, y) => byRunning(x.b, y.b)).map((x) => entryOf(x.at, x.b));
+  return found
+    .sort((x, y) => byNewest(x.b, y.b))
+    .slice(0, spec.top)
+    .map((x) => entryOf(x.at, x.b));
 }
 
 /* ---------- work items: the drawer lists (a WIQL query + one batch) and tracking the ones brought in ---------- */

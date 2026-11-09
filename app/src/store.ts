@@ -220,6 +220,8 @@ export interface State extends Doc {
   runs: Record<string, BuildStatus>; // the MOCK DevOps's truth (ref -> status), set from the developer panel
   /** plugin id -> requests made (times in the last hour, total since start) and, where the source says, its quota */
   reqs: Record<string, ReqCount>;
+  /** where the user last put each popup window (logical px): 'settings', 'ai', … and one per drawer: 'drawer:github' */
+  popups: Record<string, { x: number; y: number; w: number; h: number }>;
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
@@ -388,6 +390,7 @@ export function initialState(): State {
     prc: {},
     runs: {},
     reqs: {},
+    popups: {},
     snaps: {},
     agenda: {},
     lists: {},

@@ -14,7 +14,8 @@ import { effLayout, get, subscribe } from './store';
 import type { State } from './store';
 import type * as Actions from './actions';
 import { runAct } from './act';
-import { emitTo, invoke, isTauri, listen, popupRect } from './platform';
+import { emitTo, invoke, isTauri, listen, logicalOnScreen, popupRect } from './platform';
+import { placedAt } from './popupguard';
 import type { Placement } from './platform';
 
 export interface PopupSpec extends Placement {
@@ -39,6 +40,9 @@ export const isView = (v: unknown): v is View => typeof v === 'string' && v in V
 export const viewOfLabel = (label: string) => label.replace(/^popup-/, '');
 const label = (v: View) => `popup-${v}`;
 
+/** what a popup's place is remembered under: the view, and for the drawer each source of its own */
+export const popupKey = (v: View, s: State) => (v === 'drawer' ? `drawer:${s.drawer?.kind ?? ''}` : v);
+
 /** on screen right now: open in the state, and the main window is not hidden away */
 export const wanted = (v: View, s: State) => (VIEWS[v] as PopupSpec).open(s) && !s.hidden;
 
@@ -58,6 +62,7 @@ export function closeView(v: View) {
 
 /* ---------- the main window's side ---------- */
 const shown = new Set<View>(); // asked to be on screen
+const keys: Partial<Record<View, string>> = {}; // the place each shown one was put for (the drawer's source)
 const loaded = new Set<View>(); // the window's page is up and listening
 const chain: Partial<Record<View, Promise<unknown>>> = {};
 let layoutKey = '';
@@ -67,7 +72,10 @@ function apply(v: View, focus: boolean) {
   chain[v] = (chain[v] ?? Promise.resolve())
     .then(async () => {
       if (!shown.has(v)) return invoke('popup_close', { view: v });
-      const r = await popupRect(VIEWS[v]);
+      // where the user last put it (if that is still on a screen), else beside / over the main window
+      const saved = get().popups[popupKey(v, get())];
+      const r = saved && (await logicalOnScreen(saved)) ? saved : await popupRect(VIEWS[v]);
+      placedAt[v] = Date.now();
       if (!shown.has(v)) return; // closed while measuring: the next queued step hides it
       return invoke('popup_open', { view: v, x: r.x, y: r.y, w: r.w, h: r.h, focus });
     })
@@ -81,11 +89,14 @@ function sync() {
   layoutKey = lk;
   for (const v of Object.keys(VIEWS) as View[]) {
     const want = wanted(v, s);
-    if (want && !shown.has(v)) (shown.add(v), apply(v, true));
+    const key = popupKey(v, s);
+    if (want && !shown.has(v)) (shown.add(v), (keys[v] = key), apply(v, true));
     else if (!want && shown.has(v)) (shown.delete(v), apply(v, false));
+    // another source in the same drawer window: to that one's place
+    else if (want && keys[v] !== key) ((keys[v] = key), apply(v, false));
   }
-  // the main window is being moved / resized for its new layout: follow it once it got there
-  if (relayout) setTimeout(() => shown.forEach((v) => VIEWS[v].place === 'beside' && apply(v, false)), 450);
+  // the main window is being moved / resized for its new layout: follow it once it got there (not the ones the user placed)
+  if (relayout) setTimeout(() => shown.forEach((v) => VIEWS[v].place === 'beside' && !get().popups[popupKey(v, get())] && apply(v, false)), 450);
 }
 
 let queued = false;

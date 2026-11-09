@@ -560,3 +560,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .displbl { font-size: var(--fs-sm); color: var(--text-muted); }
 .dispctl .ugrp { gap: 2px; }
 .dispctl .ugrp button { gap: 6px; }
+
+/* a drawer with groups of tabs (DevOps: Builds · Work items): the groups on a row of their own, above the tabs */
+.dgroups { display: flex; gap: 4px; padding: 8px 12px 4px; flex: none; }
+.dgroups button { padding: 4px 12px; border-radius: 999px; color: var(--text-muted); font-weight: var(--fw-semi); }
+.dgroups button:hover { background: var(--hover); color: var(--text); }
+.dgroups button.on { background: var(--accent-soft); color: var(--accent-text); }
+.popup-body .dgroups { cursor: grab; }

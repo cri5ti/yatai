@@ -61,7 +61,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 |---|---|---|
 | **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row). One line per meeting with its time range. Today has a red now-line: through the meeting in progress, as far as it has got, or between meetings (gaps are not drawn to scale). Past meetings are faded; double bookings get an accent bar and time |
 | **GitHub** | Assigned to me · My PRs · Mentions | An item whose text is the PR link (rendered per §2) |
-| **DevOps** | Pipelines (every run going or waiting) · Mentions · My work items · Created by me (work items: demo only) | A run link (tracked like a PR), or a work-item (smart) item |
+| **DevOps** | two rows. **Builds**: Pending · Running · Recent (today). **Work items**: Assigned to me · Created by me · Following · Mentions | A run link (tracked like a PR), or a work-item (smart) item |
 
 - **Add to Next** (⏎) or, for GitHub and DevOps, **to the Inbox** (I) to triage later. Things already in yatai show "✓ in yatai" and can't be added twice.
 - Keyboard-first like everything else: ↑↓ choose, ←→ switch tab, Esc closes and returns focus to the list.
@@ -161,3 +161,7 @@ The lists (Next, Inbox, Organizer, the drawers) always keep their vertical scrol
 ## Display controls
 
 UI scale and row density are behind the **Aa** button at the right of the footer: a small pop-over that Esc or a click elsewhere closes. They are also in Settings → Display. They apply at once (no Save), from either place.
+
+## Popup windows keep their place
+
+Settings, help, the AI chat, the developer panel and the drawers open where you last put them (moved or resized), kept per drawer source: the GitHub, Outlook and DevOps drawers each have their own place. A place that is no longer on any screen is dropped, and the popup goes back beside the main window. Popups you never moved still follow the main window. The drawers carry no title: the tabs (and, for DevOps, the Builds · Work items row) are the header, and dragging it moves the window.
