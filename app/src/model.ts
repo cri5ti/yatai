@@ -88,8 +88,12 @@ export function buildLinks(text: string): BuildLink[] {
 }
 export const buildMatch = (url: string) => buildLinks(url).find((l) => l.url === url) ?? null;
 export const buildUrl = (base: string, id: string) => `https://${base}/_build/results?buildId=${id}`;
-/** a run's state as the DevOps plugin last reported it ('queued' until it has) */
-export const buildStatusOf = (snaps: Record<string, Snapshot>, ref: string): BuildStatus => (snaps[ref]?.view.glyph as BuildStatus | undefined) ?? 'queued';
+const BUILD_STATES: BuildStatus[] = ['queued', 'building', 'failed', 'done', 'cancelled'];
+/** a run's state as the DevOps plugin last reported it; null when it has not (not tracked, not connected, can't see it) */
+export const buildStatusOf = (snaps: Record<string, Snapshot>, ref: string): BuildStatus | null => {
+  const sn = snaps[ref];
+  return sn && !sn.gone && BUILD_STATES.includes(sn.view.glyph as BuildStatus) ? (sn.view.glyph as BuildStatus) : null;
+};
 
 /* ---------- plugin refs and their snapshots ---------- */
 /** the ref an item's `smart` badge tracks; items made before refs existed derive it */

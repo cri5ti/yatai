@@ -79,7 +79,7 @@ export async function fetchBuilds(refs: string[]): Promise<Snapshot[]> {
           ref,
           name,
           title: name,
-          view: { glyph: 'queued', label: 'no access', tone: 'warn' },
+          view: { glyph: 'unknown', label: 'no access', tone: 'warn' },
           alerts: [{ key: 'gone', tone: 'warn', text: `Can't see ${name}`, toast: `${name}: Azure DevOps ${msg}` }],
           rev: 'gone',
           gone: true,

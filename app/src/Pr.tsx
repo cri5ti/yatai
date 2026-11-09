@@ -106,15 +106,26 @@ export function BuildState({ status }: { status: BuildStatus }) {
 /** a pipeline run link shown as `◇ Project #123 [state]` */
 export function BuildRef({ url, base, project, id }: { url: string; base: string; project: string; id: string }) {
   const s = useS();
-  const st = buildStatusOf(s.snaps, `devops:build/${base}#${id}`);
-  const name = s.snaps[`devops:build/${base}#${id}`]?.name;
+  const ref = `devops:build/${base}#${id}`;
+  const st = buildStatusOf(s.snaps, ref);
+  const sn = s.snaps[ref];
+  // a project in the url may be its id (a GUID): no use as a label
+  const name = sn && !sn.gone ? sn.name : `${/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(project) ? 'run' : project} #${id}`;
+  // no state known: say why rather than guess one
+  const why = st
+    ? BUILD_LABELS[st]
+    : sn?.gone
+      ? sn.alerts[0]?.toast ?? sn.alerts[0]?.text ?? 'Azure DevOps cannot show it'
+      : !s.demo && s.accounts.devops?.state !== 'connected'
+        ? 'state unknown: DevOps is not connected (Settings → DevOps)'
+        : 'state unknown: only links on an item’s first line are followed, while the item is open';
   return (
-    <span className={`pr bs-${st}`}>
+    <span className={`pr bs-${st ?? 'unknown'}`}>
       <span className="ado">◇</span>
-      <a href={url} target="_blank" rel="noreferrer" title={`${name ?? project} — ${BUILD_LABELS[st]} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
-        {name ?? `${project} #${id}`}
+      <a href={url} target="_blank" rel="noreferrer" title={`${name} — ${why} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
+        {name}
       </a>
-      <BuildState status={st} />
+      {st && <BuildState status={st} />}
     </span>
   );
 }
