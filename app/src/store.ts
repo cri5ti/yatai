@@ -4,7 +4,9 @@ import type { AccountState, AgendaEvent, ListState, Snapshot } from './plugins/t
 export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
 /** what the (mocked) GitHub connector reports for a pull request */
-export type PrStatus = 'draft' | 'review' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export type PrStatus = 'draft' | 'review' | 'building' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+/** an Azure DevOps pipeline run (build) */
+export type BuildStatus = 'queued' | 'building' | 'failed' | 'done' | 'cancelled';
 /** the id of the plugin whose drawer is open ('outlook', 'github', 'devops', …) */
 export type DrawerKind = string;
 export type Layout = 'dock' | 'float' | 'max' | 'pill';
@@ -25,6 +27,7 @@ export interface Node {
   due?: string; // yyyy-mm-dd
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
+  notify?: boolean; // tell me about every change of what it tracks (a PR, a pipeline run): toast + OS notification
   smart?: { source: SmartSource; ref?: string }; // ref: what the plugin tracks ('devops:wi/18233'); older items derive it (model.ts refsOf)
 }
 
@@ -182,6 +185,7 @@ export interface Settings {
   effort: string; // reasoning effort for reasoning models; '' = model default
   baseUrl: string; // '' = https://api.openai.com/v1
   githubHost: string; // '' = github.com; else a GitHub Enterprise host (its token is in the keychain)
+  devopsOrg: string; // Azure DevOps organization: 'acme', 'dev.azure.com/acme' or 'acme.visualstudio.com' (its token is in the keychain)
 }
 
 export interface State extends Doc {
@@ -207,6 +211,7 @@ export interface State extends Doc {
   dark: boolean;
   prs: Record<string, PrStatus>; // the MOCK GitHub's truth ('org/repo#123' -> status), set from the developer panel
   prc: Record<string, number>; // …and its unresolved review comments
+  runs: Record<string, BuildStatus>; // the MOCK DevOps's truth (ref -> status), set from the developer panel
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
@@ -341,7 +346,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '' };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '' };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
@@ -373,6 +378,7 @@ export function initialState(): State {
     dark: false,
     prs: {},
     prc: {},
+    runs: {},
     snaps: {},
     agenda: {},
     lists: {},
@@ -468,7 +474,7 @@ export const useS = () => useSyncExternalStore(subscribe, get);
 
 /** developer panel: replace the whole document (empty, or the demo data); UI preferences stay */
 export function resetDoc(doc: Doc, demo: boolean) {
-  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, snaps: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
+  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, runs: {}, snaps: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
   emit();
 }
 export const resetAll = () => resetDoc(emptyDoc(), false);

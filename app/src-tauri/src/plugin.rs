@@ -69,6 +69,8 @@ pub struct HttpReq {
     body: Option<String>,
     /// add the plugin's token (only ever to the host it was stored for)
     auth: bool,
+    /// how: "bearer" (default) or "basic" (an empty user name and the token as password: Azure DevOps personal access tokens)
+    scheme: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -110,7 +112,7 @@ pub async fn plugin_http(req: HttpReq) -> Result<HttpRes, String> {
         }
     }
     if let Some((_, t)) = secret {
-        rb = rb.bearer_auth(t);
+        rb = if req.scheme.as_deref() == Some("basic") { rb.basic_auth("", Some(t)) } else { rb.bearer_auth(t) };
     }
     if let Some(b) = req.body {
         rb = rb.body(b);

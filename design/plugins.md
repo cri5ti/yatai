@@ -24,9 +24,9 @@ What the POC and the app already tell us about what each source must deliver:
 
 | Source | What the UX needs from it |
 |---|---|
-| **GitHub** | (a) a pasted PR link becomes a smart item with a live state: draft / to review / has feedback (N unresolved) / build fails / ready / merged / closed; (b) a change (build went red, new comments, approved) highlights the item and toasts; (c) drawer lists: *assigned to me* (review requested), *my PRs*, *mentions*; (d) "bring in" to Next or Inbox: under the current item (the row picked in Next, or the Organizer's selection), or beside it when that is itself a PR / work item / run |
+| **GitHub** | (a) a pasted PR link becomes a smart item with a live state: draft / to review / checks running (queued or in progress: a passing state, not announced) / has feedback (N unresolved) / build fails / ready / merged / closed; (b) a change (build went red, new comments, approved) highlights the item and toasts; (c) drawer lists: *assigned to me* (review requested), *my PRs*, *mentions*; (d) "bring in" to Next or Inbox: under the current item (the row picked in Next, or the Organizer's selection), or beside it when that is itself a PR / work item / run |
 | **Outlook** | (a) today's events, each with start / duration / location; (b) a meeting you brought into Next stays in sync: moved, cancelled, renamed → highlight + toast; (c) the drawer lists today's agenda; (d) read-only (moving a meeting in yatai is local only) |
-| **Azure DevOps** | (a) work items: *mentions*, *mine*, *created by me*, with type + state; (b) a linked work item chips its state changes (Active → Resolved); (c) pipeline runs: "Deploy 2.4 · stage 2/4", failed at stage X |
+| **Azure DevOps** | (a) work items: *mentions*, *mine*, *created by me*, with type + state; (b) a linked work item chips its state changes (Active → Resolved); (c) pipeline runs: a pasted `…/_build/results?buildId=N` link shows the run's state: queued / building / failed / done (or cancelled); a failed run alerts, a finished one is announced |
 | **Later** | AI sessions (local, no network: done / needs feedback), Teams mentions, Jira / Linear issues, GitLab MRs |
 
 The common shape: a source supplies **links it can recognise**, **live state for things yatai tracks**, **lists to browse**, and sometimes **time-bound events**. Everything else (highlighting, toasts, ordering in Next, chips, bring-in, persistence) is the same for every source and belongs in the core.
@@ -206,6 +206,11 @@ Example, GitHub PR with a red check and 3 unresolved threads:
 
 The existing `Flags` / developer-panel toggles keep working **as the mock plugins' input**: toggling "PR build failing" changes what the mock GitHub plugin returns on its next `fetch`, then the normal diff produces the highlight and toast. The mock path therefore exercises the same code as the live path.
 
+
+### 6.1 Notify me when it changes
+
+Any item that tracks something (a PR link, a run link, a smart item) has **Notify me when it changes** in its menu (`/notify`; several selected items toggle together). It is saved on the item (`notify`). For such an item, every change of state counts: GitHub's *checks running*, a run going queued → building → done. Normally only what wants attention counts. Each change is a toast and a highlight, as always. When yatai is hidden or not in front, it is also a **system notification** (`tauri-plugin-notification`; it asks for permission the first time). Rows that notify show a 🔔.
+
 ## 7. Data model changes
 
 Small and additive; fits `design.md` §7 (`smart_binding`, `event`).
@@ -280,11 +285,11 @@ These match the seven states and chip texts the POC already designed (`alertsFor
 
 Real version later: Microsoft Graph `GET /me/calendarView?startDateTime&endDateTime` (`Calendars.Read`), device-code flow against Entra, `Prefer: outlook.timezone`. Blocked on the open question in `design.md` §11 (can an app registration be made in the work tenant). The `cli` auth option (`az account get-access-token --resource https://graph.microsoft.com`) may be a way around that for a dev machine.
 
-### 8.4 Azure DevOps (mocked, through the plugin system)
+### 8.4 Azure DevOps (pipeline runs live; work items mocked)
 
-`links` (`dev.azure.com/<org>/<proj>/_workitems/edit/<id>`, `…/_build/results?buildId=<id>`), `track` (work-item state, pipeline run + stage), `lists` (*Mentions*, *My work items*, *Created by me*) over mock data. Today's `WI 18233` text convention in titles is replaced by a ref; the title keeps a human label.
-
-Real version later: REST `_apis/wit/wiql` + `workitemsbatch`, `_apis/build/builds`; PAT (Basic) first, Entra device flow second.
+- **Pipeline runs are live.** A run link (`https://dev.azure.com/<org>/<project>/_build/results?buildId=<id>`, or `<org>.visualstudio.com/…`) in an item's first line is a ref `devops:build/<host>/<org>/<project>#<id>`. The item renders it as `◇ name #id` plus a state icon: queued, building (spinning), failed, done, cancelled. The tracker reads `GET …/<project>/_apis/build/builds/<id>`; `statusOf` maps `status` + `result` to the state (partially succeeded = done with a warning). Settings → DevOps takes the organization (`acme`, `dev.azure.com/acme` or `acme.visualstudio.com`) and a PAT with *Build (Read)*. The token is bound to that host and sent by Rust as Basic auth (`plugin_http` with `scheme: "basic"`). A run of another organization, or one the token cannot see, says so instead of looking queued.
+- **Announcing a run:** queued and building are *passing* states (`View.quiet`): moving into them is not a toast. Failing is an alert (toast + highlight). Finishing (done / cancelled) is announced by its change of state. An item set to notify (§6.1) hears about every step.
+- **Mocked:** work items (`links`/`track` by the `WI 18233` convention, `lists` *Mentions*, *My work items*, *Created by me*), the smart "Deploy 2.4" run of the demo data, and the *Pipelines* drawer list. The developer panel sets each mocked run's state. Later: work items over REST (`_apis/wit/wiql` + `workitemsbatch`), a live pipelines list, Entra device flow.
 
 ## 9. Adding a source later (what it costs)
 

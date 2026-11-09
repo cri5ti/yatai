@@ -1,10 +1,12 @@
 import { useS } from './store';
-import type { PrStatus } from './store';
-import { prCountOf, prStatusOf } from './model';
+import type { BuildStatus, PrStatus } from './store';
+import { buildStatusOf, prCountOf, prStatusOf } from './model';
+import { BUILD_LABELS } from './plugins/devops/map';
 
 export const PR_STATUSES: { id: PrStatus; label: string }[] = [
   { id: 'draft', label: 'draft' },
   { id: 'review', label: 'to review' },
+  { id: 'building', label: 'checks running' },
   { id: 'feedback', label: 'has feedback' },
   { id: 'failing', label: 'build fails' },
   { id: 'ready', label: 'ready' },
@@ -38,6 +40,7 @@ const GLYPH: Record<PrStatus, JSX.Element | null> = {
       <circle cx="8" cy="8" r="2.3" fill="currentColor" />
     </>
   ),
+  building: <path d="M8 2.2a5.8 5.8 0 1 0 5.8 5.8" {...line} strokeWidth="2.1" />,
   feedback: null,
   failing: <path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8" {...line} strokeWidth="2.2" />,
   ready: <path d="M3.8 8.4l3 3 5.6-6.4" {...line} strokeWidth="2.2" />,
@@ -76,6 +79,43 @@ export function PrState({ status, comments = DEFAULT_COMMENTS }: { status: PrSta
         {GLYPH[status]}
       </g>
     </svg>
+  );
+}
+
+/* ---------- Azure DevOps pipeline runs ---------- */
+export const BUILD_STATUSES: { id: BuildStatus; label: string }[] = (Object.keys(BUILD_LABELS) as BuildStatus[]).map((id) => ({ id, label: BUILD_LABELS[id] }));
+const BGLYPH: Record<BuildStatus, JSX.Element> = {
+  queued: <path d="M8 4.2V8l2.6 1.6" {...line} strokeWidth="2" />,
+  building: <path d="M8 2.2a5.8 5.8 0 1 0 5.8 5.8" {...line} strokeWidth="2.1" />,
+  failed: <path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8" {...line} strokeWidth="2.2" />,
+  done: <path d="M3.8 8.4l3 3 5.6-6.4" {...line} strokeWidth="2.2" />,
+  cancelled: <path d="M4.8 11.2l6.4-6.4" {...line} strokeWidth="2" />,
+};
+/** a run's state as a tiny icon (building spins) */
+export function BuildState({ status }: { status: BuildStatus }) {
+  return (
+    <svg className={`prsi bs-${status}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={BUILD_LABELS[status]}>
+      <title>{BUILD_LABELS[status]}</title>
+      <circle cx="8" cy="8" r="8" fill="currentColor" />
+      <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
+        <g className={status === 'building' ? 'spin' : undefined}>{BGLYPH[status]}</g>
+      </g>
+    </svg>
+  );
+}
+/** a pipeline run link shown as `◇ Project #123 [state]` */
+export function BuildRef({ url, base, project, id }: { url: string; base: string; project: string; id: string }) {
+  const s = useS();
+  const st = buildStatusOf(s.snaps, `devops:build/${base}#${id}`);
+  const name = s.snaps[`devops:build/${base}#${id}`]?.name;
+  return (
+    <span className={`pr bs-${st}`}>
+      <span className="ado">◇</span>
+      <a href={url} target="_blank" rel="noreferrer" title={`${name ?? project} — ${BUILD_LABELS[st]} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
+        {name ?? `${project} #${id}`}
+      </a>
+      <BuildState status={st} />
+    </span>
   );
 }
 

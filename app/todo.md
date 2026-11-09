@@ -45,6 +45,10 @@
 - [ ] Next drag: drop on a row's top / bottom edge = before / after it, middle = into it (any item, anywhere but into itself); gaps between cards move a top row's whole card, or split a sub-item out; nothing stays see-through after a drop (Next, Organizer, Inbox → Organizer)
 - [ ] Bring in from the GitHub / DevOps drawer (⏎): lands under the item picked in Next (or the Organizer's selection), or right after it when that item is itself a PR / work item; with nothing picked, top level
 
+- [ ] GitHub: a PR whose checks are queued / running shows the blue "checks running" icon (spinning arc); it is not announced, the result is
+- [ ] /notify (row menu: Notify me when it changes) on a PR or run item: 🔔 on the row; every change of state toasts; with yatai hidden or in the background a system notification appears (first time: the OS asks for permission; macOS / Windows); toggling again stops it; survives a restart
+- [ ] DevOps drawer → Pipelines (demo connectors): runs with their state icons; ⏎ brings one in; the developer panel's "DevOps pipeline runs" moves it queued → building → failed / done
+
 - [ ] GitHub drawer: funnel icon (or F) opens a filter bar with a repository drop-down: tick several repos (searchable, with counts; ↑↓ ⏎ in the search box), the list narrows to them, Clear / Esc resets; the icon is filled while a filter is on
 
 ## Gaps in what's there
@@ -90,7 +94,12 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] if some recurring meeting is wrong or on the wrong day, send me that VEVENT (without attendees) so the parser can be fixed
   - [ ] Windows: never run yet (see above); the link fetch is plain https from Rust
   - [ ] later, if the admin approves: Microsoft Graph `calendarView` with device code, which is real time (swap `plugins/outlook/index.ts`'s `live`)
-- [ ] **Azure DevOps**: work items (mentions, mine, created by me), pipeline runs: replace the mock in `plugins/devops.ts` (PAT first)
+- [ ] **Azure DevOps**, check by hand with a real PAT (Build: Read)
+  - [ ] Settings → DevOps: organization `dev.azure.com/<org>` + PAT → "Connected as …"; a wrong PAT → "token rejected", nothing kept
+  - [ ] paste a run link (`…/_build/results?buildId=N`) into an item in Next: it shows `◇ pipeline #N` with queued / building (spinning) / failed / done; queue a new run and watch it move (polled every 30 s)
+  - [ ] a run that fails: toast + highlight; one that finishes: "…: done" toast; queued → building is quiet unless the item notifies
+  - [ ] a run link of another organization says it can't be seen
+- [ ] Azure DevOps: work items and the drawer lists over REST (`_apis/wit/wiql`, `workitemsbatch`, recent builds); the drawer shows the mocked tabs only with the demo connectors
 - [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback: hooks, logs, or APIs?
 - [ ] Polling while the window is hidden: it keeps running in the webview at a slower rate (3 min); decide if it needs to move to Rust
 - [ ] The tracker only looks at items in Next (and items bound with `smart`); an item in the Organizer shows the last state it had

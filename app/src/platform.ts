@@ -269,9 +269,28 @@ export interface HttpRes {
   body: string;
 }
 /** an https request made by Rust; `auth` adds the plugin's token (only to the host it was stored for) */
-export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean }): Promise<HttpRes> {
+export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean; scheme?: 'bearer' | 'basic' }): Promise<HttpRes> {
   if (!isTauri) throw new Error('This source needs the desktop app');
-  return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth } });
+  return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth, scheme: req.scheme } });
+}
+
+/* ---------- OS notifications ---------- */
+let notifyOk: Promise<boolean> | null = null;
+/** a system notification (asks for permission the first time); the browser build uses the web Notification API */
+export async function osNotify(title: string, body: string) {
+  try {
+    if (isTauri) {
+      const n = await import('@tauri-apps/plugin-notification');
+      notifyOk ??= (async () => (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted')();
+      if (await notifyOk) n.sendNotification({ title, body });
+      return;
+    }
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission === 'granted') new Notification(title, { body });
+  } catch (e) {
+    console.warn('yatai: notification failed', e);
+  }
 }
 
 /* ---------- links ---------- */

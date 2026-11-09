@@ -1,6 +1,6 @@
 import { get, set, uid } from './store';
 import type { MenuItem, Node, Target } from './store';
-import { nextModel, plain } from './model';
+import { nextModel, plain, refsOf } from './model';
 import type { CardM } from './model';
 import { EST_KEYS } from './kbd';
 import { breadcrumb } from './mock';
@@ -124,6 +124,8 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });
   if (c.card && !c.row)
     items.push({ id: 'fold', label: folded(c.card) ? 'Expand' : 'Collapse', cmd: 'collapse', keys: folded(c.card) ? '→' : '←', icon: '▾', run: () => A.toggleCardOpen(c.card!, folded(c.card!)) });
+  if (refsOf(n).length)
+    items.push({ id: 'notify', label: n.notify ? 'Stop notifying me' : 'Notify me when it changes', cmd: 'notify', icon: n.notify ? '🔕' : '🔔', tip: 'Every change of its state (queued, building, failed, done…): a toast and a system notification when yatai is in the background', run: () => A.toggleNotify([n.id]) });
   items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
   items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo([n.id], 1) });
   items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems([n.id]) });
@@ -158,6 +160,9 @@ function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
     { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },
     { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => ids.forEach((id) => A.toggleToday(id)) },
     { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(ids) },
+    ...(ids.some((id) => { const x = get().nodes.find((n) => n.id === id); return !!x && refsOf(x).length > 0; })
+      ? [{ id: 'notify', label: 'Notify me when they change (toggle)', cmd: 'notify', icon: '🔔', run: () => A.toggleNotify(ids) }]
+      : []),
     { id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate(ids) },
     { id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon(ids) },
     { id: 'delete', label: `Delete ${ids.length} items`, cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, run: () => A.removeNodes(ids) },

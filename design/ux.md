@@ -61,7 +61,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 |---|---|---|
 | **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row) |
 | **GitHub** | Assigned to me · My PRs · Mentions | An item whose text is the PR link (rendered per §2) |
-| **DevOps** | Mentions · My work items · Created by me | A work-item (smart) item |
+| **DevOps** | Pipelines · Mentions · My work items · Created by me | A run link (tracked like a PR), or a work-item (smart) item |
 
 - **Add to Next** (⏎) or, for GitHub and DevOps, **to the Inbox** (I) to triage later. Things already in yatai show "✓ in yatai" and can't be added twice.
 - Keyboard-first like everything else: ↑↓ choose, ←→ switch tab, Esc closes and returns focus to the list.

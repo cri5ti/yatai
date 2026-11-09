@@ -7,6 +7,7 @@ export const LABELS: Record<string, string> = {
   draft: 'draft',
   review: 'to review',
   feedback: 'has feedback',
+  building: 'checks running',
   failing: 'build fails',
   ready: 'ready',
   merged: 'merged',
@@ -24,9 +25,10 @@ export interface Facts {
   changesRequested: boolean;
   approved: boolean;
   checksOk: boolean; // every check passed (or there are none)
+  pending: boolean; // checks queued or still running
   conflicts: boolean;
 }
-export const noFacts: Facts = { draft: false, merged: false, closed: false, failing: null, threads: 0, changesRequested: false, approved: false, checksOk: true, conflicts: false };
+export const noFacts: Facts = { draft: false, merged: false, closed: false, failing: null, threads: 0, changesRequested: false, approved: false, checksOk: true, pending: false, conflicts: false };
 
 /** "what needs me" beats "what is true": the first match decides the glyph */
 export function summarize(f: Facts): { view: { glyph: string; label: string; tone: Tone; count?: number }; alerts: Alert[] } {
@@ -38,10 +40,11 @@ export function summarize(f: Facts): { view: { glyph: string; label: string; ton
   if (open && f.conflicts) alerts.push({ key: 'conflict', tone: 'warn', text: 'Merge conflicts' });
   const ready = open && !f.draft && f.approved && f.checksOk && !f.failing && !f.conflicts;
   if (ready) alerts.push({ key: 'ready', tone: 'good', text: 'Approved · mergeable' });
+  if (open && f.pending && !f.failing) alerts.push({ key: 'checks:pending', tone: 'info', text: 'Checks running' });
   if (open && !alerts.length) alerts.push({ key: 'review', tone: 'info', text: f.draft ? 'Draft' : 'Awaiting review' });
 
-  const glyph = f.merged ? 'merged' : f.closed ? 'closed' : f.draft ? 'draft' : f.failing ? 'failing' : f.threads > 0 || f.changesRequested ? 'feedback' : ready ? 'ready' : 'review';
-  return { view: { glyph, label: LABELS[glyph], tone: TONES[glyph] ?? 'info', ...(glyph === 'feedback' ? { count: Math.max(1, f.threads) } : {}) }, alerts };
+  const glyph = f.merged ? 'merged' : f.closed ? 'closed' : f.draft ? 'draft' : f.failing ? 'failing' : f.threads > 0 || f.changesRequested ? 'feedback' : f.pending ? 'building' : ready ? 'ready' : 'review';
+  return { view: { glyph, label: LABELS[glyph], tone: TONES[glyph] ?? 'info', ...(glyph === 'feedback' ? { count: Math.max(1, f.threads) } : {}), ...(glyph === 'building' ? { quiet: true } : {}) }, alerts };
 }
 
 export function snapshot(ref: string, name: string, title: string, f: Facts): Snapshot {
@@ -57,7 +60,7 @@ export const PR_FIELDS = `fragment F on PullRequest {
   reviewThreads(first: 100) { nodes { isResolved } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes {
     __typename
-    ... on CheckRun { name conclusion }
+    ... on CheckRun { name status conclusion }
     ... on StatusContext { context state }
   } } } } } }
 }`;
@@ -76,7 +79,7 @@ export interface GqlPr {
   author: { login: string } | null;
   repository: { nameWithOwner: string };
   reviewThreads: { nodes: { isResolved: boolean }[] };
-  commits: { nodes: { commit: { statusCheckRollup: { state: string; contexts: { nodes: ({ __typename: string; name?: string; conclusion?: string | null; context?: string; state?: string } | null)[] } } | null } }[] };
+  commits: { nodes: { commit: { statusCheckRollup: { state: string; contexts: { nodes: ({ __typename: string; name?: string; status?: string; conclusion?: string | null; context?: string; state?: string } | null)[] } } | null } }[] };
 }
 
 const BAD_CHECK = new Set(['FAILURE', 'TIMED_OUT', 'STARTUP_FAILURE', 'ERROR']);
@@ -91,6 +94,12 @@ export function factsOf(p: GqlPr): Facts {
     if (failing) break;
   }
   if (!failing && roll && BAD_CHECK.has(roll.state)) failing = 'checks';
+  // the rollup says PENDING / EXPECTED while anything is queued or running; a check run says so itself too
+  const pending =
+    !!roll &&
+    (roll.state === 'PENDING' ||
+      roll.state === 'EXPECTED' ||
+      (roll.contexts.nodes ?? []).some((c) => (c?.__typename === 'CheckRun' && c.status && c.status !== 'COMPLETED') || (c?.__typename === 'StatusContext' && (c.state === 'PENDING' || c.state === 'EXPECTED'))));
   return {
     draft: p.isDraft,
     merged: p.merged || p.state === 'MERGED',
@@ -100,6 +109,7 @@ export function factsOf(p: GqlPr): Facts {
     changesRequested: p.reviewDecision === 'CHANGES_REQUESTED',
     approved: p.reviewDecision === 'APPROVED',
     checksOk: !roll || roll.state === 'SUCCESS',
+    pending,
     conflicts: p.mergeable === 'CONFLICTING',
   };
 }

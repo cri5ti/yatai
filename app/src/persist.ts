@@ -12,7 +12,7 @@ import type { Doc, InboxItem, Meeting, Node, Seg, State } from './store';
 /** state that is saved besides the document (everything not in TRANSIENT and not part of Doc) */
 const UI_KEYS = [
   'flags', 'clock', 'clockSpeed', 'clockManual', 'day', 'demo', 'settings', 'layout', 'prevLayout', 'onTop', 'tab', 'focus', 'focusSpeed', 'dark',
-  'prs', 'prc', 'snaps', 'agenda', 'hl', 'bounds', 'scale', 'density', 'showApps', 'aiDelay', 'sel', 'nsel', 'isel', 'expanded',
+  'prs', 'prc', 'runs', 'snaps', 'agenda', 'hl', 'bounds', 'scale', 'density', 'showApps', 'aiDelay', 'sel', 'nsel', 'isel', 'expanded',
 ] as const satisfies readonly (keyof State)[];
 /** (the real-time clock is not worth a write every 15 s: only a simulated one is kept) */
 const uiOf = (s: State) => Object.fromEntries(UI_KEYS.filter((k) => k !== 'clock' || s.clockManual || s.clockSpeed).map((k) => [k, s[k]]));
@@ -38,14 +38,14 @@ const T = {
     to: (n: Node, ord: number): Row => ({
       id: n.id, ord, parent_id: n.parentId, title: n.title, status: n.status, today: n.today, open: n.open, created: n.created, modified: n.modified,
       last_run: n.lastRun ?? null, scheduled: n.scheduled ?? null, est: n.est ?? null, due: n.due ?? null, later: n.later ?? null, spent: n.spent ?? null,
-      smart: json(n.smart),
+      smart: json(n.smart), notify: n.notify ? true : null,
     }),
     from: (r: Row): Node =>
       tidy({
         id: r.id as string, parentId: (r.parent_id as string) ?? null, title: (r.title as string) ?? '', status: (r.status as Node['status']) ?? 'todo',
         today: !!r.today, open: r.open == null ? true : !!r.open, created: num(r.created) ?? Date.now(), modified: num(r.modified) ?? Date.now(),
         lastRun: num(r.last_run), scheduled: num(r.scheduled), est: num(r.est), due: str(r.due), later: num(r.later), spent: num(r.spent),
-        smart: parse<Node['smart']>(r.smart),
+        smart: parse<Node['smart']>(r.smart), notify: r.notify ? true : undefined,
       }),
   },
   inbox: {

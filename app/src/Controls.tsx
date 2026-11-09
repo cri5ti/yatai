@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useS } from './store';
-import type { Flags, Layout, PrStatus } from './store';
+import type { BuildStatus, Flags, Layout, PrStatus } from './store';
 import { act } from './act';
 import { dbPath } from './persist';
 import { isTauri, showCapture } from './platform';
-import { fmt, plain, prLinks } from './model';
-import { DEFAULT_COMMENTS, PR_STATUSES } from './Pr';
+import { buildLinks, fmt, plain, prLinks, smartRef } from './model';
+import { BUILD_STATUSES, DEFAULT_COMMENTS, PR_STATUSES } from './Pr';
+import { mockRun } from './plugins/devops/mock';
 import { prCountOf, prStatusOf } from './model';
 
 const layouts: { id: Layout; label: string; hint: string }[] = [
@@ -32,6 +33,11 @@ export function DevPanel() {
   const found = new Map<string, string[]>();
   for (const n of s.nodes) for (const l of prLinks(n.title)) found.set(l.key, [...(found.get(l.key) ?? []), plain(n.title.split('\n')[0]).slice(0, 40)]);
   const prs = [...found].map(([key, items]) => ({ key, items }));
+  const runs = new Map<string, string>();
+  for (const n of s.nodes) {
+    for (const l of buildLinks(n.title.split('\n')[0])) runs.set(`devops:build/${l.key}`, `${l.project} #${l.id}`);
+    if (n.smart?.source === 'pipeline') runs.set(smartRef(n)!, plain(n.title.split('\n')[0]).slice(0, 30));
+  }
   return (
     <aside className="controls devpanel" onKeyDown={(e) => e.key === 'Escape' && act.toggleDev()}>
       <div className="dev-head">
@@ -110,6 +116,24 @@ export function DevPanel() {
           </label>
         ))}
         {!prs.length && <p className="note">No PR links yet — paste a github.com/…/pull/123 url into any item.</p>}
+      </section>
+
+      <section>
+        <h3>DevOps pipeline runs (mock)</h3>
+        <p className="note">{s.demo ? 'Every pipeline run in your items. Pick a state to simulate the run moving on.' : 'Turn the demo connectors on to drive these. With a real token, Azure DevOps decides.'}</p>
+        {[...runs].map(([ref, label]) => (
+          <label key={ref} className="prrow">
+            <span title={ref}>{label}</span>
+            <select disabled={!s.demo} value={mockRun(ref)} onChange={(e) => act.setRunStatus(ref, e.target.value as BuildStatus)}>
+              {BUILD_STATUSES.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        {!runs.size && <p className="note">No runs yet — bring one in from the DevOps drawer (Pipelines), or paste a …/_build/results?buildId=… url.</p>}
       </section>
 
       <section>

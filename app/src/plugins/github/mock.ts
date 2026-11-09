@@ -16,6 +16,8 @@ const factsFor = (status: PrStatus, count: number): Facts => ({
   merged: status === 'merged',
   closed: status === 'closed',
   failing: status === 'failing' ? 'unit-tests' : null,
+  pending: status === 'building',
+  checksOk: status !== 'building',
   threads: status === 'feedback' ? count : 0,
   approved: status === 'ready',
 });

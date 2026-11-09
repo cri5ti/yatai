@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { prMatch } from './model';
-import { PrRef } from './Pr';
+import { buildMatch, prMatch } from './model';
+import { BuildRef, PrRef } from './Pr';
 
 /* Basic markdown: **bold**, *italic*, `code`, urls, - lists, 1. lists, - [ ] checkboxes */
 
@@ -24,6 +24,9 @@ export function inline(text: string, kp = 'i', prIcon = true): ReactNode[] {
     else if (t.startsWith('http') && prMatch(t)) {
       const pm = prMatch(t)!;
       out.push(<PrRef key={key} url={t} org={pm[1]} repo={pm[2]} num={pm[3]} icon={prIcon} />);
+    } else if (t.startsWith('http') && buildMatch(t)) {
+      const b = buildMatch(t)!;
+      out.push(<BuildRef key={key} url={t} base={b.base} project={b.project} id={b.id} />);
     } else if (t.startsWith('http'))
       out.push(
         <a key={key} href={t} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>

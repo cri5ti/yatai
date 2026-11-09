@@ -266,6 +266,11 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {fmtSpent(node.spent)}
               </span>
             ) : null}
+            {node.notify && (
+              <span className="bell" title="Notifies you when it changes (/notify to stop)">
+                🔔
+              </span>
+            )}
             <DueChip node={node} />
             {pk('est') && pm!.prev.est ? <s className="est-chip was">{fmtEst(pm!.prev.est as number)}</s> : null}
             {node.est ? (

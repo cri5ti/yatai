@@ -19,6 +19,8 @@ export interface View {
   label: string;
   tone: Tone;
   count?: number;
+  /** a passing state (queued, building): moving into it is not announced, unless the item asks to be told everything */
+  quiet?: boolean;
 }
 
 /** what a plugin currently knows about one ref */
@@ -34,7 +36,7 @@ export interface Snapshot {
 }
 
 /** the left-hand mark of a drawer row */
-export type Lead = { glyph: string; count?: number } | { text: string };
+export type Lead = { glyph: string; count?: number; kind?: 'build' } | { text: string };
 
 /** one row in a drawer */
 export interface Entry {

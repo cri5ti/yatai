@@ -243,7 +243,7 @@ export function Settings() {
             !isTauri
               ? 'needs the desktop app'
               : acc?.state === 'connected'
-                ? `✓ connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : ''}`
+                ? `✓ connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : p.id === 'devops' && cfg.devopsOrg ? ` (${cfg.devopsOrg})` : ''}`
                 : acc?.state === 'expired'
                   ? 'token rejected'
                   : 'not connected';
@@ -257,6 +257,14 @@ export function Settings() {
                 <div className="set-row">
                   <span className="set-lbl">GitHub host</span>
                   <input value={cfg.githubHost} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ githubHost: e.target.value })} placeholder="github.com (or ghe.example.com)" />
+                </div>
+              )}
+              {p.id === 'devops' && (
+                <div className="set-row">
+                  <span className="set-lbl">
+                    Organization<small>Pipeline run links of this organization are tracked live.</small>
+                  </span>
+                  <input value={cfg.devopsOrg} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ devopsOrg: e.target.value })} placeholder="dev.azure.com/acme (or acme.visualstudio.com)" />
                 </div>
               )}
               <div className="set-row">

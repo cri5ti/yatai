@@ -4,7 +4,7 @@ import type { ClipItem } from './clip';
 import { DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
 import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
 import { acceptProposal, rejectProposal } from './proposal';
-import type { Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
+import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { pluginById } from './plugins/registry';
 import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
@@ -72,6 +72,19 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
+/** developer panel: the mock DevOps moves a pipeline run on */
+export function setRunStatus(ref: string, status: BuildStatus) {
+  set((s) => ({ runs: { ...s.runs, [ref]: status } }));
+  void refreshNow('devops');
+}
+/** ask to be told about every change of what these items track (or stop); one undo step */
+export function toggleNotify(ids: string[]) {
+  const nodes = get().nodes.filter((n) => ids.includes(n.id) && refsOf(n).length);
+  if (!nodes.length) return toast('Nothing here is tracked: paste a PR or pipeline link into it first', 'info');
+  const on = !nodes.every((n) => n.notify);
+  patchNodes(on ? 'Notify on changes' : 'Stop notifying', nodes.map((n) => n.id), { notify: on || undefined });
+  toast(on ? 'You will be notified when it changes' : 'No more notifications for it', 'info');
+}
 export function setPrComments(key: string, n: number) {
   if (get().prc[key] === n) return;
   set((s) => ({ prc: { ...s.prc, [key]: n } }));
@@ -153,6 +166,8 @@ export function bringIn(spec: { title: string; ref?: string; smart?: string; sna
       // the mock GitHub has to agree with what the drawer showed
       prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
       prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
+      // …and so does the mock DevOps
+      runs: sn?.ref.startsWith('devops:build/') && !s.runs[sn.ref] ? { ...s.runs, [sn.ref]: sn.view.glyph as BuildStatus } : s.runs,
       nsel: { card: null, row: node.id },
       sel: s.tab === 'organizer' ? node.id : s.sel,
       multi: [],

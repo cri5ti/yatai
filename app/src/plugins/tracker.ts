@@ -13,6 +13,8 @@ import type { AgendaEvent, Alert, Plugin, Snapshot, Tone } from './types';
 export interface Sink {
   toast(text: string, tone: Tone): void;
   highlight(ids: string[]): void;
+  /** a system notification, for items that asked to be told (`notify`) */
+  notify?(title: string, body: string): void;
 }
 let sink: Sink = { toast() {}, highlight() {} };
 
@@ -31,12 +33,20 @@ export function trackedRefs(s: Pick<State, 'nodes'>): Map<string, string[]> {
 const nodesWith = (s: State, ref: string) => s.nodes.filter((n) => refsOf(n).includes(ref)).map((n) => n.id);
 
 /* ---------- snapshots → changes ---------- */
-/** what is new in `next` compared with `prev`: alerts that were not there, or a different state glyph */
-export function changes(prev: Snapshot, next: Snapshot): { text: string; tone: Tone }[] {
+/**
+ * what is new in `next` compared with `prev`: alerts that were not there, or a different state glyph.
+ * Normally only what wants attention counts (not info alerts, not a move into a passing state such as "building");
+ * with `all` (the item asked to be notified) every change of state does.
+ */
+export function changes(prev: Snapshot, next: Snapshot, all = false): { text: string; tone: Tone }[] {
   if (prev.rev === next.rev) return [];
   const fresh = next.alerts.filter((a: Alert) => a.tone !== 'info' && !prev.alerts.some((p) => p.key === a.key));
   if (fresh.length) return fresh.map((a) => ({ text: a.toast ?? `${next.name}: ${a.text}`, tone: a.tone }));
-  if (prev.view.glyph !== next.view.glyph) return [{ text: `${next.name}: ${next.view.label}`, tone: next.view.tone }];
+  if (prev.view.glyph !== next.view.glyph && (all || !next.view.quiet)) return [{ text: `${next.name}: ${next.view.label}`, tone: next.view.tone }];
+  if (all) {
+    const info = next.alerts.filter((a) => !prev.alerts.some((p) => p.key === a.key));
+    if (info.length) return info.map((a) => ({ text: `${next.name}: ${a.text}`, tone: a.tone }));
+  }
   return [];
 }
 
@@ -73,9 +83,13 @@ export function applySnapshots(snaps: Snapshot[]) {
     changed = true;
     if (sn.gone && !prev?.gone) sink.toast(sn.alerts[0]?.toast ?? sn.alerts[0]?.text ?? `${sn.name}: not found`, 'warn');
     if (!prev) continue; // the first time we hear of it is not a change
-    const ch = changes(prev, sn);
-    if (ch.length) hl.push(...nodesWith(s, sn.ref));
+    const ids = nodesWith(s, sn.ref);
+    const watched = s.nodes.some((n) => n.notify && ids.includes(n.id));
+    const ch = changes(prev, sn, watched);
+    if (ch.length) hl.push(...ids);
     ch.forEach((c) => sink.toast(c.text, c.tone));
+    // asked to be told: also a system notification, unless yatai is in front of you
+    if (watched && ch.length && (s.hidden || typeof document === 'undefined' || document.hidden || !document.hasFocus())) sink.notify?.(sn.name, ch.map((c) => c.text).join('\n'));
   }
   if (changed) set(() => ({ snaps: next }));
   if (hl.length) sink.highlight(hl);
@@ -234,7 +248,7 @@ export function startTracker(s: Sink) {
   setInterval(() => void cycle(undefined, false), 10_000);
   // something the plugins depend on changed: look again now
   let key = '';
-  let host = get().settings.githubHost;
+  let host = get().settings.githubHost + '|' + get().settings.devopsOrg;
   let nodes: State['nodes'] | null = null;
   let refs = '';
   const watch = () => {
@@ -245,8 +259,8 @@ export function startTracker(s: Sink) {
     }
     const need = PLUGINS.filter((p) => implFor(p, st)?.agenda && !st.agenda[p.id]).map((p) => p.id).join(',');
     const k = [refs, st.drawer ? `${st.drawer.kind}/${st.drawer.tab}` : '', st.demo, JSON.stringify(st.accounts), need].join('|');
-    if (st.settings.githubHost !== host) {
-      host = st.settings.githubHost;
+    if (st.settings.githubHost + '|' + st.settings.devopsOrg !== host) {
+      host = st.settings.githubHost + '|' + st.settings.devopsOrg;
       void refreshAccounts().then(() => cycle());
     }
     if (k === key) return;

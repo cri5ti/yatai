@@ -1,4 +1,4 @@
-import type { Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
+import type { BuildStatus, Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
 import type { AgendaEvent, Alert, Snapshot } from './plugins/types';
 
 export const FX = 'fx_'; // fixed calendar row inside a meeting card: fx_<meetingId>
@@ -67,6 +67,28 @@ export const prUrl = (org: string, repo: string, num: string) => `https://${prHo
 /** text for places that cannot render a link: PR urls become repo#123 */
 export const plain = (text: string) => text.replace(new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g'), (_, _o, r, n) => `${r}#${n}`);
 
+/* ---------- Azure DevOps pipeline run (build) links ---------- */
+/** …/_build/results?buildId=123 on dev.azure.com/<org>/<project> or <org>.visualstudio.com/<project> */
+const BUILD_SRC = 'https:\\/\\/((?:dev\\.azure\\.com\\/[\\w.-]+|[\\w-]+\\.visualstudio\\.com)\\/([^\\s/?#]+))\\/_build\\/results\\?(?:[^\\s#]*?&)?buildId=(\\d+)';
+export interface BuildLink {
+  key: string; // dev.azure.com/acme/Payroll#4211
+  base: string; // dev.azure.com/acme/Payroll
+  project: string;
+  id: string;
+  url: string;
+}
+export function buildLinks(text: string): BuildLink[] {
+  const re = new RegExp(BUILD_SRC + '[^\\s)]*', 'g');
+  const out: BuildLink[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) out.push({ key: `${m[1]}#${m[3]}`, base: m[1], project: decodeURIComponent(m[2]), id: m[3], url: m[0] });
+  return out;
+}
+export const buildMatch = (url: string) => buildLinks(url).find((l) => l.url === url) ?? null;
+export const buildUrl = (base: string, id: string) => `https://${base}/_build/results?buildId=${id}`;
+/** a run's state as the DevOps plugin last reported it ('queued' until it has) */
+export const buildStatusOf = (snaps: Record<string, Snapshot>, ref: string): BuildStatus => (snaps[ref]?.view.glyph as BuildStatus | undefined) ?? 'queued';
+
 /* ---------- plugin refs and their snapshots ---------- */
 /** the ref an item's `smart` badge tracks; items made before refs existed derive it */
 export function smartRef(n: Node): string | undefined {
@@ -84,7 +106,9 @@ export function refsOf(n: Node): string[] {
   const out = new Set<string>();
   const r = smartRef(n);
   if (r) out.add(r);
-  for (const l of prLinks(n.title.split('\n')[0])) out.add(`github:${l.key}`);
+  const first = n.title.split('\n')[0];
+  for (const l of prLinks(first)) out.add(`github:${l.key}`);
+  for (const l of buildLinks(first)) out.add(`devops:build/${l.key}`);
   return [...out];
 }
 type Snaps = Record<string, Snapshot>;

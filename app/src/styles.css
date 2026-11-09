@@ -501,3 +501,13 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .dopt { display: flex; align-items: center; gap: var(--sp-3); padding: 4px 6px; border-radius: var(--r-sm); font-size: var(--fs-md); cursor: pointer; }
 .dopt.hi { background: var(--hover); } .dopt input { margin: 0; } .dopt span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dopt small { color: var(--text-muted); }
 .dnone { padding: 6px; color: var(--text-muted); font-size: var(--fs-sm); }
+
+/* Azure DevOps pipeline runs: queued / building (spinning) / failed / done / cancelled */
+.prsi.bs-queued { color: var(--gh-draft); } .prsi.bs-building { color: var(--gh-review); } .prsi.bs-failed { color: var(--gh-failing); }
+.prsi.bs-done { color: var(--gh-ready); } .prsi.bs-cancelled { color: var(--gh-closed); }
+.prsi.pr-building { color: var(--gh-review); }
+.prsi .spin { transform-origin: 8px 8px; animation: spin 1.1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .prsi .spin { animation: none; } }
+.pr .ado { color: var(--text-muted); font-size: var(--fs-xs); margin-right: 2px; }
+.bell { font-size: var(--fs-xs); margin-right: var(--sp-2); opacity: .75; }
