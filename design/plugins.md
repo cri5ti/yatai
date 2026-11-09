@@ -209,7 +209,7 @@ The existing `Flags` / developer-panel toggles keep working **as the mock plugin
 
 ### 6.0 Getting the credentials
 
-Settings shows, under each account, **How to get it** (`app/src/guides.tsx`), open until the account is connected. GitHub: `gh auth token [--hostname <host>]` (the GitHub CLI's own token: quick but broad), or a fine-grained token (Pull requests / Commit statuses / Checks / Metadata, read-only), plus the SAML SSO note. DevOps: the Personal access tokens page (Build: Read), or the Azure CLI (`az rest` on the PAT lifecycle API with a `pat.json` body, valid 90 days). Outlook: Publish a calendar → the ICS link (there is no CLI route without an admin's consent for Graph). Placeholders are filled from what the user typed (host, organization); nothing company-specific is written in.
+Settings shows, under each account, **How to get it** (`app/src/guides.tsx`), open until the account is connected. GitHub: `gh auth token [--hostname <host>]` (the GitHub CLI's own token: quick but broad), or a fine-grained token (Pull requests / Commit statuses / Checks / Metadata, read-only), plus the SAML SSO note. DevOps: the Personal access tokens page (Build: Read), or one Azure CLI script that signs in and creates a PAT with Build (Read) for 90 days through the PAT lifecycle API. There is a PowerShell version (az for the access token, Invoke-RestMethod for the request, because JSON passed to `az.cmd` loses its quotes) and a bash / zsh one (`az rest`); the user's OS comes first. Outlook: Publish a calendar → the ICS link (there is no CLI route without an admin's consent for Graph). Placeholders are filled from what the user typed (host, organization); nothing company-specific is written in.
 
 ### 6.1 Notify me when it changes
 

@@ -7,6 +7,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Settings } from './store';
 import { openUrl } from './platform';
+
+const isWindows = typeof navigator !== 'undefined' && /Win/.test(navigator.platform || navigator.userAgent);
 import { normHost } from './model';
 import { orgOf } from './plugins/devops/api';
 
@@ -83,7 +85,26 @@ function devops(cfg: Settings) {
   const base = o?.base ?? 'https://dev.azure.com/<your-org>';
   // the PAT API lives on vssps.dev.azure.com/<org> (for <org>.visualstudio.com too)
   const name = o ? (o.host === 'dev.azure.com' ? o.base.split('/').pop()! : o.host.split('.')[0]) : '<your-org>';
-  const body = `{ "displayName": "yatai", "scope": "vso.build", "validTo": "${inDays(90)}T00:00:00Z", "allOrgs": false }`;
+  const pats = `https://vssps.dev.azure.com/${name}/_apis/tokens/pats?api-version=7.1-preview.1`;
+  // PowerShell: the request is made by Invoke-RestMethod, because JSON passed to az (a .cmd on Windows) loses its quotes
+  const ps = [
+    'az login',
+    '$t = az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken -o tsv',
+    "$body = @{ displayName = 'yatai'; scope = 'vso.build'; validTo = (Get-Date).AddDays(90).ToUniversalTime().ToString('o'); allOrgs = $false } | ConvertTo-Json",
+    `(Invoke-RestMethod -Method Post -Uri '${pats}' -Headers @{ Authorization = "Bearer $t" } -ContentType 'application/json' -Body $body).patToken.token`,
+  ].join('\n');
+  const sh = [
+    'az login',
+    `az rest --method post --resource 499b84ac-1321-427f-aa17-267ca6975798 \\`,
+    `  --uri '${pats}' \\`,
+    `  --body '{"displayName":"yatai","scope":"vso.build","validTo":"${inDays(90)}T00:00:00Z","allOrgs":false}' \\`,
+    '  --query patToken.token -o tsv',
+  ].join('\n');
+  const scripts = [
+    { label: 'PowerShell', code: ps },
+    { label: 'bash / zsh', code: sh },
+  ];
+  if (!isWindows) scripts.reverse();
   return (
     <>
       <h5>In the browser</h5>
@@ -97,11 +118,13 @@ function devops(cfg: Settings) {
         <li>Create, copy the token, paste it here.</li>
       </ol>
       <h5>From the Azure CLI</h5>
-      <p>
-        Sign in, save the request below as <code>pat.json</code>, then ask Azure DevOps for a token with Build (Read) only, valid for 90 days. Works the same in PowerShell and bash.
-      </p>
-      <Cmd>{body}</Cmd>
-      <Cmd>{`az login\naz rest --method post --resource 499b84ac-1321-427f-aa17-267ca6975798 --uri "https://vssps.dev.azure.com/${name}/_apis/tokens/pats?api-version=7.1-preview.1" --body @pat.json --query patToken.token -o tsv`}</Cmd>
+      <p>One script: signs you in, then asks Azure DevOps for a token with Build (Read) only, valid for 90 days, and prints it.</p>
+      {scripts.map((x) => (
+        <div key={x.label}>
+          <div className="set-cmd-label">{x.label}</div>
+          <Cmd>{x.code}</Cmd>
+        </div>
+      ))}
       <p className="set-fine">
         <code>499b84ac-…</code> is Azure DevOps' fixed application id, not a secret. If your organization only allows tokens through a policy, the browser route is the one that works.
       </p>
