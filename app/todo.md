@@ -41,6 +41,10 @@
 
 - [ ] Windows: dragging works: items / cards in Next and Organizer (HTML5 drag and drop, needed `dragDropEnabled: false`), and the window by its title bar
 
+- [ ] Next, one kind of row: an item whose children are in Next (but not itself) shows as the card's top row, with its path muted in front, and behaves like any row (Space, F2, ⌘↑↓ moves the card, ⌫, / menu has Consolidate and Collapse); Enter on it, or on any open item with children, adds the first child
+- [ ] Next drag: drop on a row's top / bottom edge = before / after it, middle = into it (any item, anywhere but into itself); gaps between cards move a top row's whole card, or split a sub-item out; nothing stays see-through after a drop (Next, Organizer, Inbox → Organizer)
+- [ ] Bring in from the GitHub / DevOps drawer (⏎): lands under the item picked in Next (or the Organizer's selection), or right after it when that item is itself a PR / work item; with nothing picked, top level
+
 - [ ] GitHub drawer: funnel icon (or F) opens a filter bar with a repository drop-down: tick several repos (searchable, with counts; ↑↓ ⏎ in the search box), the list narrows to them, Clear / Esc resets; the icon is filled while a filter is on
 
 ## Gaps in what's there

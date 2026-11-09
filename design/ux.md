@@ -100,9 +100,14 @@ Top-level items are plain lines with a blank line between them; only sub-items a
 
 Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them (with whatever hangs below them, seen or not). Items outside the text keep their place among their siblings. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
 
-## 7. Top-level items have no group
+## 7. Item cards have no header: everything is a row
 
-Anything can sit at the top level. In Next, top-level items are just rows with no card header (there is no "Items" group), aligned to the left edge. Each top-level item is its own header-less card (a separator line between them, drag / ⌘↑↓ move it like any card); they are never grouped into one shared card. There are no empty "new card" shells either: Enter / ⇧Enter on a card header add the first item *inside* that card, and a new item with nothing to anchor to is a plain top-level row. Indent / outdent therefore always have a neighbour to work with.
+Anything can sit at the top level, and in Next every line of an item card is a row, the same row everywhere. A card is one item with what of it is in Next nested below it. When that item is in Next itself, it is simply the top row. When only some of its children are (picked from the Organizer, or added inside it), it is still the top row: the same check, chevron, editing, keys and dragging. Its path, if it has one, is shown muted in front of its title (`Project › Task`). Only meetings and alert cards carry a header. So there is one kind of top-level line, not two depending on how the item got into Next.
+
+- Each top-level item is its own card (a separator line between them, drag / ⌘↑↓ move it like any card); they are never grouped into one shared card. There are no empty "new card" shells either.
+- **Enter** adds a sibling below the row. On an open item with children (and on a card's top item) it adds the first child instead, like an outliner. A new item with nothing to anchor to is a plain top-level row.
+- Indent / outdent always have a neighbour to work with. ⌘] on a card's top row nests it under the top row of the card above.
+- Implementation: a plan segment's owner that is not itself in Next becomes the card's first row (`Row.head`); its rows are one level deeper. The plan model (segments, splits) is unchanged.
 
 ## 8. Removing things
 
@@ -110,11 +115,12 @@ Anything can sit at the top level. In Next, top-level items are just rows with n
 - **Toggling a parent into / out of Next acts on the whole hierarchy**, parent included.
 - **Indent follows what you see.** ⌘] in Next nests under the row displayed directly above, even after rows were moved around; outdenting keeps the item where it was on screen.
 
-## 9. Splitting sub-items out of their parent
+## 9. Dragging in Next, and splitting sub-items out of their parent
 
-- **Any row can be dragged in Next**, sub-items included. Dropping a sub-item outside its card (before / after another card, or beside its own) gives it a card of its own whose header is its parent — **the parent repeats** there, with the split marker (⑂ 2/2); the parent row stays where it was and simply no longer shows that sub-item.
+- **Any row can be dropped on any row**, as in the Organizer. On its top or bottom edge it goes before / after that row (its sibling); in the middle it goes into it (its last child). Just below an open item it becomes the first child. Never into itself. What is dropped stays in Next.
+- **Between cards** (the gap above / below a card, the empty space at the end): a card's top row moves the whole card. Any other row splits out into a card of its own, whose top row is its parent: **the parent repeats** there, with the split marker (⑂ 2/2). The parent row stays where it was and simply no longer shows that sub-item. On a card's top row that is not in Next itself, the top / bottom edge means before / after that card.
 - **Moving it back consolidates.** Dropping it onto its parent row, or between its siblings nested there, puts it back in the group (and closes the split). `/consolidate` on the pulled card does the same; on the parent's card it also brings back every sub-item pulled out of its rows.
-- Dropping a sub-item between its siblings (nested, same parent) reorders them in the tree.
+- A drag always ends cleanly, even when the drop moved the dragged element to another card (it never gets its own `dragend`): see `drag.ts`.
 - Implementation: a plan segment with `pulled: true` may list sub-items of a Next row; they are then left out when their parent row expands.
 
 ## 10. Collapse / expand all

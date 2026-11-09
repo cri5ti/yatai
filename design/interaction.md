@@ -29,7 +29,7 @@ How yatai is meant to feel to use. This is the part of the original idea notes a
 
 - **Starting an action** moves it (and its task) to the top of the stack and shows a running stopwatch; it is the "current" item. Finishing asks what next.
 - **Next is a plan, not a query.** It is an ordered list of cards; a card is a task (or a meeting) and the actions of it that are scheduled for today. Order is the user's, except that meetings rise to the top as their time approaches and smart items needing attention are promoted.
-- **Splitting the schedule.** Dragging an action out of its card to another place splits the task across the plan: same task, its actions in different places, a small marker (⑂ 2/2) on each part. `/consolidate` brings them back together.
+- **Splitting the schedule.** Dragging an action into the gap between cards (dropping it on a row moves it in the tree instead) splits the task across the plan: same task, its actions in different places, a small marker (⑂ 2/2) on each part. `/consolidate` brings them back together.
 
 ## 5. Context menu and commands
 

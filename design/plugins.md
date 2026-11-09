@@ -24,7 +24,7 @@ What the POC and the app already tell us about what each source must deliver:
 
 | Source | What the UX needs from it |
 |---|---|
-| **GitHub** | (a) a pasted PR link becomes a smart item with a live state: draft / to review / has feedback (N unresolved) / build fails / ready / merged / closed; (b) a change (build went red, new comments, approved) highlights the item and toasts; (c) drawer lists: *assigned to me* (review requested), *my PRs*, *mentions*; (d) "bring in" to Next or Inbox |
+| **GitHub** | (a) a pasted PR link becomes a smart item with a live state: draft / to review / has feedback (N unresolved) / build fails / ready / merged / closed; (b) a change (build went red, new comments, approved) highlights the item and toasts; (c) drawer lists: *assigned to me* (review requested), *my PRs*, *mentions*; (d) "bring in" to Next or Inbox: under the current item (the row picked in Next, or the Organizer's selection), or beside it when that is itself a PR / work item / run |
 | **Outlook** | (a) today's events, each with start / duration / location; (b) a meeting you brought into Next stays in sync: moved, cancelled, renamed → highlight + toast; (c) the drawer lists today's agenda; (d) read-only (moving a meeting in yatai is local only) |
 | **Azure DevOps** | (a) work items: *mentions*, *mine*, *created by me*, with type + state; (b) a linked work item chips its state changes (Active → Resolved); (c) pipeline runs: "Deploy 2.4 · stage 2/4", failed at stage X |
 | **Later** | AI sessions (local, no network: done / needs feedback), Teams mentions, Jira / Linear issues, GitLab MRs |

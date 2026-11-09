@@ -51,6 +51,9 @@ interface Ctx {
 }
 
 /** one menu for every item, at any level: what is offered depends on whether it has children, not on a "type" */
+/** an item card folds by its item; a meeting by itself */
+const folded = (c: CardM) => (c.kind === 'task' ? c.task?.open === false : c.collapsed);
+
 function itemMenu(n: Node, c: Ctx): MenuItem[] {
   const nodes = get().nodes;
   const kids = nodes.some((x) => x.parentId === n.id);
@@ -65,7 +68,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
       : { id: 'start', label: running ? 'Pause' : 'Start', cmd: 'start', keys: '⇧Space', icon: running ? '❚❚' : '▶', run: () => A.toggleStart(n.id) },
     { id: 'focus', label: 'Start in focus mode', cmd: 'focus', keys: '⌘⇧⏎', icon: '◎', run: () => (kids ? (A.startFirst(n.id), get().current && A.startFocus(get().current!.id)) : A.startFocus(n.id)) },
     { id: 'done', label: A.isDone(nodes, n.id) ? 'Mark not done' : kids ? 'Mark all done' : 'Mark done', cmd: 'done', keys: 'Space', icon: '✓', run: () => A.toggleDoneNodes([n.id]) },
-    { id: 'edit', label: 'Edit', cmd: 'edit', keys: 'F2', icon: '✎', run: () => edit(c.card && !c.row ? 'card:' + c.card.key : n.id) },
+    { id: 'edit', label: 'Edit', cmd: 'edit', keys: 'F2', icon: '✎', run: () => edit(n.id) },
   ];
   if (c.card && !c.row)
     items.push({
@@ -74,7 +77,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
       cmd: 'new',
       keys: '→',
       icon: '＋',
-      run: () => set(() => ({ menu: null, nsel: { card: c.card!.key, row: null }, ins: { kind: 'action', owner: n.id, seg: c.card!.seg?.id, after: lastRow(c.card) } })),
+      run: () => set(() => ({ menu: null, nsel: { card: c.card!.key, row: c.card!.rows[0]?.head ? n.id : null }, ins: { kind: 'action', owner: n.id, seg: c.card!.seg?.id, after: lastRow(c.card) } })),
     });
   else if (c.card)
     items.push({
@@ -120,7 +123,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   items.push({ id: 'breakdown', label: 'Break down with AI', cmd: 'breakdown', keys: 'B', icon: '✨', run: () => A.breakDown(n.id) });
   if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });
   if (c.card && !c.row)
-    items.push({ id: 'fold', label: c.card.collapsed ? 'Expand' : 'Collapse', cmd: 'collapse', keys: c.card.collapsed ? '→' : '←', icon: '▾', run: () => A.toggleCardOpen(c.card!, c.card!.collapsed) });
+    items.push({ id: 'fold', label: folded(c.card) ? 'Expand' : 'Collapse', cmd: 'collapse', keys: folded(c.card) ? '→' : '←', icon: '▾', run: () => A.toggleCardOpen(c.card!, folded(c.card!)) });
   items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
   items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo([n.id], 1) });
   items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems([n.id]) });
@@ -136,7 +139,11 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   items.push({ id: 'ai', label: 'Ask AI about this', cmd: 'ai', keys: '⌘/', icon: '✨', run: () => A.openAi(n.id) });
   return items;
 }
-const lastRow = (c?: CardM) => (c && c.rows.length ? c.rows.filter((r) => r.depth === 0).slice(-1)[0]?.id ?? null : null);
+/** the last row directly under the card's item (or at the top level of a card without one) */
+const lastRow = (c?: CardM) => {
+  const top = c?.rows[0]?.head ? 1 : 0;
+  return c?.rows.filter((r) => r.depth === top && !r.head).slice(-1)[0]?.id ?? null;
+};
 const A_lastChild = (id: string) => [...get().nodes].reverse().find((n) => n.parentId === id)?.id ?? null;
 
 /** the menu for a multi-selection: the bulk-capable subset */
@@ -217,7 +224,8 @@ function build(t: Target): { title: string; items: MenuItem[] } | null {
     const r = c?.rows.find((x) => x.id === t.id);
     if (!c || !r) return null;
     if (r.fx) return { title: r.fx.title, items: meetingItems(c) };
-    return { title: plain(r.node!.title.split('\n')[0]), items: itemMenu(r.node!, { card: c, row: true }) };
+    // a card's own item (its top row when it is not in Next itself) carries the card's commands
+    return { title: plain(r.node!.title.split('\n')[0]), items: itemMenu(r.node!, r.head ? { card: c } : { card: c, row: true }) };
   }
   const c = nextModel(s).cards.find((x) => x.key === t.key);
   if (!c) return null;

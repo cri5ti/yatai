@@ -300,8 +300,10 @@ export interface Row {
   id: string;
   node?: Node;
   fx?: EffMeeting;
-  depth: number; // 0 = directly under the card header
+  depth: number; // 0 = the card's top row
   kids: boolean; // has Next children nested below it
+  /** the item a card is about when it is not in Next itself (its Next children are): it shows as the card's first row, like any other */
+  head?: true;
 }
 
 export interface CardM {
@@ -401,6 +403,10 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
       (card.pinned ? pinned : regular).push(card);
     } else if (owner || seg.owner === ROOT) {
       if (!rows.length && promoted) continue;
+      // no card headers for items: the owner is the first row and what is in Next nests under it
+      const shown: Row[] = owner
+        ? [{ id: owner.id, node: owner, depth: 0, kids: rows.length > 0, head: true }, ...(owner.open === false ? [] : rows.map((r) => ({ ...r, depth: r.depth + 1 })))]
+        : rows;
       regular.push({
         key: seg.id,
         kind: 'task',
@@ -408,9 +414,9 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
         ownerId: seg.owner,
         task: owner,
         path: owner ? pathOf(nodes, owner.id) : ['Items'],
-        rows,
+        rows: shown,
         pinned: false,
-        collapsed: owner ? owner.open === false : false,
+        collapsed: false,
         ...stats(rows, owner),
       });
     }
@@ -437,9 +443,17 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
   return { cards, ...all };
 }
 
+/** item cards have no header: every line in them is a row (only meetings and alerts carry a header) */
+export const isLoose = (c: CardM) => c.kind === 'task';
+
+/** is `id` inside the subtree of `anc` (or `anc` itself)? */
+export function isUnder(nodes: Node[], id: string, anc: string) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (let cur: string | null | undefined = id, i = 0; cur && i < 100; cur = byId.get(cur)?.parentId, i++) if (cur === anc) return true;
+  return false;
+}
+
 /** keep the selection valid whatever happens to the cards (undo, delete, collapse…) */
-/** the card of top-level items: it has no header, anything can sit at the top level */
-export const isLoose = (c: CardM) => c.kind === 'task' && c.ownerId === ROOT;
 
 export function effSel(cards: CardM[], sel: Nsel): Nsel {
   let c = cards.find((x) => x.key === sel.card);

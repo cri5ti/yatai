@@ -13,6 +13,7 @@ import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Chips, DueChip } from './Chips';
 import { useFlip } from './flip';
+import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod } from './kbd';
 
 interface RowItem {
@@ -46,6 +47,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const dnd = useRef<string | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  useDragEnd(!!dragId, () => ((dnd.current = null), setDragId(null), setHint(null)));
   const [width, setWidth] = useState(0);
   const wide = width >= TABLE_AT;
   useFlip(area, 'data-fr');

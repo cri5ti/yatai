@@ -9,6 +9,7 @@ import { INBOX_MIME, Organizer } from './Organizer';
 import { countItems, flatten, parseMarkdown, toMarkdown } from './clip';
 import { Md, bodyInfo, inline } from './md';
 import { useFlip } from './flip';
+import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod } from './kbd';
 
 const SPLIT_AT = 720; // px: wider than this the Organizer appears on the right, to drag inbox items onto
@@ -21,6 +22,7 @@ export function Inbox() {
   const area = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [drag, setDrag] = useState<string[] | null>(null);
+  useDragEnd(!!drag, () => setDrag(null));
   const [ins, setIns] = useState<{ after: string | null; before?: string } | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);

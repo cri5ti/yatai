@@ -9,7 +9,7 @@ import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mo
 import { pluginById } from './plugins/registry';
 import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
 import type { Snapshot } from './plugins/types';
-import { FX, ROOT, doneOf, fmt, plain, hasKids, isLoose, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
+import { FX, ROOT, doneOf, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
 import { quietFlip } from './flip';
@@ -126,19 +126,52 @@ export function bringIn(spec: { title: string; ref?: string; smart?: string; sna
     return toast('Added to the Inbox', 'good');
   }
   const smart = spec.smart ? { source: spec.smart as NonNullable<Node['smart']>['source'], ref: spec.ref } : undefined;
-  const node = mk(null, spec.title, { today: true, smart, status: smart ? 'waiting' : 'todo' });
+  const s0 = get();
+  // under the current item; beside it when that is itself something brought in (a PR, a work item…)
+  const cur = currentItem(s0);
+  const sib = cur && typeof cur !== 'string' && (!!cur.smart || refsOf(cur).length > 0) ? cur : null;
+  const parentId = !cur ? null : typeof cur === 'string' ? cur : sib ? sib.parentId : cur.id;
+  const node = mk(parentId, spec.title, { today: true, smart, status: smart ? 'waiting' : 'todo' });
   const sn = spec.snap;
   const key = sn?.ref.startsWith('github:') ? sn.ref.slice(7) : null;
-  commit('Bring in', (s) => ({
-    nodes: [...s.nodes, node],
-    snaps: sn && !s.snaps[sn.ref] ? { ...s.snaps, [sn.ref]: sn } : s.snaps,
-    // the mock GitHub has to agree with what the drawer showed
-    prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
-    prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
-    nsel: { card: 's_' + ROOT, row: node.id },
-    multi: [],
-  }));
-  toast('Added to Next', 'good');
+  commit('Bring in', (s) => {
+    const after = sib ? sib.id : parentId ? lastChild(s.nodes, parentId) ?? parentId : null;
+    const nodes = openIt(insertAfter(s.nodes, node, after), parentId);
+    let plan = planOf({ ...s, nodes });
+    // beside a row of a card: right after it, not at the end of the card
+    const si = sib ? segOf(plan, sib.id) : -1;
+    if (sib && si >= 0 && segOf(plan, node.id) >= 0) {
+      plan = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== node.id) }));
+      const items = [...plan[si].items];
+      items.splice(items.indexOf(sib.id) + 1, 0, node.id);
+      plan = reconcilePlan(withItems(plan, si, items), nodes, s.meetings);
+    }
+    return {
+      nodes,
+      plan,
+      snaps: sn && !s.snaps[sn.ref] ? { ...s.snaps, [sn.ref]: sn } : s.snaps,
+      // the mock GitHub has to agree with what the drawer showed
+      prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
+      prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
+      nsel: { card: null, row: node.id },
+      sel: s.tab === 'organizer' ? node.id : s.sel,
+      multi: [],
+    };
+  });
+  const under = parentId && (s0.nodes.find((n) => n.id === parentId)?.title ?? s0.meetings.find((m) => m.id === parentId)?.title);
+  toast(under ? `Added to Next, under ${plain(under.split('\n')[0])}` : 'Added to Next', 'good');
+}
+
+/** the item the user is on: the Organizer's selection, or the row picked in Next (a meeting id for its calendar row) */
+function currentItem(s: State): Node | string | null {
+  if (s.tab === 'organizer') return s.nodes.find((n) => n.id === s.sel) ?? null;
+  const cards = nextModel(s).cards;
+  const sel = effSel(cards, s.nsel);
+  const c = cards.find((x) => x.key === sel.card);
+  if (!c) return null;
+  const r = sel.row ? c.rows.find((x) => x.id === sel.row) : undefined;
+  if (r?.fx) return r.fx.id;
+  return r?.node ?? c.task ?? (c.kind === 'meeting' ? c.ownerId : null);
 }
 
 export const toggleHelp = () => set((s) => ({ help: !s.help }));
@@ -423,11 +456,11 @@ export function indentItems(ids: string[], rowsOnly = false) {
             break;
           }
         }
-        // a top-level item is a card of its own: the neighbour above is the previous top-level card
-        if (!parent && isLoose(card)) {
-          for (let k = cards.indexOf(card) - 1; k >= 0 && isLoose(cards[k]); k--) {
-            const above = cards[k].rows.find((r) => r.depth === 0);
-            if (above?.node && !sel.has(above.id)) {
+        // a card's top row: the neighbour above is the top row of the item card above (never something inside itself)
+        if (!parent && rows[ri].depth === 0 && card.kind === 'task') {
+          for (let k = cards.indexOf(card) - 1; k >= 0 && cards[k].kind === 'task'; k--) {
+            const above = cards[k].rows[0];
+            if (above?.node && !sel.has(above.id) && !isUnder(nodes, above.id, x.id)) {
               parent = above.node;
               break;
             }
@@ -439,7 +472,7 @@ export function indentItems(ids: string[], rowsOnly = false) {
         while (i >= 0 && (sel.has(sibs[i].id) || (rowsOnly && !sibs[i].today))) i--;
         parent = sibs[i];
       }
-      if (!parent) continue;
+      if (!parent || isUnder(nodes, parent.id, x.id)) continue;
       nodes = openIt(relocate(nodes, x.id, parent.id, { end: true }), parent.id);
       moved++;
     }
@@ -643,19 +676,31 @@ const ownerOfNode = (n: Node) => n.parentId ?? ROOT;
 /** is this item a sub-item of a Next row (it nests under it unless pulled out)? */
 const nestsInNext = (nodes: Node[], n: Node) => !!n.parentId && !!nodes.find((p) => p.id === n.parentId)?.today;
 
-/** drop a row next to a top-level row of a card of the same group (a sub-item lands in its parent's pulled card) */
-export function dropRowInSeg(id: string, targetRowId: string, pos: 'before' | 'after') {
-  commit('Move action', (s) => {
-    if (id === targetRowId || id.startsWith(FX)) return null;
+/**
+ * drop a row onto another row in Next: before / after it (as its sibling) or into it (as its last child).
+ * Any item can go anywhere but into itself, the same as in the Organizer; it stays in Next where it lands.
+ */
+export function dropOnRow(id: string, targetId: string, pos: 'before' | 'after' | 'into', segKey: string | null) {
+  commit('Move', (s) => {
     const n = s.nodes.find((x) => x.id === id);
-    const plan = planOf(s);
-    const ti = segOf(plan, targetRowId);
-    if (!n || ti < 0 || plan[ti].owner !== ownerOfNode(n)) return null;
-    const out = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
-    const items = out[ti].items;
-    items.splice(items.indexOf(targetRowId) + (pos === 'after' ? 1 : 0), 0, id);
-    if (nestsInNext(s.nodes, n)) out[ti] = { ...out[ti], pulled: true };
-    return { plan: out, nsel: { card: out[ti].id, row: id } };
+    const t = s.nodes.find((x) => x.id === targetId);
+    if (!n || !t || isUnder(s.nodes, targetId, id)) return null;
+    const parentId = pos === 'into' ? t.id : t.parentId;
+    let nodes = relocate(s.nodes, id, parentId, pos === 'into' ? { end: true } : pos === 'before' ? { before: t.id } : { after: t.id });
+    nodes = openIt(nodes, parentId).map((x) => (x.id === id && !x.today ? { ...x, today: true, later: undefined } : x));
+    let plan = planOf(s).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
+    // a row directly under its card's item (not nested under another Next row): put it where it was dropped
+    const owner = parentId ?? ROOT;
+    if (!(parentId && nodes.find((x) => x.id === parentId)?.today)) {
+      const ti = pos === 'into' ? plan.findIndex((sg) => sg.id === segKey && sg.owner === owner) : plan.findIndex((sg) => sg.owner === owner && sg.items.includes(t.id));
+      if (ti >= 0) {
+        const items = [...plan[ti].items];
+        items.splice(pos === 'into' ? items.length : items.indexOf(t.id) + (pos === 'after' ? 1 : 0), 0, id);
+        plan = withItems(plan, ti, items);
+      }
+    }
+    plan = reconcilePlan(plan, nodes, s.meetings);
+    return { nodes, plan, nsel: { card: null, row: id }, multi: [] };
   });
 }
 
@@ -677,24 +722,6 @@ export function dropRowSplit(id: string, targetSegId: string, pos: 'before' | 'a
     out.splice(pos === 'before' ? ti : ti + 1, 0, ns);
     return { plan: out, nsel: { card: ns.id, row: id } };
   });
-}
-
-/**
- * a sub-item dropped back into its group: onto its parent ('into') or beside a sibling nested under it.
- * It leaves any pulled card (the split closes) and, beside a sibling, takes that place in the tree.
- */
-export function dropSubItem(id: string, targetId: string, pos: 'before' | 'after' | 'into') {
-  const was = segOf(planOf(get()), id) >= 0;
-  const done = commit(was ? 'Consolidate' : 'Reorder', (s) => {
-    const n = s.nodes.find((x) => x.id === id);
-    const t = s.nodes.find((x) => x.id === targetId);
-    if (!n || !t || id === targetId) return null;
-    if ((pos === 'into' ? t.id : t.parentId) !== n.parentId) return null; // only within its own group
-    const plan = planOf(s).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
-    const nodes = pos === 'into' ? openIt(s.nodes, t.id) : relocate(s.nodes, id, n.parentId, pos === 'before' ? { before: t.id } : { after: t.id });
-    return { nodes, plan, nsel: { card: s.nsel.card, row: id } };
-  });
-  if (done && was) toast('Back in its group', 'good');
 }
 
 export function dropCard(key: string, targetKey: string | null, pos: 'before' | 'after') {
