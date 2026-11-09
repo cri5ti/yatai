@@ -135,6 +135,10 @@ export interface AdoEntry {
   note: string;
 }
 export const ADO: Record<string, AdoEntry[]> = {
+  following: [
+    { id: '18190', title: 'Investigate sqlite-vec for embeddings', type: 'Story', state: 'Active', note: 'you follow it · changed 2h ago' },
+    { id: '18256', title: 'Payroll export: add the new tax fields', type: 'Story', state: 'Resolved', note: 'you follow it · changed 1d ago' },
+  ],
   mentions: [
     { id: '18301', title: 'Staff export times out for large tenants', type: 'Bug', state: 'Active', note: 'Priya mentioned you · 1h' },
     { id: '18288', title: 'Clarify the extraction acceptance criteria', type: 'Story', state: 'New', note: 'Sam mentioned you · 1d' },

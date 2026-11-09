@@ -90,14 +90,14 @@ function devops(cfg: Settings) {
   const ps = [
     'az login',
     '$t = az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken -o tsv',
-    "$body = @{ displayName = 'yatai'; scope = 'vso.build'; validTo = (Get-Date).AddDays(90).ToUniversalTime().ToString('o'); allOrgs = $false } | ConvertTo-Json",
+    "$body = @{ displayName = 'yatai'; scope = 'vso.build vso.work'; validTo = (Get-Date).AddDays(90).ToUniversalTime().ToString('o'); allOrgs = $false } | ConvertTo-Json",
     `(Invoke-RestMethod -Method Post -Uri '${pats}' -Headers @{ Authorization = "Bearer $t" } -ContentType 'application/json' -Body $body).patToken.token`,
   ].join('\n');
   const sh = [
     'az login',
     `az rest --method post --resource 499b84ac-1321-427f-aa17-267ca6975798 \\`,
     `  --uri '${pats}' \\`,
-    `  --body '{"displayName":"yatai","scope":"vso.build","validTo":"${inDays(90)}T00:00:00Z","allOrgs":false}' \\`,
+    `  --body '{"displayName":"yatai","scope":"vso.build vso.work","validTo":"${inDays(90)}T00:00:00Z","allOrgs":false}' \\`,
     '  --query patToken.token -o tsv',
   ].join('\n');
   const scripts = [
@@ -113,12 +113,12 @@ function devops(cfg: Settings) {
           Open <Link href={`${base}/_usersSettings/tokens`}>Personal access tokens</Link> → <b>New Token</b>.
         </li>
         <li>
-          Organization: yours; expiration: up to your policy; Scopes: <b>Custom defined</b> → <b>Build: Read</b>.
+          Organization: yours; expiration: up to your policy; Scopes: <b>Custom defined</b> → <b>Build: Read</b> and <b>Work Items: Read</b>.
         </li>
         <li>Create, copy the token, paste it here.</li>
       </ol>
       <h5>From the Azure CLI</h5>
-      <p>One script: signs you in, then asks Azure DevOps for a token with Build (Read) only, valid for 90 days, and prints it.</p>
+      <p>One script: signs you in, then asks Azure DevOps for a token with only Build (Read) and Work Items (Read), valid for 90 days, and prints it.</p>
       {scripts.map((x) => (
         <div key={x.label}>
           <div className="set-cmd-label">{x.label}</div>

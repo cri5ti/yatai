@@ -3,7 +3,8 @@ import { get } from '../../store';
 import { pluginHttp, pluginSecretSet, pluginSecretStatus } from '../../platform';
 import { AuthError } from '../types';
 import type { Entry, ListDef, Snapshot } from '../types';
-import { byRunning, entryOf, toSnapshot } from './map';
+import { WIQL, WI_FIELDS, byRunning, entryOf, toSnapshot, wiEntry, wiSnapshot } from './map';
+import type { AdoWorkItem } from './map';
 import type { AdoBuild } from './map';
 
 export const ID = 'devops';
@@ -26,12 +27,28 @@ const org = () => {
   return o;
 };
 
-async function call<T>(url: string): Promise<T> {
-  const r = await pluginHttp(ID, { url, auth: true, scheme: 'basic', headers: { Accept: 'application/json' } });
+async function call<T>(url: string, body?: unknown): Promise<T> {
+  const r = await pluginHttp(ID, {
+    url,
+    auth: true,
+    scheme: 'basic',
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   // a rejected token is a 401, or a 203 / 302 to the sign-in page
   if (r.status === 401 || r.status === 203 || (r.status >= 300 && r.status < 400)) throw new AuthError('Azure DevOps rejected the token');
   if (r.status === 404) throw Object.assign(new Error('not found'), { gone: true });
-  if (r.status === 403) throw Object.assign(new Error('the token may not read this (needs Build: Read)'), { gone: true });
+  if (r.status === 403) throw Object.assign(new Error('the token may not read this (needs Build: Read, Work Items: Read)'), { gone: true });
+  if (r.status === 400) {
+    let why = '';
+    try {
+      why = (JSON.parse(r.body) as { message?: string }).message ?? '';
+    } catch {
+      /* not json */
+    }
+    throw new Error(`Azure DevOps: ${why || 'bad request'}`);
+  }
   if (r.status === 429) throw new Error('Azure DevOps rate limit');
   if (r.status < 200 || r.status >= 300) throw new Error(`Azure DevOps answered ${r.status}`);
   try {
@@ -91,7 +108,13 @@ export async function fetchBuilds(refs: string[]): Promise<Snapshot[]> {
 }
 
 /* ---------- the Pipelines list: every run that is going or waiting, across the organization's projects ---------- */
-export const LISTS: ListDef[] = [{ id: 'pipelines', label: 'Pipelines' }];
+export const LISTS: ListDef[] = [
+  { id: 'pipelines', label: 'Pipelines' },
+  { id: 'mine', label: 'Assigned to me' },
+  { id: 'created', label: 'Created by me' },
+  { id: 'following', label: 'Following' },
+  { id: 'mentions', label: 'Mentions' },
+];
 
 // the project list changes rarely: asked once an hour
 let projects: { org: string; at: number; names: string[] } | null = null;
@@ -124,4 +147,53 @@ export async function listPipelines(): Promise<Entry[]> {
   }
   if (!found.length && failed) throw failed;
   return found.sort((x, y) => byRunning(x.b, y.b)).map((x) => entryOf(x.at, x.b));
+}
+
+/* ---------- work items: the drawer lists (a WIQL query + one batch) and tracking the ones brought in ---------- */
+async function workItems(ids: number[]): Promise<AdoWorkItem[]> {
+  if (!ids.length) return [];
+  const out: AdoWorkItem[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const d = await call<{ value: AdoWorkItem[] }>(`${org().base}/_apis/wit/workitemsbatch?${V}`, { ids: ids.slice(i, i + 200), fields: WI_FIELDS, errorPolicy: 'omit' });
+    out.push(...d.value.filter((w) => w && w.fields));
+  }
+  return out;
+}
+
+/** two requests: which items (WIQL, newest change first, at most 50), then their fields */
+export async function listWorkItems(id: string): Promise<Entry[]> {
+  const q = WIQL[id];
+  if (!q) return [];
+  const r = await call<{ workItems: { id: number }[] }>(`${org().base}/_apis/wit/wiql?$top=50&${V}`, { query: q });
+  const ids = r.workItems.map((w) => w.id);
+  const byId = new Map((await workItems(ids)).map((w) => [w.id, w]));
+  return ids.flatMap((x) => (byId.has(x) ? [wiEntry(byId.get(x)!)] : []));
+}
+
+/** devops:wi/<id> refs: one batch for all of them; one that is gone or not visible says so */
+export async function fetchWorkItems(refs: string[]): Promise<Snapshot[]> {
+  const ids = refs.map((r) => Number(/^devops:wi\/(\d+)$/.exec(r)?.[1])).filter((n) => n > 0);
+  if (!ids.length) return [];
+  const got = new Map((await workItems(ids)).map((w) => [w.id, w]));
+  return ids.map((n) => {
+    const ref = `devops:wi/${n}`;
+    const w = got.get(n);
+    return w
+      ? wiSnapshot(ref, w)
+      : {
+          ref,
+          name: `WI ${n}`,
+          title: `WI ${n}`,
+          view: { glyph: 'unknown', label: 'no access', tone: 'warn' as const },
+          alerts: [{ key: 'gone', tone: 'warn' as const, text: `Can't see WI ${n}`, toast: `WI ${n}: Azure DevOps can't find it with this token (deleted, or another organization?)` }],
+          rev: 'gone',
+          gone: true,
+        };
+  });
+}
+
+/** everything DevOps tracks: pipeline runs (one request each) and work items (one batch) */
+export async function fetchAll(refs: string[]): Promise<Snapshot[]> {
+  const [b, w] = await Promise.all([fetchBuilds(refs.filter((r) => r.startsWith('devops:build/'))), fetchWorkItems(refs.filter((r) => r.startsWith('devops:wi/')))]);
+  return [...b, ...w];
 }

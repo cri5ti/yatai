@@ -5,6 +5,7 @@ import { ADO, PIPELINES } from '../../mock';
 import { buildUrl } from '../../model';
 import type { Entry, Impl, Snapshot } from '../types';
 import { buildSnapshot } from './map';
+import { LISTS } from './api';
 
 const wiSnap = (ref: string, name: string, label: string, alerts: Snapshot['alerts']): Snapshot => ({
   ref,
@@ -47,12 +48,7 @@ export const mock: Impl = {
       return [];
     });
   },
-  lists: [
-    { id: 'pipelines', label: 'Pipelines' },
-    { id: 'mentions', label: 'Mentions' },
-    { id: 'mine', label: 'My work items' },
-    { id: 'created', label: 'Created by me' },
-  ],
+  lists: LISTS,
   async list(id) {
     if (id === 'pipelines')
       return PIPELINES.filter((p) => ['queued', 'building'].includes(mockRun(`devops:build/${p.base}#${p.id}`))).map((p): Entry => {

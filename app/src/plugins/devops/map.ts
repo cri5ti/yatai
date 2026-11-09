@@ -66,3 +66,50 @@ export function entryOf(base: string, b: AdoBuild): Entry {
 export const byRunning = (a: AdoBuild, b: AdoBuild) =>
   (statusOf(a) === 'building' ? 0 : 1) - (statusOf(b) === 'building' ? 0 : 1) ||
   Date.parse(b.startTime ?? b.queueTime ?? '') - Date.parse(a.startTime ?? a.queueTime ?? '');
+
+/* ---------- work items ---------- */
+/** the fields asked for every work item */
+export const WI_FIELDS = ['System.Id', 'System.Title', 'System.WorkItemType', 'System.State', 'System.TeamProject', 'System.ChangedDate', 'System.AssignedTo'];
+export interface AdoWorkItem {
+  id: number;
+  fields: Record<string, unknown>;
+}
+const str = (v: unknown) => (typeof v === 'string' ? v : v && typeof v === 'object' && 'displayName' in v ? String((v as { displayName: unknown }).displayName) : '');
+
+/** a tracked work item: its state is the glyph, so a change of state is announced (as info) */
+export function wiSnapshot(ref: string, w: AdoWorkItem): Snapshot {
+  const state = str(w.fields['System.State']) || '?';
+  const title = str(w.fields['System.Title']);
+  const name = `WI ${w.id}`;
+  return {
+    ref,
+    name,
+    title,
+    view: { glyph: state, label: state, tone: 'info' },
+    alerts: [{ key: `wi:${state}`, tone: 'info', text: state }],
+    rev: JSON.stringify([state, title, str(w.fields['System.AssignedTo'])]),
+  };
+}
+export function wiEntry(w: AdoWorkItem): Entry {
+  const f = w.fields;
+  const changed = str(f['System.ChangedDate']);
+  return {
+    ref: `devops:wi/${w.id}`,
+    title: str(f['System.Title']),
+    sub: [str(f['System.WorkItemType']), str(f['System.State']), str(f['System.TeamProject']), str(f['System.AssignedTo']), changed ? `changed ${relTime(Date.parse(changed))}` : ''].filter(Boolean).join(' · '),
+    lead: { text: `WI ${w.id}` },
+    text: `WI ${w.id} — ${str(f['System.Title'])}`,
+    smart: 'workitem',
+    snap: wiSnapshot(`devops:wi/${w.id}`, w),
+    canInbox: true,
+  };
+}
+
+/** the drawer's work-item lists, as WIQL (finished items left out where "what is on my plate" is meant) */
+const OPEN = `[System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut')`;
+export const WIQL: Record<string, string> = {
+  mine: `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND ${OPEN} ORDER BY [System.ChangedDate] DESC`,
+  created: `SELECT [System.Id] FROM WorkItems WHERE [System.CreatedBy] = @Me AND ${OPEN} ORDER BY [System.ChangedDate] DESC`,
+  following: `SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@Follows) ORDER BY [System.ChangedDate] DESC`,
+  mentions: `SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@RecentMentions) ORDER BY [System.ChangedDate] DESC`,
+};
