@@ -567,3 +567,13 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .dgroups button:hover { background: var(--hover); color: var(--text); }
 .dgroups button.on { background: var(--accent-soft); color: var(--accent-text); }
 .popup-body .dgroups { cursor: grab; }
+
+/* drawer placeholder rows while a list loads */
+.drow.skel { pointer-events: none; }
+.sk { display: block; border-radius: 4px; background: linear-gradient(90deg, var(--hover) 0%, color-mix(in srgb, var(--hover) 40%, var(--surface)) 40%, var(--hover) 80%); background-size: 300% 100%; animation: sk-shine 1.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 80ms); }
+.sk-dot { width: 15px; height: 15px; border-radius: 50%; flex: none; }
+.sk-lead { width: 64px; height: 12px; flex: none; margin-right: 18px; }
+.sk-line { height: 11px; margin: 3px 0; }
+.sk-line.sm { height: 8px; margin-top: 6px; }
+@keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

@@ -124,6 +124,35 @@ function ReqCount({ r }: { r?: State['reqs'][string] }) {
   );
 }
 
+/**
+ * placeholder rows: nothing loaded yet for this tab, or a refresh the user asked for (R / ↻) is running. The background
+ * refreshes keep showing what is there; an error or a source that is not on shows its message instead.
+ */
+export function showSkeleton(s: Pick<State, 'lists' | 'agenda'>, d: { kind: string; tab: string }, blocked: boolean, manual: boolean): boolean {
+  const ls = s.lists[`${d.kind}/${d.tab}`];
+  if (blocked || ls?.error) return false;
+  if (d.kind === 'outlook' && d.tab === 'today') return !s.agenda[d.kind];
+  return !ls || (!!ls.loading && (!ls.entries.length || manual));
+}
+
+/** placeholder rows while a list loads: the shape of the real ones (a round state icon, or a time / number on the left) */
+function Skeleton({ round }: { round: boolean }) {
+  const widths = [[72, 46], [58, 64], [80, 38], [64, 52], [50, 60], [76, 44]];
+  return (
+    <div className="dskel" aria-busy="true" aria-label="Loading">
+      {widths.map(([a, b], i) => (
+        <div key={i} className="drow skel" style={{ ['--i' as string]: i } as React.CSSProperties}>
+          <span className={round ? 'sk sk-dot' : 'sk sk-lead'} />
+          <div className="dmain">
+            <span className="sk sk-line" style={{ width: `${a}%` }} />
+            <span className="sk sk-line sm" style={{ width: `${b}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** a pop-up over the bottom of the window: browse a source, bring things in (⏎ → Next, I → Inbox) */
 export function Drawer() {
   const s = useS();
@@ -135,12 +164,27 @@ export function Drawer() {
   const [menu, setMenu] = useState(false); // the repository drop-down is open
   const [mq, setMq] = useState(''); // search inside the drop-down
   const [mi, setMi] = useState(0); // highlighted row of the drop-down
+  const [manual, setManual] = useState(false); // a refresh the user asked for is running: show placeholders
+  const refresh = () => (setManual(true), act.refreshDrawer());
   useEffect(() => {
     if (d) list.current?.focus({ preventScroll: true });
   }, [d?.kind, d?.tab]);
   useEffect(() => {
     list.current?.querySelector('.drow.is-sel')?.scrollIntoView({ block: 'nearest' });
   }, [d?.sel]);
+  // a manual refresh's placeholders go once that list stops loading (hooks stay above the early return)
+  const busy = !!(d && s.lists[`${d.kind}/${d.tab}`]?.loading);
+  const seenBusy = useRef(false);
+  useEffect(() => {
+    if (busy) seenBusy.current = true;
+    else if (seenBusy.current) ((seenBusy.current = false), setManual(false));
+  }, [busy]);
+  useEffect(() => {
+    // asked for, but nothing started loading (blocked, or already fresh): do not keep placeholders up
+    if (!manual) return;
+    const t = setTimeout(() => !seenBusy.current && setManual(false), 2500);
+    return () => clearTimeout(t);
+  }, [manual]);
   if (!d) return null;
 
   const tabs = tabsOf(s, d.kind);
@@ -160,6 +204,7 @@ export function Drawer() {
   const closeBar = () => (setBar(false), setMenu(false), setPicked([]), list.current?.focus({ preventScroll: true }));
   const block = blocked(s, d.kind);
   const ls = s.lists[`${d.kind}/${d.tab}`];
+  const skeleton = showSkeleton(s, d, !!block, manual);
   const sel = Math.min(d.sel, Math.max(0, entries.length - 1));
   const cur = entries[sel];
 
@@ -185,7 +230,7 @@ export function Drawer() {
       act.setDrawerTab(tabs[(i + (k === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].id);
     } else if (k === 'r' || k === 'R') {
       stop();
-      act.refreshDrawer();
+      refresh();
     } else if (k === 'Enter' && cur) {
       stop();
       cur.have ? act.toast('Already in yatai') : cur.add('next');
@@ -221,7 +266,7 @@ export function Drawer() {
             </svg>
           </button>
         )}
-        <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={() => act.refreshDrawer()}>
+        <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={refresh}>
           ↻
         </button>
         <button className="x" aria-label="Close" title="Close (Esc)" onClick={() => act.closeDrawer()}>
@@ -272,8 +317,8 @@ export function Drawer() {
           </div>
         ) : ls?.error ? (
           <div className="dempty">{ls.error}</div>
-        ) : !ls && !(d.kind === 'outlook' && d.tab === 'today') ? (
-          <div className="dempty">Loading…</div>
+        ) : skeleton ? (
+          <Skeleton round={d.kind === 'github' || (d.kind === 'devops' && ['pending', 'running', 'recent'].includes(d.tab))} />
         ) : (
           entries.length === 0 && (
             <div className="dempty">
@@ -281,7 +326,7 @@ export function Drawer() {
             </div>
           )
         )}
-        {entries.map((en, i) => (
+        {!skeleton && entries.map((en, i) => (
           <div
             key={en.id}
             className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim', en.clash && 'clash', en.now != null && `now-${typeof en.now === 'number' ? 'in' : en.now}`)}
