@@ -7,9 +7,9 @@ import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
 import { AiPop, ProposalBar } from './AiPop';
-import { capture, closeCapture, setBounds, dismissToast, openDrawer, openSettings, setDensity, setLayout, setScale, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
-import { DENSITIES, SCALES } from './store';
+import { capture, closeCapture, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { Drawer } from './Drawer';
+import { DisplayButton } from './display';
 import { GhIcon } from './Pr';
 import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
@@ -160,24 +160,7 @@ function Win() {
             </button>
           </div>
           <span className="grow" />
-          <div className="ugrp" role="group" aria-label="Scale">
-            {SCALES.map((v, i) => (
-              <button key={v} className={s.scale === i ? 'on' : ''} aria-pressed={s.scale === i} title={`Scale ${Math.round(v * 100)}%`} aria-label={`Scale ${Math.round(v * 100)}%`} onClick={() => setScale(i)}>
-                {Math.round(v * 100)}
-              </button>
-            ))}
-          </div>
-          <div className="ugrp" role="group" aria-label="Density">
-            {DENSITIES.map((_, i) => (
-              <button key={i} className={s.density === i ? 'on' : ''} aria-pressed={s.density === i} title={['Tight', 'Normal', 'Roomy'][i] + ' rows'} aria-label={['Tight', 'Normal', 'Roomy'][i] + ' rows'} onClick={() => setDensity(i)}>
-                <svg width="16" height="13" viewBox="0 0 12 10" aria-hidden>
-                  {[0, 1, 2].map((k) => (
-                    <rect key={k} x="0" y={[0.5, 3.5, 6.5][k] + (i - 1) * (k - 1) * -1.2} width="12" height="1.4" rx=".7" fill="currentColor" />
-                  ))}
-                </svg>
-              </button>
-            ))}
-          </div>
+          <DisplayButton />
         </div>
       )}
       {!pill && !isTauri && <Drawer />}

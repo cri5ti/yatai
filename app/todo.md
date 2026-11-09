@@ -47,7 +47,7 @@
 
 - [ ] Disconnect GitHub (or DevOps): PR / run links show the muted unplugged-plug mark, not a state; connected but not fetched yet: no mark; a PR the token cannot see: amber mark
 - [ ] Complete every sub-item of an item (or have GitHub resolve every thread): the item stays open until you tick it yourself; ticking it leaves the sub-items as they are
-- [ ] Footer bar: taller, with bigger source buttons (Outlook / GitHub / DevOps), scale and density; easy to click without grabbing the window's bottom edge or corners (dock and float)
+- [ ] Footer bar: taller, with bigger source buttons (Outlook / GitHub / DevOps); scale and density now sit behind the Aa button (a small pop-over: Esc / click elsewhere closes it) and in Settings → Display (applies at once, also from the settings window); easy to click without grabbing the window's bottom edge or corners (dock and float)
 - [ ] DevOps drawer → Pipelines with a real PAT: every running / queued run across the organization, running first; ⏎ brings one in and it then follows the run's state; `requests:` rises by about one per project per refresh
 - [ ] Settings → GitHub / DevOps / Outlook: "How to get it" is open while not connected (folded once connected). Links open in the browser with a plain click. Copy puts the command on the clipboard. The placeholders follow the GitHub host and the DevOps organization typed above (until then they stay `<your-org>`). Try `gh auth token` and the `az rest` route for a real token
 - [ ] Window snapping on a second monitor with a different display scale (e.g. laptop 150 % + external 100 %): flush on every edge, nothing sticking out; quit and relaunch with the window there → same place

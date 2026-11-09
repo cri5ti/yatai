@@ -7,8 +7,9 @@ import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
 import { GhIcon } from './Pr';
 import { Guide } from './guides';
+import { DisplayControls } from './display';
 
-const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇' };
+const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
@@ -183,13 +184,27 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'db', name: 'Database' }].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
           ))}
         </nav>
         <div className="set-body">
+        {sec === 'display' && (
+          <section className="set-sec">
+            <header>
+              <h4>Display</h4>
+              <span className="set-hint">applies at once</span>
+            </header>
+            <div className="set-row">
+              <span className="set-lbl">
+                Scale and density<small>The size of everything, and how much room each row gets. Also under Aa in the window's footer.</small>
+              </span>
+              <DisplayControls labels />
+            </div>
+          </section>
+        )}
         {sec === 'db' && <Database draft={bk.draft} onLoad={(c) => setBk((x) => (x.base ? x : { base: c, draft: c }))} onChange={(p) => setBk((x) => x.draft ? { ...x, draft: { ...x.draft, ...p } } : x)} />}
         {sec === 'ai' && <section className="set-sec">
           <header>

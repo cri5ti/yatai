@@ -157,3 +157,7 @@ A link or smart item shows a state only when its source has reported one. Until 
 ## Scrollbars
 
 The lists (Next, Inbox, Organizer, the drawers) always keep their vertical scrollbar, even when everything fits. A scrollbar that comes and goes changes the width, and every row would re-wrap.
+
+## Display controls
+
+UI scale and row density are behind the **Aa** button at the right of the footer: a small pop-over that Esc or a click elsewhere closes. They are also in Settings → Display. They apply at once (no Save), from either place.

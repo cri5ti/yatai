@@ -550,3 +550,13 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .set-link { padding: 0; border: 0; background: none; color: var(--accent-text); cursor: pointer; font: inherit; } .set-link:hover { text-decoration: underline; }
 .set-cmd-label { margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--text-muted); font-weight: var(--fw-semi); }
 /* the lists always keep their scrollbar (overflow-y: scroll): a scrollbar coming and going would re-wrap every row */
+
+/* display controls: the footer's Aa pop-over, and Settings → Display */
+.dispbtn { height: 26px; min-width: 30px; padding: 0 8px; border-radius: var(--r-sm); color: var(--text-muted); font-size: var(--fs-md); font-weight: var(--fw-semi); }
+.dispbtn:hover, .dispbtn.on { background: var(--hover); color: var(--text); }
+.disppop { position: fixed; z-index: var(--z-menu); padding: var(--sp-4) var(--sp-5); background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md, 8px); box-shadow: var(--shadow-pop); animation: menu-in var(--dur-2) var(--ease); }
+.dispctl { display: flex; flex-direction: column; gap: var(--sp-4); }
+.dispgrp { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); }
+.displbl { font-size: var(--fs-sm); color: var(--text-muted); }
+.dispctl .ugrp { gap: 2px; }
+.dispctl .ugrp button { gap: 6px; }
