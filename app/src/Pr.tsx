@@ -93,7 +93,7 @@ export function PrState({ status, comments = DEFAULT_COMMENTS, turn }: { status:
       <title>{label}</title>
       {/* a filled disc in the status colour with the glyph knocked out in the surface colour */}
       <circle cx="8" cy="8" r="8" fill="currentColor" />
-      <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
+      <g className="prg" transform="translate(8 8) scale(.66) translate(-8 -8)">
         {GLYPH[status]}
       </g>
     </svg>

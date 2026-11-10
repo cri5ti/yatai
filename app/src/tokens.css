@@ -86,8 +86,8 @@
   --info: #5b6478;
   --info-soft: #eceef4;
   --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #1f8a3c; --gh-closed: #8c949e;
-  --pr-me: #1d3fb3; /* a PR whose move is mine: deep blue */
-  --pr-wait: #a397c9; /* waiting on someone else: muted purple */
+  --pr-me: #2f63f0; /* a PR whose move is mine: blue, white glyph */
+  --pr-wait: #b9a2f5; /* waiting on someone else: soft purple, black glyph */
   /* quick priority: 1 → 3 → 5, the rest mixed between them (Chips.tsx prioBg); light bold digits on top */
   --prio-hi: oklch(0.60 0.24 27); /* 1: red */
   --prio-mid: oklch(0.70 0.17 75); /* 3: amber */
@@ -139,8 +139,8 @@
   --info: #a0a8c0;
   --info-soft: #2b3040;
   --gh-draft: #8b949e; --gh-review: #4493f8; --gh-feedback: #f0883e; --gh-failing: #ff7b72; --gh-ready: #3fb950; --gh-merged: #3fb950; --gh-closed: #6e7681;
-  --pr-me: #5a86ff;
-  --pr-wait: #8a80b4;
+  --pr-me: #4a7bff;
+  --pr-wait: #a990f2;
   --prio-hi: oklch(0.62 0.22 27);
   --prio-mid: oklch(0.68 0.16 75);
   --prio-lo: oklch(0.60 0.15 255);
