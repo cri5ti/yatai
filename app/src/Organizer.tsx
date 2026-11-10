@@ -188,7 +188,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
     else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
-    else if (!M && /^[0-9]$/.test(k) && ids.length) (stop(), setPrio(ids, +k));
+    else if (!M && /^[0-5]$/.test(k) && ids.length) (stop(), setPrio(ids, +k));
     else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
     else if (k === '/') {
       stop();

@@ -126,7 +126,7 @@ function Win() {
             {(s.prioFilter || s.tab !== 'inbox') && (
               <button
                 className={s.prioFilter ? 'pfilt on' : 'pfilt'}
-                title={s.prioFilter ? `Showing only priority ${s.prioFilter} — ⌥${s.prioFilter} or ⌥0 shows everything` : 'Show only one priority (⌥1–⌥9)'}
+                title={s.prioFilter ? `Showing priority ${s.prioFilter === 1 ? '1' : `1–${s.prioFilter}`} only — ⌥${s.prioFilter} or ⌥0 shows everything` : 'Show only the top priorities (⌥1–⌥5)'}
                 aria-label="Priority filter"
                 onClick={(e) => {
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

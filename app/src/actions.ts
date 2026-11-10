@@ -409,11 +409,11 @@ export function toggleCardOpen(c: CardM, open: boolean) {
 }
 
 export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `Estimate ${v} min` : 'Clear estimate', ids, { est: v });
-/** ⌥1–9: show only that priority (the same one again, or 0, shows everything) */
+/** ⌥1–5: show priorities 1…p (the same one again, or 0, shows everything) */
 export const setPrioFilter = (p: number) => set((s) => ({ prioFilter: p && s.prioFilter !== p ? p : null, prioPick: null }));
 export const openPrioPick = (ids: string[] | undefined, x: number, y: number) => set(() => ({ prioPick: { ids, x, y }, menu: null }));
 export const closePrioPick = () => set(() => ({ prioPick: null }));
-/** keys 1–9: set the quick priority (the same digit again on all of them clears it; 0 clears) */
+/** keys 1–5: set the quick priority (the same digit again on all of them clears it; 0 clears) */
 export function setPrio(ids: string[], p: number) {
   const nodes = get().nodes.filter((n) => ids.includes(n.id));
   if (!nodes.length) return;

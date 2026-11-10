@@ -30,7 +30,7 @@ export interface Node {
   scheduled?: number;
   est?: number; // minutes
   due?: string; // yyyy-mm-dd
-  prio?: number; // quick priority 1 (highest) … 9, keys 1–9
+  prio?: number; // quick priority 1 (highest) … 5, keys 1–5
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
   origin?: string; // made by yatai from what a source reported: '<ref>|<detail key>' (a failing check, a review thread); checked off when it is no longer outstanding
@@ -246,8 +246,8 @@ export interface State extends Doc {
   edit: string | null; // id being renamed ('card:<key>' for a card title)
   ins: Ins | null; // inline "create here" draft
   menu: MenuState | null;
-  prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–9 picker (no ids: it picks the view filter)
-  prioFilter: number | null; // ⌥1–9: Next and the Organizer show only items of this priority, and their parents
+  prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–5 picker (no ids: it picks the view filter)
+  prioFilter: number | null; // ⌥1–5: Next and the Organizer show only items of priority 1…this, and their parents
   ai: AiState | null;
   proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
   help: boolean;

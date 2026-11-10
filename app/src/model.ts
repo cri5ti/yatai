@@ -171,15 +171,15 @@ export function prioShown(nodes: Node[], id: string, collapsed: boolean): { p: n
   const ids = new Set([id]);
   let best = own ?? 99;
   for (const n of nodes) if (n.parentId && ids.has(n.parentId)) (ids.add(n.id), n.prio && n.status === 'todo' && n.prio < best && (best = n.prio));
-  return best > 9 ? null : { p: best, inside: best !== own };
+  return best > 5 ? null : { p: best, inside: best !== own };
 }
 
-/** the priority filter: items of priority `p` and every parent above them */
+/** the priority filter: items of priority 1…`p` and every parent above them */
 export function prioKeep(nodes: Node[], p: number): Set<string> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const keep = new Set<string>();
   for (const n of nodes) {
-    if (n.prio !== p) continue;
+    if (!n.prio || n.prio > p) continue;
     for (let cur: Node | undefined = n; cur && !keep.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) keep.add(cur.id);
   }
   return keep;

@@ -16,7 +16,7 @@ export interface ClipItem {
   dropped: boolean;
   est?: number; // minutes
   due?: string; // yyyy-mm-dd
-  prio?: number; // 1–9
+  prio?: number; // 1–5
   kids: ClipItem[];
 }
 
@@ -42,7 +42,7 @@ function splitMeta(first: string): { title: string; est?: number; due?: string; 
       if (v == null) break;
       est ??= v;
     } else if (m[1].toLowerCase() === 'p') {
-      if (!/^[1-9]$/.test(m[2])) break;
+      if (!/^[1-5]$/.test(m[2])) break;
       prio ??= +m[2];
     } else {
       if (!/^\d{4}-\d\d-\d\d$/.test(m[2])) break;

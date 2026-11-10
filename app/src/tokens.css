@@ -86,10 +86,10 @@
   --info: #5b6478;
   --info-soft: #eceef4;
   --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #8250df; --gh-closed: #82071e;
-  /* quick priority: 1 → 5 → 9, the rest mixed between them (Chips.tsx prioBg); light bold digits on top */
+  /* quick priority: 1 → 3 → 5, the rest mixed between them (Chips.tsx prioBg); light bold digits on top */
   --prio-hi: oklch(0.60 0.24 27); /* 1: red */
-  --prio-mid: oklch(0.70 0.17 75); /* 5: amber */
-  --prio-lo: oklch(0.56 0.16 255); /* 9: blue */
+  --prio-mid: oklch(0.70 0.17 75); /* 3: amber */
+  --prio-lo: oklch(0.56 0.16 255); /* 5: blue */
   --prio-text: #fff;
   --hl: #fff2a0; /* yellow: something changed that you did not change */
   --hl-bar: #d9a400;

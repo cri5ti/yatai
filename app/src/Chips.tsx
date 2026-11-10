@@ -25,15 +25,17 @@ export function DueChip({ node }: { node: Node }) {
   return <span className={`chip ${d.tone}`}>⚑ {d.text}</span>;
 }
 
-/** the priority colour: a 3-point ramp, --prio-hi (1) → --prio-mid (5) → --prio-lo (9) */
-export const prioBg = (p: number) =>
-  p <= 5 ? `color-mix(in oklch, var(--prio-mid) ${(p - 1) * 25}%, var(--prio-hi))` : `color-mix(in oklch, var(--prio-lo) ${(p - 5) * 25}%, var(--prio-mid))`;
+/** the priority colour: a 3-point ramp, --prio-hi (1) → --prio-mid (3) → --prio-lo (5) */
+export const prioBg = (p: number) => {
+  p = Math.max(1, Math.min(5, p));
+  return p <= 3 ? `color-mix(in oklch, var(--prio-mid) ${(p - 1) * 50}%, var(--prio-hi))` : `color-mix(in oklch, var(--prio-lo) ${(p - 3) * 50}%, var(--prio-mid))`;
+};
 
-/** the quick-priority square (1 = highest … 9); `inside` = it comes from something hidden under a collapsed item.
+/** the quick-priority square (1 = highest … 5); `inside` = it comes from something hidden under a collapsed item.
  *  With `ids` it is a button that opens the little picker — and shows as a faint ghost on hover when there is no priority yet. */
 export function Prio({ v, ids }: { v: { p: number; inside: boolean } | null; ids?: string[] }) {
   if (!v && !ids) return null;
-  const tip = !v ? 'Set a priority (keys 1–9)' : v.inside ? `Priority ${v.p} — the highest inside (keys 1–9)` : `Priority ${v.p} (keys 1–9 · same key again or 0 clears)`;
+  const tip = !v ? 'Set a priority (keys 1–5)' : v.inside ? `Priority ${v.p} — the highest inside (keys 1–5)` : `Priority ${v.p} (keys 1–5 · same key again or 0 clears)`;
   const body = v ? v.p : '';
   const style = v ? { background: prioBg(v.p) } : undefined;
   if (!ids) return <span className="prio" style={style} title={tip}>{body}</span>;
@@ -54,7 +56,7 @@ export function Prio({ v, ids }: { v: { p: number; inside: boolean } | null; ids
   );
 }
 
-/** the little picker: nine squares and a clear, for the selection's priority or (no ids) the view filter */
+/** the little picker: five squares and a clear, for the selection's priority or (no ids) the view filter */
 export function PrioPick() {
   const s = useS();
   const pk = s.prioPick;
@@ -87,22 +89,22 @@ export function PrioPick() {
         className="ppick"
         role="listbox"
         tabIndex={-1}
-        aria-label={filter ? 'Show only priority' : 'Priority'}
+        aria-label={filter ? 'Show priority up to' : 'Priority'}
         style={pos ? { left: pos.x, top: pos.y } : { visibility: 'hidden' }}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();
           const k = e.code.startsWith('Digit') ? e.code.slice(5) : e.key;
-          if (/^[0-9]$/.test(k)) return (e.preventDefault(), pick(+k));
+          if (/^[0-5]$/.test(k)) return (e.preventDefault(), pick(+k));
           if (e.key === 'Escape') return (e.preventDefault(), close());
-          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') return (e.preventDefault(), setHi((h) => (h + (e.key === 'ArrowRight' ? 1 : 9)) % 10));
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') return (e.preventDefault(), setHi((h) => (h + (e.key === 'ArrowRight' ? 1 : 5)) % 6));
           if (e.key === 'Enter' || e.key === ' ') return (e.preventDefault(), pick(hi));
         }}
       >
-        <div className="ppick-t">{filter ? 'Show only' : 'Priority'}</div>
+        <div className="ppick-t">{filter ? 'Show up to' : 'Priority'}</div>
         <div className="ppick-row">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((p) => (
-            <button key={p} tabIndex={-1} className={cx('prio', p === cur && 'on', p === hi && 'hi')} style={{ background: prioBg(p) }} onMouseMove={() => setHi(p)} onClick={() => pick(p)} title={filter ? `Only priority ${p} (⌥${p})` : `Priority ${p} (${p})`}>
+          {[1, 2, 3, 4, 5].map((p) => (
+            <button key={p} tabIndex={-1} className={cx('prio', p === cur && 'on', p === hi && 'hi')} style={{ background: prioBg(p) }} onMouseMove={() => setHi(p)} onClick={() => pick(p)} title={filter ? (p === 1 ? 'Only priority 1 (⌥1)' : `Priorities 1–${p} (⌥${p})`) : `Priority ${p} (${p})`}>
               {p}
             </button>
           ))}

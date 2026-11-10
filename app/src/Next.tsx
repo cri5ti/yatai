@@ -693,8 +693,8 @@ export function Next() {
     if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
     if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
-    // 1–9: quick priority (same digit again, or 0, clears)
-    if (/^[0-9]$/.test(k)) return ids.length ? (stop(), setPrio(ids, +k)) : undefined;
+    // 1–5: quick priority (same digit again, or 0, clears)
+    if (/^[0-5]$/.test(k)) return ids.length ? (stop(), setPrio(ids, +k)) : undefined;
 
     switch (k) {
       case 'ArrowDown':

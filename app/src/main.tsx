@@ -90,10 +90,10 @@ function App() {
       if (e.altKey && !M && !isTauri) {
         if (k === ' ') return (e.preventDefault(), get().capture ? closeCapture() : openCapture());
         if (k.toLowerCase() === 'y' || k === '¥') return (e.preventDefault(), toggleHidden());
-        if (!/^Digit\d$/.test(e.code)) return;
+        if (!/^Digit[0-5]$/.test(e.code)) return;
       }
-      // ⌥1–⌥9: show only that priority (⌥0, or the same again, shows everything)
-      if (e.altKey && !M && !e.shiftKey && /^Digit\d$/.test(e.code) && !isEditable(e.target)) return (e.preventDefault(), setPrioFilter(+e.code.slice(5)));
+      // ⌥1–⌥5: show priorities up to that one (⌥0, or the same again, shows everything)
+      if (e.altKey && !M && !e.shiftKey && /^Digit[0-5]$/.test(e.code) && !isEditable(e.target)) return (e.preventDefault(), setPrioFilter(+e.code.slice(5)));
       if (M && !e.altKey && get().proposal) {
         // a pending AI proposal: ⌘⏎ accepts, ⌘⌫ rejects (but ⌘⌫ still edits a text field that has text)
         const t = e.target as HTMLInputElement | null;
