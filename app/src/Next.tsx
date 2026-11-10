@@ -288,7 +288,6 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {fmtEst(node.est)}
               </button>
             ) : null}
-            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} ids={picked && x.multi.size > 1 ? [...x.multi] : [node.id]} />
             <button
               className="kebab"
               tabIndex={-1}
@@ -307,6 +306,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {running ? '❚❚' : '▶'}
               </button>
             )}
+            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} ids={picked && x.multi.size > 1 ? [...x.multi] : [node.id]} />
           </div>
           <div className="abody">
             <div className={cx('first', pk('title') && 'pk')}>
