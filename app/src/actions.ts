@@ -427,7 +427,11 @@ export function toggleToday(id: string) {
   if (!hasKids(nodes, id)) return patchNodes(n.today ? 'Remove from Next' : 'Add to Next', [id], { today: !n.today, later: n.today ? n.later : undefined });
   const open = leavesOf(nodes, id).filter((l) => l.status !== 'done');
   if (open.every((l) => l.today)) return unplan([id]); // the whole hierarchy goes, parent included
-  patchNodes('Add to Next', open.map((l) => l.id), { today: true, later: undefined });
+  // the open leaves come into Next; nothing in the hierarchy stays deferred (/tomorrow put `later` on the parent too)
+  const leaves = new Set(open.map((l) => l.id));
+  const sub = subtreeIds(nodes, [id]);
+  const touch = nodes.filter((x) => sub.has(x.id) && (leaves.has(x.id) || x.later != null)).map((x) => x.id);
+  patchNodes('Add to Next', touch, (x) => (leaves.has(x.id) ? { today: true, later: undefined } : { later: undefined }));
 }
 /** take items (with everything beneath them) out of Next; they stay in the Organizer */
 export const unplan = (ids: string[]) => {
