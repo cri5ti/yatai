@@ -1,14 +1,14 @@
 # yatai: read the Inbox of the local (classic) Outlook through COM. Read-only.
-# In (stdin, JSON): { "since": "<ISO time or empty>", "limit": 50, "known": ["<EntryID>", ...] }
+# In (stdin, JSON): { "days": 14, "limit": 200, "known": ["<EntryID>", ...] }
 # Out (stdout, JSON): { "error": "…" } or { "me": "<name>", "items": [ { id, conv, received, from, fromAddr, to, cc, subject, unread, importance, attach, body? } ] }
-#   the unread mail (newest first, at most `limit`), plus everything received after `since`.
+#   the unread mail received in the last `days` days (0 = any age), newest first, at most `limit`.
 #   `body` (the first 2000 characters of the plain text) only for ids not in `known`: the classifier needs it once.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $in = [Console]::In.ReadToEnd() | ConvertFrom-Json
-$limit = if ($in.limit) { [int]$in.limit } else { 50 }
-$since = if ($in.since) { [DateTime]::Parse($in.since).ToUniversalTime() } else { $null }
+$limit = if ($in.limit) { [int]$in.limit } else { 200 }
+$cutoff = if ($in.days -gt 0) { [DateTime]::UtcNow.AddDays(-[double]$in.days) } else { $null }
 $known = @{}
 foreach ($k in @($in.known)) { if ($k) { $known[$k] = $true } }
 
@@ -36,20 +36,14 @@ function Add-Mail($m) {
   $out[$id] = $o
 }
 
+# newest first, stop at the first one older than the cutoff (no date in the filter: Jet date literals depend on the locale)
 $unread = $inbox.Items.Restrict('[UnRead] = True')
 $unread.Sort('[ReceivedTime]', $true)
-$n = 0
-foreach ($m in $unread) { if ($n -ge $limit) { break }; Add-Mail $m; $n++ }
-
-if ($since) {
-  $all = $inbox.Items
-  $all.Sort('[ReceivedTime]', $true)
-  $m = $all.GetFirst(); $n = 0
-  while ($m -and $n -lt 200) {
-    if ($m.ReceivedTime.ToUniversalTime() -le $since) { break }
-    Add-Mail $m; $n++
-    $m = $all.GetNext()
-  }
+$m = $unread.GetFirst(); $n = 0
+while ($m -and $n -lt $limit) {
+  if ($cutoff -and $m.ReceivedTime.ToUniversalTime() -lt $cutoff) { break }
+  Add-Mail $m; $n++
+  $m = $unread.GetNext()
 }
 
 ConvertTo-Json -Compress -Depth 4 -InputObject ([ordered]@{ me = [string]$ns.CurrentUser.Name; items = @($out.Values) })

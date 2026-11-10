@@ -1293,6 +1293,8 @@ export function resortMail() {
   toast('Emails: sorting them all again', 'info');
   void refreshNow('mail');
 }
+/** Emails: read Outlook again now (the window of days changed) */
+export const refreshMail = () => void refreshNow('mail');
 export const toggleDev = () => set((s) => ({ dev: !s.dev, hidden: false }));
 export const setDemo = (demo: boolean) => set(() => ({ demo }));
 export function loadDemo() {

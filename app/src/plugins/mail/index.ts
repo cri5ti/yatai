@@ -1,13 +1,13 @@
 /**
  * Emails: the Inbox of the classic Outlook on this PC (COM, through src-tauri/src/mail.rs), sorted by a local model
  * into Urgent / Today / Eventually / Dismiss. Read-only: nothing is marked read or moved in Outlook.
- * The first look takes the newest 50 unread; after that, everything that arrives. Each mail is sorted once.
+ * It looks at the unread mail of the last N days (Settings → Emails; at most 200). Each mail is sorted once.
  */
 import { get, set } from '../../store';
 import { isTauri, mailFetch } from '../../platform';
 import type { Impl, ListState, Notice, Plugin } from '../types';
 import { classify } from './classify';
-import { BUCKETS, entriesOf, knownOf, merge, sinceOf, tabsOf } from './model';
+import { BUCKETS, entriesOf, knownOf, merge, tabsOf } from './model';
 import type { Fetched, MailState } from './model';
 import { mock } from './mock';
 
@@ -31,11 +31,12 @@ function save(mail: MailState) {
 
 async function look(): Promise<MailState> {
   const st = get().mail;
-  const raw = await mailFetch(ID, { since: sinceOf(st), limit: 50, known: knownOf(st) });
+  const days = get().settings.mailDays ?? 14;
+  const raw = await mailFetch(ID, { days, limit: 200, known: knownOf(st) });
   const res = JSON.parse(raw) as { error?: string; me?: string; items?: Fetched[] };
   if (res.error) throw new Error(`Outlook: ${res.error}`);
   for (const f of res.items ?? []) if (f.body != null) bodies.set(f.id, f.body);
-  const next = { ...merge(get().mail, res.items ?? [], Date.now()), me: res.me || st.me };
+  const next = { ...merge(get().mail, res.items ?? [], Date.now(), days), me: res.me || st.me };
   save(next);
   return next;
 }

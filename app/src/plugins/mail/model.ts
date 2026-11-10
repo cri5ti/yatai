@@ -57,10 +57,11 @@ const KEEP_READ_MS = 3 * 864e5; // a mail that has been read stays listed (dimme
 const MAX = 300;
 
 /**
- * Fold one look at Outlook into the state. What it returned is added or updated (a new one is `fresh` unless this
- * is the first look); a mail it no longer returns has been read (or moved) elsewhere.
+ * Fold one look at Outlook (the unread mail of the last `days`) into the state. What it returned is added or updated
+ * (a new one is `fresh` unless this is the first look); a mail it no longer returns has been read (or moved) elsewhere.
+ * Mail older than the window goes (0 = no window).
  */
-export function merge(st: MailState, got: Fetched[], now: number): MailState {
+export function merge(st: MailState, got: Fetched[], now: number, days = 0): MailState {
   const by = new Map(got.map((f) => [f.id, f]));
   const items: MailItem[] = st.items.map((m) => {
     const f = by.get(m.id);
@@ -74,13 +75,12 @@ export function merge(st: MailState, got: Fetched[], now: number): MailState {
       unread: f.unread, important: f.importance === 2 || undefined, fresh: st.polled != null || undefined,
     });
   }
-  const kept = items.filter((m) => m.unread || now - Date.parse(m.received) < KEEP_READ_MS);
+  const age = (m: MailItem) => now - Date.parse(m.received);
+  const kept = items.filter((m) => (m.unread || age(m) < KEEP_READ_MS) && (!days || age(m) < days * 864e5));
   kept.sort((a, b) => b.received.localeCompare(a.received));
   return { ...st, items: kept.slice(0, MAX), polled: now };
 }
 
-/** what to ask Outlook for: everything received since a little before the last look (its sync can lag), by id */
-export const sinceOf = (st: MailState) => (st.polled ? new Date(st.polled - 2 * 3_600_000).toISOString() : '');
 /** ids whose body is not needed again (already sorted) */
 export const knownOf = (st: MailState) => st.items.filter((m) => m.cls).map((m) => m.id);
 

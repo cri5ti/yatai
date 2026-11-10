@@ -146,6 +146,7 @@ export function Settings() {
     try {
       if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
       if (cfg.mailModel !== s.settings.mailModel) act.resortMail();
+      else if (cfg.mailDays !== s.settings.mailDays) act.refreshMail();
       if (bk.draft && !same(bk.draft, bk.base)) await invoke('backup_set_config', { config: bk.draft });
       if (key.trim()) {
         setSt(await aiSetKey(key));
@@ -266,7 +267,7 @@ export function Settings() {
               <span className="set-hint">{!isTauri ? 'needs the desktop app' : s.mail.polled ? `${s.mail.items.length} emails · read ${new Date(s.mail.polled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'not read yet'}</span>
             </header>
             <p className="set-note">
-              Reads the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email with a local model: Urgent, Today, Eventually or Dismiss.
+              Reads the unread mail in the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email with a local model: Urgent, Today, Eventually or Dismiss.
               Nothing leaves the machine, and nothing is changed in Outlook.
             </p>
             <div className="set-row">
@@ -274,6 +275,15 @@ export function Settings() {
                 Local model<small>An Ollama model on this PC (ollama pull &lt;name&gt;). Changing it sorts every email again.</small>
               </span>
               <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="qwen3:4b-instruct-2507-q4_K_M" />
+            </div>
+            <div className="set-row">
+              <span className="set-lbl">
+                Unread from the last<small>Only unread mail this recent is looked at (0 = any age, at most 200).</small>
+              </span>
+              <span className="set-hours">
+                <input type="number" min={0} max={365} value={cfg.mailDays} disabled={!isTauri} onChange={(e) => patch({ mailDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })} onKeyDown={enter} style={{ width: '5em' }} />
+                <span>days</span>
+              </span>
             </div>
             <div className="set-row">
               <span className="set-lbl">
