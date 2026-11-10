@@ -120,6 +120,7 @@ export function AiPop() {
             )}
           </div>
         )}
+        <div className="ai-foot">
         <ProposalBar inPop />
         {next.length > 0 && (
           <div className="ai-sugg" ref={sugg} role="group" aria-label="Suggested next steps (↑ from the input)">
@@ -145,6 +146,7 @@ export function AiPop() {
             else if (e.key === 'ArrowUp' && !q) (e.preventDefault(), (sugg.current?.querySelector('button') as HTMLElement | null)?.focus());
           }}
         />
+        </div>
       </div>
     </div>
   );
