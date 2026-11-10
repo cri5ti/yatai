@@ -377,6 +377,8 @@ export const pluginGetSecretUrl = (plugin: string) => (requests.count(plugin), i
 /** the classic Outlook's Inbox through COM (src-tauri/src/mail.rs); input and output as in mail.ps1 */
 export const mailFetch = (plugin: string, input: unknown) => (requests.count(plugin), invoke<string>('mail_fetch', { input: JSON.stringify(input) }));
 /** the local model server (Ollama) on loopback (src-tauri/src/llm.rs); an empty body is a GET */
+/** the Laya decision-model helper on loopback, started by Rust when needed (src-tauri/src/laya.rs) */
+export const layaPredict = (body: unknown) => invoke<{ status: number; body: string }>('laya_predict', { body: JSON.stringify(body) });
 export const llmLocal = (path: string, body: unknown) => invoke<{ status: number; body: string }>('llm_local', { path, body: body == null ? '' : JSON.stringify(body) });
 
 export const setTrayMode = (mode: 'normal' | 'attention' | 'meeting') => isTauri && invoke('set_tray_mode', { mode }).catch(() => {});

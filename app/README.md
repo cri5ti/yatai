@@ -9,6 +9,8 @@ bun run dev       # the same UI in a browser at :5174 (localStorage, AI via the 
 bun run bundle    # release build → src-tauri/target/release/bundle
 ```
 
+Emails (Windows, classic Outlook) sorts mail on this PC: with Ollama (`ollama pull qwen3:4b-instruct-2507-q4_K_M`), or with the Laya decision model, set up once with `powershell -ExecutionPolicy Bypass -File sidecar\laya\setup.ps1` (a Python 3.12 venv in `%LOCALAPPDATA%\yatai\laya`; the app starts the helper when needed). Settings → Emails picks one.
+
 The Rust toolchain is pinned in `src-tauri/rust-toolchain.toml` (Tauri 2.12 needs rustc ≥ 1.90).
 
 ## What changed from the POC

@@ -196,7 +196,9 @@ export interface Settings {
   devopsOrg: string; // Azure DevOps organization: 'acme', 'dev.azure.com/acme' or 'acme.visualstudio.com' (its token is in the keychain)
   workStart: number; // working hours, minutes of the day (the Outlook schedule fits them on 80% of the drawer)
   workEnd: number;
-  mailModel: string; // the local (Ollama) model that sorts emails
+  mailSorter: 'laya' | 'ollama'; // what sorts emails: a Laya decision model (no LLM), or an Ollama LLM (kept for comparison)
+  mailLaya: 'english' | 'multilingual' | 'typed-decisions'; // the Laya checkpoint
+  mailModel: string; // the Ollama model
   mailDays: number; // Emails looks at the unread mail of this many days (0 = any age)
 }
 
@@ -366,7 +368,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailModel: 'qwen3:4b-instruct-2507-q4_K_M', mailDays: 14 };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailSorter: 'ollama', mailLaya: 'english', mailModel: 'qwen3:4b-instruct-2507-q4_K_M', mailDays: 14 };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });

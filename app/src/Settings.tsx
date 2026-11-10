@@ -145,7 +145,8 @@ export function Settings() {
     setBusy(true);
     try {
       if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
-      if (cfg.mailModel !== s.settings.mailModel) act.resortMail();
+      const resort = cfg.mailSorter !== s.settings.mailSorter || (cfg.mailSorter === 'laya' ? cfg.mailLaya !== s.settings.mailLaya : cfg.mailModel !== s.settings.mailModel);
+      if (resort) act.resortMail();
       else if (cfg.mailDays !== s.settings.mailDays) act.refreshMail();
       if (bk.draft && !same(bk.draft, bk.base)) await invoke('backup_set_config', { config: bk.draft });
       if (key.trim()) {
@@ -267,15 +268,37 @@ export function Settings() {
               <span className="set-hint">{!isTauri ? 'needs the desktop app' : s.mail.polled ? `${s.mail.items.length} emails · read ${new Date(s.mail.polled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'not read yet'}</span>
             </header>
             <p className="set-note">
-              Reads the unread mail in the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email with a local model: Urgent, Today, Eventually or Dismiss.
+              Reads the unread mail in the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email on this PC: Urgent, Today, Eventually or Dismiss.
               Nothing leaves the machine, and nothing is changed in Outlook.
             </p>
             <div className="set-row">
               <span className="set-lbl">
-                Local model<small>An Ollama model on this PC (ollama pull &lt;name&gt;). Changing it sorts every email again.</small>
+                Sorter<small>Laya: a decision model (no LLM), set up with app\sidecar\laya\setup.ps1. Ollama: a local LLM, kept for comparison. Changing it sorts every email again.</small>
               </span>
-              <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="qwen3:4b-instruct-2507-q4_K_M" />
+              <select value={cfg.mailSorter} disabled={!isTauri} onChange={(e) => patch({ mailSorter: e.target.value as typeof cfg.mailSorter })}>
+                <option value="laya">Laya (decision model)</option>
+                <option value="ollama">Ollama (LLM)</option>
+              </select>
             </div>
+            {cfg.mailSorter === 'laya' ? (
+              <div className="set-row">
+                <span className="set-lbl">
+                  Laya checkpoint<small>English and multilingual are the base checkpoints; typed decisions is the one fine-tuned for questions like these.</small>
+                </span>
+                <select value={cfg.mailLaya} disabled={!isTauri} onChange={(e) => patch({ mailLaya: e.target.value as typeof cfg.mailLaya })}>
+                  <option value="english">English</option>
+                  <option value="multilingual">Multilingual</option>
+                  <option value="typed-decisions">Typed decisions (fine-tuned)</option>
+                </select>
+              </div>
+            ) : (
+              <div className="set-row">
+                <span className="set-lbl">
+                  Ollama model<small>An Ollama model on this PC (ollama pull &lt;name&gt;).</small>
+                </span>
+                <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="qwen3:4b-instruct-2507-q4_K_M" />
+              </div>
+            )}
             <div className="set-row">
               <span className="set-lbl">
                 Unread from the last<small>Only unread mail this recent is looked at (0 = any age, at most 200).</small>
@@ -287,7 +310,7 @@ export function Settings() {
             </div>
             <div className="set-row">
               <span className="set-lbl">
-                Sort again<small>Forget how every email was sorted and ask the model again.</small>
+                Sort again<small>Forget how every email was sorted and sort them again.</small>
               </span>
               <button className="btn sm" disabled={!isTauri || !s.mail.items.length} onClick={() => act.resortMail()}>
                 Sort all again

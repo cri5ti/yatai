@@ -1,6 +1,7 @@
 mod ai;
 mod backup;
 mod db;
+mod laya;
 mod llm;
 mod mail;
 mod plugin;
@@ -388,6 +389,7 @@ pub fn run() {
             plugin::plugin_get_secret_url,
             mail::mail_fetch,
             llm::llm_local,
+            laya::laya_predict,
         ])
         .build(tauri::generate_context!())
         .expect("error while building yatai");

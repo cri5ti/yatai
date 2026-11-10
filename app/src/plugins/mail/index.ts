@@ -1,12 +1,12 @@
 /**
- * Emails: the Inbox of the classic Outlook on this PC (COM, through src-tauri/src/mail.rs), sorted by a local model
- * into Urgent / Today / Eventually / Dismiss. Read-only: nothing is marked read or moved in Outlook.
+ * Emails: the Inbox of the classic Outlook on this PC (COM, through src-tauri/src/mail.rs), sorted on this machine
+ * into Urgent / Today / Eventually / Dismiss by a Laya decision model (or, for comparison, an Ollama LLM). Read-only: nothing is marked read or moved in Outlook.
  * It looks at the unread mail of the last N days (Settings → Emails; at most 200). Each mail is sorted once.
  */
 import { get, set } from '../../store';
 import { isTauri, mailFetch } from '../../platform';
 import type { Impl, ListState, Notice, Plugin } from '../types';
-import { classify } from './classify';
+import { classify, sorterOf } from './classify';
 import { BUCKETS, entriesOf, knownOf, merge, tabsOf } from './model';
 import type { Fetched, MailState } from './model';
 import { mock } from './mock';
@@ -44,14 +44,14 @@ async function look(): Promise<MailState> {
 async function sort(): Promise<Notice[]> {
   const out: Notice[] = [];
   const t0 = Date.now();
-  const model = get().settings.mailModel || 'qwen3:4b-instruct-2507-q4_K_M';
+  const cfg = get().settings;
   for (;;) {
     const st = get().mail;
     const m = st.items.find((x) => !x.cls);
     if (!m || Date.now() - t0 > BUDGET_MS) break;
     let r;
     try {
-      r = await classify(model, st.me ?? '', { ...m, body: bodies.get(m.id) });
+      r = await classify(cfg, st.me ?? '', { ...m, body: bodies.get(m.id) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg !== lastModelError) out.push({ text: `Emails: ${msg}`, tone: 'warn' });
@@ -61,7 +61,7 @@ async function sort(): Promise<Notice[]> {
     lastModelError = '';
     bodies.delete(m.id);
     const cur = get().mail;
-    save({ ...cur, items: cur.items.map((x) => (x.id === m.id ? { ...x, ...r, by: model } : x)) });
+    save({ ...cur, items: cur.items.map((x) => (x.id === m.id ? { ...x, ...r, by: sorterOf(cfg) } : x)) });
     if (m.fresh && m.unread && r.cls === 'urgent') out.push({ text: `Urgent email from ${m.from}: ${m.subject}`, tone: 'bad' });
   }
   return out;
@@ -82,7 +82,7 @@ const live: Impl = {
 
 /** forget how everything was sorted (another model, a better prompt): it is all sorted again over the next cycles */
 export function resort(s: MailState): MailState {
-  return { ...s, items: s.items.map(({ cls: _c, why: _w, by: _b, ...m }) => m) };
+  return { ...s, items: s.items.map(({ cls: _c, why: _w, by: _b, p: _p, reply: _r, ...m }) => m) };
 }
 
 export const mail: Plugin = {

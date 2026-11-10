@@ -1,5 +1,10 @@
-/** Sorting one email into a bucket with a small local model (Ollama), on this machine: nothing leaves it. */
-import { llmLocal } from '../../platform';
+/**
+ * Sorting one email into a bucket, on this machine (nothing leaves it). Two sorters:
+ *  - Laya (default): an encoder decision model answering typed questions with probabilities; no text is generated.
+ *  - Ollama: a small generative LLM with a JSON-schema answer. Kept for comparison (app/todo.md: review it).
+ */
+import { layaPredict, llmLocal } from '../../platform';
+import type { Settings } from '../../store';
 import { isBucket } from './model';
 import type { Bucket, MailItem } from './model';
 
@@ -47,7 +52,74 @@ const threads = () => Math.max(2, Math.floor(((typeof navigator !== 'undefined' 
 /** the transport, swappable for tests */
 export const transport = { post: llmLocal };
 
-export async function classify(model: string, me: string, m: MailItem & { body?: string }): Promise<{ cls: Bucket; why: string }> {
+export type Sorted = { cls: Bucket; why: string; p?: number; reply?: boolean };
+type Cfg = Pick<Settings, 'mailSorter' | 'mailLaya' | 'mailModel'>;
+/** what an item was sorted by (kept on it) */
+export const sorterOf = (c: Cfg) => (c.mailSorter === 'ollama' ? c.mailModel || 'qwen3:4b-instruct-2507-q4_K_M' : `laya:${c.mailLaya || 'english'}`);
+
+export function classify(c: Cfg, me: string, m: MailItem & { body?: string }): Promise<Sorted> {
+  return c.mailSorter === 'ollama' ? classifyOllama(c.mailModel || 'qwen3:4b-instruct-2507-q4_K_M', me, m) : classifyLaya(c.mailLaya || 'english', me, m);
+}
+
+/* ---------- Laya: typed questions, one forward pass, probabilities ---------- */
+
+/** the questions asked of each email: the bucket, and two yes/no signals shown beside it */
+export const questions = (me: string) => ({
+  bucket: {
+    type: 'choice',
+    instructions: `When must ${me}, a software developer, deal with this email?`,
+    criteria: {
+      urgent: `within the hour: a production incident or outage, someone blocked right now waiting on ${me}, a security problem with their own account`,
+      today: `today: a person wrote to ${me} and expects a reply or an action soon: a question, a request, a review or approval, a decision`,
+      eventually: 'some time: FYI from colleagues, team or company announcements, mentions and comments on documents, digests',
+      dismiss: 'never: marketing, vendor newsletters, event invitations, receipts, automatic replies, routine automated notices',
+    },
+  },
+  needs_reply: { type: 'noul', instructions: `Does the sender expect ${me} to reply or act?` },
+  bulk: { type: 'noul', instructions: 'Is this bulk mail: marketing, a newsletter or an automated notification?' },
+});
+
+/** a noul answer: a probability of "yes" (or a plain boolean) */
+const yes = (a: unknown): boolean | undefined => {
+  const v = a && typeof a === 'object' ? (a as { noul?: unknown }).noul : undefined;
+  return typeof v === 'number' ? v >= 0.5 : typeof v === 'boolean' ? v : undefined;
+};
+
+export const layaTransport = { post: layaPredict };
+
+export async function classifyLaya(checkpoint: string, me: string, m: MailItem & { body?: string }, now = Date.now()): Promise<Sorted> {
+  const who = me || 'the user';
+  const r = await layaTransport.post({
+    model: checkpoint,
+    email: {
+      subject: m.subject,
+      body: m.body ?? '',
+      sender: m.addr ? `${m.from} <${m.addr}>` : `${m.from} (colleague, same organisation)`,
+      to: (m.to ?? '').slice(0, 300),
+      received: ago(m.received, now),
+      max_chars: 1500,
+    },
+    questions: questions(who),
+  });
+  let out: { answers?: Record<string, { choice?: unknown; probabilities?: Record<string, number> }>; error?: string } = {};
+  try {
+    out = JSON.parse(r.body);
+  } catch {
+    /* falls through */
+  }
+  if (r.status < 200 || r.status >= 300) throw new Error(`Laya: ${out.error ?? `answered ${r.status}`}`);
+  const b = out.answers?.bucket;
+  if (!b || !isBucket(b.choice)) throw new Error('Laya did not answer with a bucket');
+  const p = b.probabilities?.[b.choice];
+  const reply = yes(out.answers?.needs_reply);
+  const bulk = yes(out.answers?.bulk);
+  const why = [p != null && `${Math.round(p * 100)}%`, reply && 'expects a reply', bulk && 'bulk'].filter(Boolean).join(' · ');
+  return { cls: b.choice, why, p, reply };
+}
+
+/* ---------- Ollama: a generative LLM with a JSON-schema answer ---------- */
+
+export async function classifyOllama(model: string, me: string, m: MailItem & { body?: string }): Promise<Sorted> {
   const r = await transport.post('api/chat', {
     model,
     stream: false,

@@ -6,8 +6,8 @@ use std::time::Duration;
 
 #[derive(serde::Serialize)]
 pub struct LlmRes {
-    status: u16,
-    body: String,
+    pub(crate) status: u16,
+    pub(crate) body: String,
 }
 
 /// every process whose exe starts with "ollama" (the server, the tray app, the model runners): idle priority

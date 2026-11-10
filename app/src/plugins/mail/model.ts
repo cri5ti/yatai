@@ -42,7 +42,9 @@ export interface MailItem {
   /** what the model said, and which model */
   cls?: Bucket;
   why?: string;
-  by?: string;
+  by?: string; // 'laya:english', or the Ollama model
+  p?: number; // Laya: the probability of that bucket
+  reply?: boolean; // Laya: the sender expects a reply or an action
   /** arrived after the first look (the seed): an urgent one is announced */
   fresh?: boolean;
 }
