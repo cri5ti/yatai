@@ -409,6 +409,13 @@ export function toggleCardOpen(c: CardM, open: boolean) {
 }
 
 export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `Estimate ${v} min` : 'Clear estimate', ids, { est: v });
+/** keys 1–9: set the quick priority (the same digit again on all of them clears it; 0 clears) */
+export function setPrio(ids: string[], p: number) {
+  const nodes = get().nodes.filter((n) => ids.includes(n.id));
+  if (!nodes.length) return;
+  const v = p && nodes.every((n) => n.prio === p) ? undefined : p || undefined;
+  patchNodes(v ? `Priority ${v}` : 'Clear priority', ids, { prio: v });
+}
 export const cycleEst = (ids: string[], dir: 1 | -1) => patchNodes('Estimate', ids, (n) => ({ est: stepEst(n.est, dir) }));
 export const setDue = (ids: string[], days: number | null) =>
   patchNodes(days == null ? 'Clear due date' : 'Set due date', ids, { due: days == null ? undefined : isoDay(days) });
@@ -1306,7 +1313,7 @@ export function pasteItems(tree: ClipItem[], at: { parentId: string | null; afte
   const tops: Node[] = [];
   const build = (items: ClipItem[], parentId: string | null, top: boolean) =>
     items.forEach((it) => {
-      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo', ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}) });
+      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo', ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}), ...(it.prio ? { prio: it.prio } : {}) });
       made.push(n);
       if (top) tops.push(n);
       build(it.kids, n.id, false);

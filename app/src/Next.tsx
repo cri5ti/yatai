@@ -3,18 +3,18 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, whenLabel, inLabel } from './model';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, prioShown, bestPrio, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
   moveRows, openAllNext, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
-  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem,
+  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { InlineEdit } from './Inline';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
-import { Chips, DueChip } from './Chips';
+import { Chips, DueChip, Prio } from './Chips';
 import { SourceOff } from './Pr';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
@@ -288,6 +288,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {fmtEst(node.est)}
               </button>
             ) : null}
+            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} />
             <button
               className="kebab"
               tabIndex={-1}
@@ -466,6 +467,7 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
           {card.total > 0 && `${card.done}/${card.total}`}
           {card.est > 0 && ` · ${fmtEst(card.est)}`}
         </span>
+        {card.collapsed && <Prio v={bestPrio(card.rows.map((r) => (r.node ? prioShown(s.nodes, r.node.id, true) : null)))} />}
       </header>}
 
       <div className="collapse" data-open={!card.collapsed}>
@@ -691,6 +693,8 @@ export function Next() {
     if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
     if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
+    // 1–9: quick priority (same digit again, or 0, clears)
+    if (/^[0-9]$/.test(k)) return ids.length ? (stop(), setPrio(ids, +k)) : undefined;
 
     switch (k) {
       case 'ArrowDown':

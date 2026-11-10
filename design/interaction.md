@@ -15,7 +15,8 @@ How yatai is meant to feel to use. This is the part of the original idea notes a
 
 - **One kind of thing.** Project, task and action are all *items*; "task" just means "has children". An action is a leaf. Items nest to any depth.
 - **Multi-line text.** Only the first line is the headline; lines 2+ are notes in a smaller font. Basic markdown is supported in notes and titles: bold, italic, links, lists, checkboxes. A link to something yatai understands (a GitHub PR) renders as a compact reference.
-- **Estimates and due dates.** Estimate with 1=5 min, 2=15 min, 3=30 min, 4=1 h, 5=2 h, 6=4 h, 8=8 h, 0=none; ⇧←/→ steps through them. Due dates come from `/due` (with a date picker that also understands `fri`, `+3`, `tom`, `nov 20`).
+- **Quick priority.** Keys 1–9 on the selection (Next, Organizer) set a priority, 1 the highest; the same key again, or 0, clears it. It shows as a small bright square with the digit on the right of the row, coloured on a ramp from red (1) to blue (9). A collapsed item shows the highest priority found inside it. Copy / ⌘E carry it as `@p:N`.
+- **Estimates and due dates.** In the E menu, estimate with 1=5 min, 2=15 min, 3=30 min, 4=1 h, 5=2 h, 6=4 h, 8=8 h, 0=none; ⇧←/→ steps through them. Due dates come from `/due` (with a date picker that also understands `fri`, `+3`, `tom`, `nov 20`).
 - **Meetings are items too.** They sit in the plan at their time, can be moved and can hold items inside (typically "prep"). They carry one fixed, uneditable calendar row. Removing a meeting only removes it from yatai.
 
 ## 3. Navigating and editing

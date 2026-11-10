@@ -30,6 +30,7 @@ export interface Node {
   scheduled?: number;
   est?: number; // minutes
   due?: string; // yyyy-mm-dd
+  prio?: number; // quick priority 1 (highest) … 9, keys 1–9
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
   origin?: string; // made by yatai from what a source reported: '<ref>|<detail key>' (a failing check, a review thread); checked off when it is no longer outstanding

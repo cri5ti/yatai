@@ -31,7 +31,7 @@ const flat = (items: ClipItem[], depth = 0, parent = -1, out: Entry[] = []): Ent
 
 const markOf = (it: ClipItem) => (it.done ? 'x' : it.dropped ? '-' : ' ');
 /** everything the text says about a line, including how deep it is */
-const lineKey = (e: Entry) => `${e.depth}|${markOf(e.item)}|${e.item.title}|${e.item.est ?? ''}|${e.item.due ?? ''}`;
+const lineKey = (e: Entry) => `${e.depth}|${markOf(e.item)}|${e.item.title}|${e.item.est ?? ''}|${e.item.due ?? ''}|${e.item.prio ?? ''}`;
 const bodyKey = (e: Entry) => lineKey(e).slice(String(e.depth).length);
 
 /** which items a ⌘E edits: what the view shows (Next: its rows and the tasks above them; Organizer: the whole tree), or just the selection with its sub-items */
@@ -75,7 +75,7 @@ function forest(nodes: Node[], scope: Set<string>) {
 /** the text for these items */
 export function exportScope(nodes: Node[], scope: string[], isDone: (id: string) => boolean): string {
   const { roots, kids } = forest(nodes, new Set(scope));
-  const build = (n: Node): ClipItem => ({ title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, kids: (kids.get(n.id) ?? []).map(build) });
+  const build = (n: Node): ClipItem => ({ title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, prio: n.prio, kids: (kids.get(n.id) ?? []).map(build) });
   return toMarkdown(roots.map(build));
 }
 
@@ -83,7 +83,7 @@ function oldEntries(nodes: Node[], scope: Set<string>, isDone: (id: string) => b
   const { roots, kids } = forest(nodes, scope);
   const out: Entry[] = [];
   const walk = (n: Node, depth: number, parent: number) => {
-    const item: ClipItem = { title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, kids: [] };
+    const item: ClipItem = { title: n.title, done: isDone(n.id), dropped: n.status === 'dropped', est: n.est, due: n.due, prio: n.prio, kids: [] };
     const at = out.push({ depth, parent, item, node: n }) - 1;
     for (const c of kids.get(n.id) ?? []) walk(c, depth + 1, at);
   };
@@ -207,7 +207,7 @@ export function planEdit(nodes: Node[], scope: string[], text: string, isDone: (
     if (!old) {
       stats.added++;
       const status: Status = it.done ? 'done' : it.dropped ? 'dropped' : 'todo';
-      return { id: ids[i], parentId: parent, title: it.title, status, today, open: true, created: now, modified: now, ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}) };
+      return { id: ids[i], parentId: parent, title: it.title, status, today, open: true, created: now, modified: now, ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}), ...(it.prio ? { prio: it.prio } : {}) };
     }
     const n = old.node!;
     const textSame = bodyKey(e) === bodyKey(old);
@@ -225,6 +225,8 @@ export function planEdit(nodes: Node[], scope: string[], text: string, isDone: (
     else delete next.est;
     if (it.due) next.due = it.due;
     else delete next.due;
+    if (it.prio) next.prio = it.prio;
+    else delete next.prio;
     return next;
   });
   // a parent that gained a child opens up

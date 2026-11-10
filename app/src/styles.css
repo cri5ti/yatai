@@ -164,6 +164,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .meta { float: right; display: flex; align-items: center; gap: var(--sp-3); height: 1.5em; margin: 0 0 0 var(--sp-4); }
 .est-chip { border: 0; border-radius: var(--r-xs); padding: 0 4px; font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; line-height: 1.5em; }
 /* ⋮ = the row's context menu (every action), shown on hover / selection */
+.prio {
+  /* a ramp from --prio-hi (1) to --prio-lo (9), round the warm side of the hue wheel: red · orange · yellow · green · blue */
+  --pc: color-mix(in oklch longer hue, var(--prio-lo) calc(var(--pn, 0) * 12.5%), var(--prio-hi));
+  flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 3px;
+  background: var(--pc); color: var(--prio-text); font-size: 10px; font-weight: var(--fw-bold); line-height: 1; font-variant-numeric: tabular-nums;
+}
 .kebab { border: 0; border-radius: var(--r-xs); padding: 0 5px; line-height: 1.5em; color: var(--text-muted); font-size: 14px; font-weight: var(--fw-bold); opacity: 0; }
 .arow:hover .kebab, .arow.is-sel .kebab, .kebab:focus-visible { opacity: 1; } .kebab:hover { color: var(--text); }
 .spent { color: var(--text-muted); font-size: var(--fs-xs); }
@@ -249,6 +255,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .todaydot { color: var(--warn); margin: 0 var(--sp-2); }
 .est { color: var(--text-muted); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
 .ohead { display: flex; padding: var(--sp-2) 12px; color: var(--text-muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--bw) solid var(--border); background: var(--surface); }
+.c-p { width: 15px; flex: none; display: flex; }
 .c-m { width: 92px; flex: none; color: var(--text-muted); font-size: var(--fs-sm); text-align: left; font-weight: var(--fw-regular); }
 .is-table .orow { border-bottom: var(--bw) solid var(--border); }
 .is-table .orow.is-sel { border-bottom-color: transparent; }

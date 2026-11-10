@@ -4,14 +4,14 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday,
+  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday, setPrio,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
-import { childrenOf, depthOf, fmtEst, hlSubtree, laterLabel, plain, relTime } from './model';
+import { childrenOf, depthOf, fmtEst, prioShown, hlSubtree, laterLabel, plain, relTime } from './model';
 import { InlineEdit } from './Inline';
 import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
-import { Chips, DueChip } from './Chips';
+import { Chips, DueChip, Prio } from './Chips';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod } from './kbd';
@@ -186,6 +186,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
     else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
+    else if (!M && /^[0-9]$/.test(k) && ids.length) (stop(), setPrio(ids, +k));
     else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
     else if (k === '/') {
       stop();
@@ -278,6 +279,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           <span className="c-m">Modified</span>
           <span className="c-m">Last run</span>
           <span className="c-m">Next</span>
+          <span className="c-p" />
         </div>
       )}
 
@@ -427,6 +429,13 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                       {n.today && <span className="todaydot" title="In Next">★</span>}
                       {n.est && <span className={cx('est', pk('est') && 'pk')}>{fmtEst(n.est)}</span>}
                     </>
+                  )}
+                  {wide ? (
+                    <span className="c-p">
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open)} />
+                    </span>
+                  ) : (
+                    <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open)} />
                   )}
                 </>
               )}

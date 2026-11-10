@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Quick priority: 1–9 in Next / Organizer puts a small coloured square with the digit at the right of the row (red 1 → orange → yellow → green → blue 9; light and dark); same key again or 0 clears; works on a multi-selection; collapse a parent → it shows the highest (lowest number) inside; a collapsed meeting card's header too; Organizer table view keeps the column aligned; relaunch → kept
+
 - [ ] ⌘C / ⌘V on list items still copy / paste markdown (macOS routes them through the Edit menu)
 - [ ] ⌘Z / ⌘⇧Z with nothing being edited: one undo step, not two (the Edit menu has Undo too)
 - [ ] Resize the dock by its left edge: it keeps the new width and snaps back to the right edge, full height

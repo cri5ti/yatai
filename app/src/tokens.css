@@ -86,6 +86,9 @@
   --info: #5b6478;
   --info-soft: #eceef4;
   --gh-draft: #57606a; --gh-review: #0969da; --gh-feedback: #bc4c00; --gh-failing: #cf222e; --gh-ready: #1a7f37; --gh-merged: #8250df; --gh-closed: #82071e;
+  --prio-hi: oklch(0.70 0.22 25); /* priority 1: bright red — 2…8 are mixed between the two (styles.css .prio) */
+  --prio-lo: oklch(0.80 0.13 235); /* priority 9: bright sky blue */
+  --prio-text: rgba(0, 0, 0, 0.78);
   --hl: #fff2a0; /* yellow: something changed that you did not change */
   --hl-bar: #d9a400;
   --ai: #7c3aed; /* purple: changes an AI proposal would make — until you accept / reject */
@@ -132,6 +135,8 @@
   --info: #a0a8c0;
   --info-soft: #2b3040;
   --gh-draft: #8b949e; --gh-review: #4493f8; --gh-feedback: #f0883e; --gh-failing: #ff7b72; --gh-ready: #3fb950; --gh-merged: #ab7df8; --gh-closed: #e5534b;
+  --prio-hi: oklch(0.68 0.21 25);
+  --prio-lo: oklch(0.74 0.12 235);
   --hl: #4d4100;
   --hl-bar: #e6b800;
   --ai: #a77bff;

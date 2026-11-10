@@ -164,6 +164,20 @@ export function hlForCard(nodes: Node[], hl: Record<string, true>, card: CardM):
   return card.collapsed ? card.rows.flatMap((r) => (r.node ? hlSubtree(nodes, hl, r.node.id) : [])) : [];
 }
 
+/** the priority a row shows: its own, or — when collapsed — the highest (lowest number) in its subtree */
+export function prioShown(nodes: Node[], id: string, collapsed: boolean): { p: number; inside: boolean } | null {
+  const own = nodes.find((n) => n.id === id)?.prio;
+  if (!collapsed) return own ? { p: own, inside: false } : null;
+  const ids = new Set([id]);
+  let best = own ?? 99;
+  for (const n of nodes) if (n.parentId && ids.has(n.parentId)) (ids.add(n.id), n.prio && n.status === 'todo' && n.prio < best && (best = n.prio));
+  return best > 9 ? null : { p: best, inside: best !== own };
+}
+
+/** the highest of several shown priorities (a collapsed card) */
+export const bestPrio = (vs: ({ p: number; inside: boolean } | null)[]) =>
+  vs.reduce<{ p: number; inside: boolean } | null>((b, v) => (v && (!b || v.p < b.p) ? { p: v.p, inside: true } : b), null);
+
 export const childrenOf = (nodes: Node[], id: string | null) => nodes.filter((n) => n.parentId === id);
 
 export function pathOf(nodes: Node[], id: string | null): string[] {

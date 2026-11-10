@@ -16,6 +16,7 @@ export interface ClipItem {
   dropped: boolean;
   est?: number; // minutes
   due?: string; // yyyy-mm-dd
+  prio?: number; // 1–9
   kids: ClipItem[];
 }
 
@@ -26,10 +27,11 @@ export function parseEst(t: string): number | undefined {
   const v = Math.round(parseFloat(m[1] ?? '0') * 60 + parseInt(m[2] ?? '0', 10));
   return v > 0 ? v : undefined;
 }
-const META = /\s+@(est|due):(\S+)\s*$/i;
-/** the first line without its trailing @est: / @due: tokens (they only count at the very end, and never leave the title empty) */
-function splitMeta(first: string): { title: string; est?: number; due?: string } {
+const META = /\s+@(est|due|p):(\S+)\s*$/i;
+/** the first line without its trailing @est: / @due: / @p: tokens (they only count at the very end, and never leave the title empty) */
+function splitMeta(first: string): { title: string; est?: number; due?: string; prio?: number } {
   let title = first;
+  let prio: number | undefined;
   let est: number | undefined;
   let due: string | undefined;
   for (;;) {
@@ -39,13 +41,16 @@ function splitMeta(first: string): { title: string; est?: number; due?: string }
       const v = parseEst(m[2]);
       if (v == null) break;
       est ??= v;
+    } else if (m[1].toLowerCase() === 'p') {
+      if (!/^[1-9]$/.test(m[2])) break;
+      prio ??= +m[2];
     } else {
       if (!/^\d{4}-\d\d-\d\d$/.test(m[2])) break;
       due ??= m[2];
     }
     title = title.slice(0, m.index);
   }
-  return { title: title.trimEnd(), est, due };
+  return { title: title.trimEnd(), est, due, prio };
 }
 
 function lines(items: ClipItem[], depth: number, plainTop: boolean): string[] {
@@ -54,7 +59,7 @@ function lines(items: ClipItem[], depth: number, plainTop: boolean): string[] {
   for (const it of items) {
     const mark = it.done ? 'x' : it.dropped ? '-' : ' ';
     const [first, ...rest] = it.title.split('\n');
-    const meta = [it.est ? `@est:${fmtEst(it.est)}` : '', it.due ? `@due:${it.due}` : ''].filter(Boolean).join(' ');
+    const meta = [it.est ? `@est:${fmtEst(it.est)}` : '', it.due ? `@due:${it.due}` : '', it.prio ? `@p:${it.prio}` : ''].filter(Boolean).join(' ');
     out.push(`${pad}${depth === 0 && plainTop ? '' : '- '}[${mark}] ${first}${meta ? ` ${meta}` : ''}`);
     for (const l of rest) if (l.trim()) out.push(`${pad}  ${l}`);
     out.push(...lines(it.kids, depth + 1, plainTop));
@@ -79,6 +84,7 @@ export function treeOf(nodes: Node[], ids: string[], isDone: (id: string) => boo
     dropped: n.status === 'dropped',
     est: n.est,
     due: n.due,
+    prio: n.prio,
     kids: nodes.filter((c) => c.parentId === n.id).map(build),
   });
   return nodes.filter((n) => want.has(n.id) && !hasAncestor(n)).map(build);
@@ -100,11 +106,12 @@ export function parseMarkdown(text: string): ClipItem[] {
       top.item.title += '\n' + raw.trim(); // continuation of the item above
       continue;
     }
-    const { title, est, due } = splitMeta(isItem ? m[4].trim() : raw.trim().replace(/^#{1,6}\s+/, ''));
+    const { title, est, due, prio } = splitMeta(isItem ? m[4].trim() : raw.trim().replace(/^#{1,6}\s+/, ''));
     if (!title) continue;
     const item: ClipItem = { title, done: isItem && (m[3] === 'x' || m[3] === 'X'), dropped: isItem && m[3] === '-', kids: [] };
     if (est) item.est = est;
     if (due) item.due = due;
+    if (prio) item.prio = prio;
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
     (stack.length ? stack[stack.length - 1].item.kids : root).push(item);
     stack.push({ indent, item });
