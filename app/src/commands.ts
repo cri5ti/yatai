@@ -156,12 +156,12 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   items.push({ id: 'remind', label: remindLabelFor([n.id]), cmd: 'remind', icon: '⏰', tip: 'Come back to it later: it returns to Next, highlighted, with a notification', sub: remindItems([n.id]) });
   items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo([n.id], 1) });
   items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems([n.id]) });
-  const inNext = kids ? leaves.some((l) => nodes.find((x) => x.id === l)!.today) : n.today;
-  items.push(
-    inNext
-      ? { id: 'unplan', label: 'Remove from Next', cmd: 'remove', keys: 'T', icon: '⊖', run: () => A.unplan([n.id]) }
-      : { id: 'plan', label: 'Add to Next', cmd: 'plan', keys: 'T', icon: '★', run: () => A.toggleToday(n.id) },
-  );
+  // fully in Next: the item and everything open under it; partly: some of it (then both are offered)
+  const leafNodes = leaves.map((l) => nodes.find((x) => x.id === l)!).filter((x) => x.status !== 'done' && x.status !== 'dropped');
+  const full = kids ? n.today && leafNodes.every((x) => x.today) : n.today;
+  const some = n.today || (kids && leaves.some((l) => nodes.find((x) => x.id === l)!.today));
+  if (!full) items.push({ id: 'plan', label: some ? 'Add all of it to Next' : 'Add to Next', cmd: 'plan', keys: 'T', icon: '★', run: () => A.toggleToday(n.id) });
+  if (some) items.push({ id: 'unplan', label: 'Remove from Next', cmd: 'remove', keys: full ? 'T' : undefined, icon: '⊖', run: () => A.unplan([n.id]) });
   items.push({ id: 'duplicate', label: 'Duplicate', cmd: 'duplicate', icon: '⧉', run: () => A.duplicate([n.id]) });
   items.push({ id: 'abandon', label: 'Abandon', cmd: 'abandon', icon: '⊘', run: () => A.abandon([n.id]) });
   items.push({ id: 'delete', label: 'Delete', cmd: 'delete', keys: '⌫', icon: '🗑', danger: true, run: () => A.removeNodes([n.id]) });
@@ -187,7 +187,7 @@ function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
     { id: 'remind', label: remindLabelFor(ids), cmd: 'remind', icon: '⏰', sub: remindItems(ids) },
     { id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(ids, 1) },
     { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },
-    { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => ids.forEach((id) => A.toggleToday(id)) },
+    { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => A.addToNext(ids) },
     { id: 'unplan', label: 'Remove from Next', cmd: 'remove', icon: '⊖', run: () => A.unplan(ids) },
     ...(ids.some((id) => { const x = get().nodes.find((n) => n.id === id); return !!x && refsOf(x).length > 0; })
       ? [

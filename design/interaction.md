@@ -31,7 +31,7 @@ How yatai is meant to feel to use. This is the part of the original idea notes a
 ## 4. Starting, the stack and the schedule
 
 - **Starting an action** moves it (and its task) to the top of the stack and shows a running stopwatch; it is the "current" item. Finishing asks what next.
-- **Next is a plan, not a query.** It is an ordered list of cards; a card is a task (or a meeting) and the actions of it that are scheduled for today. Order is the user's, except that meetings rise to the top as their time approaches and smart items needing attention are promoted.
+- **Next is a plan, not a query.** It is an ordered list of cards; a card is a task (or a meeting) and the actions of it that are scheduled for today. Order is the user's, except that meetings rise to the top as their time approaches and smart items needing attention are promoted. **Add to Next** (T, or the menu) on a parent puts the parent itself and everything open under it in Next, and clears any "tomorrow" in it; T on something that is all in Next takes the whole hierarchy out. When only part of it is in Next, the menu offers both (*Add all of it to Next* on T, and *Remove from Next*).
 - **Splitting the schedule.** Dragging an action into the gap between cards (dropping it on a row moves it in the tree instead) splits the task across the plan: same task, its actions in different places, a small marker (⑂ 2/2) on each part. `/consolidate` brings them back together.
 
 ## 5. Context menu and commands
