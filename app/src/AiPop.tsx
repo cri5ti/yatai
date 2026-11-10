@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { useS } from './store';
 import { act } from './act';
 import { AI_CFG } from './ai';
@@ -44,7 +44,7 @@ function starters(ctx?: string): string[] {
 export function AiPop() {
   const s = useS();
   const [q, setQ] = useState('');
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const ai = s.ai;
   const docked = !!s.proposal?.ops.length;
@@ -53,6 +53,13 @@ export function AiPop() {
     if (ai) input.current?.focus();
     else setQ('');
   }, [!!ai]);
+  // the input grows with what is typed or pasted (up to a few lines, then it scrolls)
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [q, !!ai]);
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: 'smooth' });
   }, [ai?.msgs.length, ai?.busy, ai?.status]);
@@ -123,9 +130,10 @@ export function AiPop() {
             ))}
           </div>
         )}
-        <input
+        <textarea
           ref={input}
           className="ai-input"
+          rows={1}
           value={q}
           placeholder={docked ? 'Refine the proposal…' : AI_CFG.configured ? "e.g. estimate today's items" : 'Ask something (mocked)'}
           onChange={(e) => setQ(e.target.value)}
@@ -133,7 +141,7 @@ export function AiPop() {
             if (e.metaKey || e.ctrlKey) return; // ⌘⏎ / ⌘⌫ are handled globally while a proposal is pending
             e.stopPropagation();
             if (e.key === 'Escape') (e.preventDefault(), act.closeAi());
-            else if (e.key === 'Enter') (e.preventDefault(), send());
+            else if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), send()); // ⇧⏎ = new line
             else if (e.key === 'ArrowUp' && !q) (e.preventDefault(), (sugg.current?.querySelector('button') as HTMLElement | null)?.focus());
           }}
         />

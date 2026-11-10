@@ -2,6 +2,7 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] AI chat input: ⇧⏎ adds a line, ⏎ sends, pasting several lines keeps them; the box grows to ~6 lines then scrolls, and shrinks back after sending; ↑ on an empty box still goes to the chips; the message shows its line breaks
 - [ ] /tomorrow on a parent in Next: the parent and everything under it leave Next at once (no header left behind); next day the parent comes back with the sub-items that were in Next (not the done ones)
 - [ ] Quick priority: Ctrl+1–5 in Next / Organizer puts a small coloured square with the digit at the right of the row (red 1 → amber 3 → blue 5; light and dark); same again or Ctrl+0 clears; works on a multi-selection; collapse a parent → it shows the highest (lowest number) inside; a collapsed meeting card's header too; Organizer table view keeps the column aligned; relaunch → kept
 - [ ] Priority colours: 1 red → 3 amber → 5 blue, each step tellable apart, white bold digit readable on all five (light and dark)

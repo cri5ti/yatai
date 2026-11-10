@@ -325,6 +325,7 @@ button.prio:hover { filter: brightness(1.08); }
 .ai-msg.typing { display: flex; gap: 4px; padding: 12px 14px; } .ai-msg.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: typing 1s infinite; } .ai-msg.typing i:nth-child(2) { animation-delay: .15s; } .ai-msg.typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes typing { 30% { transform: translateY(-4px); opacity: 1; } 0%, 60%, 100% { opacity: .4; } }
 .ai-input { margin: var(--sp-4) var(--sp-5) var(--sp-5); padding: 10px var(--sp-5); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); outline: none; font-size: var(--fs-lg); flex: none; }
+.ai-input { display: block; resize: none; font-family: inherit; color: inherit; line-height: 1.4; max-height: 9.5em; overflow-y: auto; box-sizing: border-box; width: calc(100% - 2 * var(--sp-5)); }
 .ai-input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-soft); }
 .help { width: min(640px, 92vw); max-height: 78vh; overflow-y: auto; background: var(--surface); color: var(--text); border-radius: var(--r-xl); border: var(--bw) solid var(--border); box-shadow: var(--shadow-pop); padding: var(--sp-6) var(--sp-7); outline: none; animation: menu-in var(--dur-3) var(--ease); }
 .help h3 { margin: 0 0 var(--sp-3); }
