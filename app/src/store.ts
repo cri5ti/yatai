@@ -246,6 +246,8 @@ export interface State extends Doc {
   edit: string | null; // id being renamed ('card:<key>' for a card title)
   ins: Ins | null; // inline "create here" draft
   menu: MenuState | null;
+  prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–9 picker (no ids: it picks the view filter)
+  prioFilter: number | null; // ⌥1–9: Next and the Organizer show only items of this priority, and their parents
   ai: AiState | null;
   proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
   help: boolean;
@@ -416,6 +418,8 @@ export function initialState(): State {
     edit: null,
     ins: null,
     menu: null,
+    prioPick: null,
+    prioFilter: null,
     ai: null,
     proposal: null,
     help: false,

@@ -174,6 +174,28 @@ export function prioShown(nodes: Node[], id: string, collapsed: boolean): { p: n
   return best > 9 ? null : { p: best, inside: best !== own };
 }
 
+/** the priority filter: items of priority `p` and every parent above them */
+export function prioKeep(nodes: Node[], p: number): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const keep = new Set<string>();
+  for (const n of nodes) {
+    if (n.prio !== p) continue;
+    for (let cur: Node | undefined = n; cur && !keep.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) keep.add(cur.id);
+  }
+  return keep;
+}
+/** Next under the priority filter: everything unfolded, then only the kept rows (cards left empty go) */
+export function filterNext(s: Parameters<typeof nextModel>[0], p: number) {
+  const keep = prioKeep(s.nodes, p);
+  const m = nextModel({ ...s, nodes: s.nodes.map((n) => (n.open === false ? { ...n, open: true } : n)) });
+  const cards = m.cards.flatMap((c) => {
+    const rows = c.rows.filter((r) => r.node && keep.has(r.node.id));
+    if (!rows.length) return [];
+    return [{ ...c, collapsed: false, rows: rows.map((r, i) => ({ ...r, kids: (rows[i + 1]?.depth ?? -1) > r.depth })) }];
+  });
+  return { ...m, cards };
+}
+
 /** the highest of several shown priorities (a collapsed card) */
 export const bestPrio = (vs: ({ p: number; inside: boolean } | null)[]) =>
   vs.reduce<{ p: number; inside: boolean } | null>((b, v) => (v && (!b || v.p < b.p) ? { p: v.p, inside: true } : b), null);

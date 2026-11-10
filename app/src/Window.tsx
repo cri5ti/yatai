@@ -6,8 +6,9 @@ import { Inbox } from './Inbox';
 import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
+import { PrioPick, prioBg } from './Chips';
 import { AiPop, ProposalBar } from './AiPop';
-import { capture, closeCapture, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
+import { capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { Drawer } from './Drawer';
 import { DisplayButton } from './display';
 import { GhIcon } from './Pr';
@@ -122,6 +123,27 @@ function Win() {
             ))}
           </nav>
           <div className="wc">
+            {(s.prioFilter || s.tab !== 'inbox') && (
+              <button
+                className={s.prioFilter ? 'pfilt on' : 'pfilt'}
+                title={s.prioFilter ? `Showing only priority ${s.prioFilter} — ⌥${s.prioFilter} or ⌥0 shows everything` : 'Show only one priority (⌥1–⌥9)'}
+                aria-label="Priority filter"
+                onClick={(e) => {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  openPrioPick(undefined, r.right, r.bottom + 4);
+                }}
+              >
+                {s.prioFilter ? (
+                  <span className="prio" style={{ background: prioBg(s.prioFilter) }}>
+                    {s.prioFilter}
+                  </span>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+                    <path d="M2 3h12l-4.6 5.4V13l-2.8 1.2V8.4z" />
+                  </svg>
+                )}
+              </button>
+            )}
             <button className={s.onTop ? 'on' : ''} aria-pressed={s.onTop} title={s.onTop ? 'Always on top: on' : 'Keep on top of other windows'} aria-label="Always on top" onClick={toggleOnTop}>
               <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden fill={s.onTop ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round">
                 <path d="M9.5 1.8 14.2 6.5l-1.4.5-2.3 2.3.3 2.9-1 1-2.7-2.7-4 4-.7-.7 4-4L3.7 7.2l1-1 2.9.3L9.9 4.2z" />
@@ -211,6 +233,7 @@ export function Shell() {
     <div className="desktop">
       <Win />
       <Menu />
+      <PrioPick />
       {/* the app opens these as their own windows (popups.ts); the browser build shows them in the page */}
       {!isTauri && (
         <>

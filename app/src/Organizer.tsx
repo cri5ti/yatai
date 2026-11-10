@@ -7,7 +7,7 @@ import {
   fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday, setPrio,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
-import { childrenOf, depthOf, fmtEst, prioShown, hlSubtree, laterLabel, plain, relTime } from './model';
+import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel, plain, relTime } from './model';
 import { InlineEdit } from './Inline';
 import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
@@ -21,13 +21,15 @@ interface RowItem {
   depth: number;
   kids: boolean;
 }
-function visibleRows(nodes: Node[]): RowItem[] {
+/** keep: the priority filter (only these, everything unfolded) */
+function visibleRows(nodes: Node[], keep?: Set<string>): RowItem[] {
   const out: RowItem[] = [];
   const walk = (pid: string | null, d: number) => {
     for (const n of childrenOf(nodes, pid)) {
-      const kids = nodes.some((c) => c.parentId === n.id);
+      if (keep && !keep.has(n.id)) continue;
+      const kids = nodes.some((c) => c.parentId === n.id && (!keep || keep.has(c.id)));
       out.push({ n, depth: d, kids });
-      if (n.open && kids) walk(n.id, d + 1);
+      if ((n.open || keep) && kids) walk(n.id, d + 1);
     }
   };
   walk(null, 0);
@@ -41,7 +43,7 @@ const TABLE_AT = 880; // px: below this the organizer is a list, above it the sa
 /** Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room). */
 export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const { s, marks } = useView();
-  const rows = useMemo(() => visibleRows(s.nodes), [s.nodes]);
+  const rows = useMemo(() => visibleRows(s.nodes, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined), [s.nodes, s.prioFilter]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
@@ -432,10 +434,10 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                   )}
                   {wide ? (
                     <span className="c-p">
-                      <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open)} />
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
                     </span>
                   ) : (
-                    <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open)} />
+                    <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
                   )}
                 </>
               )}

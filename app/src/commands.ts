@@ -43,6 +43,15 @@ const meetingMoves = (id: string): MenuItem[] => [
   { id: 'mm15', label: '−15 min', key: '4', run: () => A.rescheduleMeeting(id, -15) },
 ];
 
+/** opens the little 1–9 picker under the selection */
+const prioItem = (ids: string[]): MenuItem => ({
+  id: 'prio', label: 'Priority…', cmd: 'priority', keys: '1–9', icon: '◆',
+  run: () => {
+    const at = anchor();
+    A.openPrioPick(ids, at.x + 140, at.y);
+  },
+});
+
 const edit = (id: string) => set(() => ({ edit: id, menu: null }));
 
 interface Ctx {
@@ -120,6 +129,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
     });
   }
   items.push({ id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems([n.id]) });
+  items.push(prioItem([n.id]));
   items.push({ id: 'breakdown', label: 'Break down with AI', cmd: 'breakdown', keys: 'B', icon: '✨', run: () => A.breakDown(n.id) });
   if (kids) items.push({ id: 'estai', label: 'Estimate all with AI', cmd: 'estimate-ai', icon: '✨', run: () => A.estimate(n.id) });
   if (c.card && !c.row)
@@ -156,6 +166,7 @@ function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
     { id: 'indent', label: 'Indent', cmd: 'indent', keys: '⌘]', icon: '⇥', run: () => A.indentItems(ids, rowsOnly) },
     { id: 'outdent', label: 'Outdent', cmd: 'outdent', keys: '⌘[', icon: '⇤', run: () => A.outdentItems(ids) },
     { id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems(ids) },
+    prioItem(ids),
     { id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems(ids) },
     { id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(ids, 1) },
     { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },

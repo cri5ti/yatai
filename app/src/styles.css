@@ -165,11 +165,23 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--surfac
 .est-chip { border: 0; border-radius: var(--r-xs); padding: 0 4px; font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; line-height: 1.5em; }
 /* ⋮ = the row's context menu (every action), shown on hover / selection */
 .prio {
-  /* a ramp from --prio-hi (1) to --prio-lo (9), round the warm side of the hue wheel: red · orange · yellow · green · blue */
-  --pc: color-mix(in oklch longer hue, var(--prio-lo) calc(var(--pn, 0) * 12.5%), var(--prio-hi));
-  flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 3px;
-  background: var(--pc); color: var(--prio-text); font-size: 10px; font-weight: var(--fw-bold); line-height: 1; font-variant-numeric: tabular-nums;
+  flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; padding: 0; border: 0; border-radius: 3px;
+  color: var(--prio-text); font-size: 10px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 2px rgba(0, 0, 0, .25);
 }
+button.prio { cursor: default; }
+button.prio:hover { filter: brightness(1.08); }
+.prio.ghost { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong, var(--border)); opacity: 0; }
+.arow:hover .prio.ghost, .arow.is-sel .prio.ghost, .orow:hover .prio.ghost, .orow.is-sel .prio.ghost { opacity: 1; }
+/* the little picker (click a priority square, /priority, or the title bar filter) */
+.ppick { position: fixed; z-index: var(--z-menu); padding: 6px 8px 8px; background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-pop); outline: none; animation: menu-in var(--dur-2) var(--ease); }
+.ppick-t { font-size: var(--fs-2xs, 10px); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+.ppick-row { display: flex; gap: 4px; }
+.ppick .prio { width: 20px; height: 20px; font-size: 11px; border-radius: 4px; }
+.ppick .prio.hi { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--focus); }
+.ppick .prio.on:not(.hi) { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--text-muted); }
+.ppick .prio.clear { background: var(--surface-2); color: var(--text-muted); text-shadow: none; }
+.wc .pfilt { display: inline-grid; place-items: center; }
+.wc .pfilt .prio { width: 17px; height: 17px; font-size: 11px; }
 .kebab { border: 0; border-radius: var(--r-xs); padding: 0 5px; line-height: 1.5em; color: var(--text-muted); font-size: 14px; font-weight: var(--fw-bold); opacity: 0; }
 .arow:hover .kebab, .arow.is-sel .kebab, .kebab:focus-visible { opacity: 1; } .kebab:hover { color: var(--text); }
 .spent { color: var(--text-muted); font-size: var(--fs-xs); }

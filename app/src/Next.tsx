@@ -3,7 +3,7 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, prioShown, bestPrio, whenLabel, inLabel } from './model';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
@@ -288,7 +288,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {fmtEst(node.est)}
               </button>
             ) : null}
-            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} />
+            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} ids={picked && x.multi.size > 1 ? [...x.multi] : [node.id]} />
             <button
               className="kebab"
               tabIndex={-1}
@@ -508,7 +508,7 @@ const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}
 
 export function Next() {
   const { s, marks } = useView();
-  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.clock, s.snaps]);
+  const m = useMemo(() => (s.prioFilter ? filterNext(s, s.prioFilter) : nextModel(s)), [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter]);
   const nav = useMemo(() => navList(m.cards), [m]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;

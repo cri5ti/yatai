@@ -3,6 +3,9 @@
 ## Check by hand (couldn't be verified headlessly)
 
 - [ ] Quick priority: 1–9 in Next / Organizer puts a small coloured square with the digit at the right of the row (red 1 → orange → yellow → green → blue 9; light and dark); same key again or 0 clears; works on a multi-selection; collapse a parent → it shows the highest (lowest number) inside; a collapsed meeting card's header too; Organizer table view keeps the column aligned; relaunch → kept
+- [ ] Priority colours: 1 red → 5 amber → 9 blue, each step tellable apart, white bold digit readable on all nine (light and dark)
+- [ ] Priority picker: click a square (or the faint one on a hovered row, or /priority) → nine squares + ✕ under it; click, digits, ←→ ⏎, Esc; on a multi-selection it sets them all
+- [ ] Priority filter: ⌥1–⌥9 (Windows: Alt+digit doesn't open anything else) and the title bar funnel; only matching items and their parents, unfolded, in Next and the Organizer; ⌥0 / same again clears; the funnel shows the active colour; typing ⌥digits inside an editor still types
 
 - [ ] ⌘C / ⌘V on list items still copy / paste markdown (macOS routes them through the Edit menu)
 - [ ] ⌘Z / ⌘⇧Z with nothing being edited: one undo step, not two (the Edit menu has Undo too)
