@@ -147,6 +147,10 @@ Anything can sit at the top level, and in Next every line of an item card is a r
 
 `/due` → **Pick a date…** (`5`) turns the menu into a calendar in place, no separate dialog. ←→ day, ↑↓ week, PgUp/PgDn (or ⇧↑↓) month, Home today, ⏎ picks, Esc / ⌫ goes back to the list; clicking a day picks it. Typing jumps straight to a date: `fri` (the next one), `+3`, `+2w`, `+1m`, `tom`, `20` (the next 20th), `nov 20`, `20/11` (in the locale's day/month order), `2026-12-01`. It opens on the current due date (marked with a dot); today is outlined.
 
+`/remind` → **Custom…** (`9`) turns the menu's input into a typed time, previewed under it: `20m`, `1h30`, `14:30` or `3pm` (today, or tomorrow once past), any day the date picker knows (`fri`, `next monday`, `nov 20`, `+2d`: at the start of the working day), or a day and a time (`fri 10:00`, `tomorrow 3pm`). ⏎ sets it, Esc / ⌫ goes back.
+
+A yellow highlight on something hidden (its parent row collapsed, its card collapsed, or not in Next itself) shows on the first visible thing above it; hovering that clears it.
+
 ## Tray icon
 
 The tray icon says what is going on without opening yatai. It shows the app's purple diamond. On a bright yellow tile when there are changes to look at (any highlight, §1). On an Outlook-blue tile with a white diamond while you are in a meeting (one in Next, or anything on today's calendar); changes win over the meeting. In Next, the meeting in progress has the same blue, muted (and the Outlook drawer's row for it). Drawn in Rust (`tray_image`), coloured, not a template image.

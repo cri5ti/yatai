@@ -35,6 +35,7 @@ export interface Node {
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
   origin?: string; // made by yatai from what a source reported: '<ref>|<detail key>' (a failing check, a review thread); checked off when it is no longer outstanding
+  remind?: number; // /remind: when to come back to it (ms); then it is brought into Next, highlighted and announced
   notify?: boolean; // tell me about every change of what it tracks (a PR, a pipeline run): toast + OS notification
   smart?: { source: SmartSource; ref?: string }; // ref: what the plugin tracks ('devops:wi/18233'); older items derive it (model.ts refsOf)
 }
@@ -118,6 +119,7 @@ export interface MenuItem {
   disabled?: boolean;
   sub?: MenuItem[];
   date?: { value?: string; pick: (iso: string) => void }; // opens a calendar inside the menu
+  when?: { pick: (at: number) => void }; // turns the menu's input into a typed time ("20m", "fri 10:00"), with a preview
   run?: () => void;
 }
 export interface MenuState {

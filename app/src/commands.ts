@@ -5,6 +5,7 @@ import type { CardM } from './model';
 import { EST_KEYS } from './kbd';
 import { breadcrumb } from './mock';
 import * as A from './actions';
+import { PRESETS, remindLabel } from './remind';
 
 /* Every level (card, action, organizer row, inbox item) shares one command list, reachable by
  * right-click or by the "/" key (which adds a type-to-filter input: /consolidate, /due, …). */
@@ -42,6 +43,20 @@ const meetingMoves = (id: string): MenuItem[] => [
   { id: 'm60', label: '+1 hour', key: '3', run: () => A.rescheduleMeeting(id, 60) },
   { id: 'mm15', label: '−15 min', key: '4', run: () => A.rescheduleMeeting(id, -15) },
 ];
+
+/** /remind: come back to it later (it returns to Next, highlighted, with a notification) */
+const remindItems = (ids: string[]): MenuItem[] => {
+  const has = get().nodes.some((n) => ids.includes(n.id) && n.remind);
+  return [
+    ...PRESETS.map((p) => ({ id: p.id, label: p.label, key: p.key, tip: p.id === 'rtom' || p.id === 'rmon' ? 'At the start of your working day (Settings → working hours)' : undefined, run: () => A.remindIn(ids, p.id) })),
+    { id: 'rcustom', label: 'Custom…', key: '9', icon: '⌨', tip: 'Type a time: 20m · 1h30 · 14:30 · fri · fri 10:00 · tomorrow 15:00 · nov 20 9am', when: { pick: (at: number) => A.setRemind(ids, at) } },
+    ...(has ? [{ id: 'rclear', label: 'Clear reminder', key: '0', run: () => A.setRemind(ids, null) }] : []),
+  ];
+};
+const remindLabelFor = (ids: string[]) => {
+  const at = get().nodes.find((n) => n.id === ids[0])?.remind;
+  return at && ids.length === 1 ? `Remind me… (${remindLabel(at)})` : 'Remind me…';
+};
 
 /** opens the little 1–5 picker under the selection */
 const prioItem = (ids: string[]): MenuItem => ({
@@ -138,6 +153,7 @@ function itemMenu(n: Node, c: Ctx): MenuItem[] {
   if (refsOf(n).length)
     items.push({ id: 'notify', label: n.notify ? 'Stop notifying me' : 'Notify me when it changes', cmd: 'notify', icon: n.notify ? '🔕' : '🔔', tip: 'Every change of its state (queued, building, failed, done…): a toast and a system notification when yatai is in the background', run: () => A.toggleNotify([n.id]) });
   items.push({ id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems([n.id]) });
+  items.push({ id: 'remind', label: remindLabelFor([n.id]), cmd: 'remind', icon: '⏰', tip: 'Come back to it later: it returns to Next, highlighted, with a notification', sub: remindItems([n.id]) });
   items.push({ id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo([n.id], 1) });
   items.push({ id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems([n.id]) });
   const inNext = kids ? leaves.some((l) => nodes.find((x) => x.id === l)!.today) : n.today;
@@ -168,6 +184,7 @@ function bulkMenu(ids: string[], rowsOnly: boolean): MenuItem[] {
     { id: 'estimate', label: 'Estimate…', cmd: 'estimate', keys: 'E', icon: '⏱', sub: estItems(ids) },
     prioItem(ids),
     { id: 'due', label: 'Due date…', cmd: 'due', icon: '⚑', sub: dueItems(ids) },
+    { id: 'remind', label: remindLabelFor(ids), cmd: 'remind', icon: '⏰', sub: remindItems(ids) },
     { id: 'tomorrow', label: 'Move to tomorrow', cmd: 'tomorrow', icon: '☾', run: () => A.deferTo(ids, 1) },
     { id: 'reschedule', label: 'Reschedule…', cmd: 'reschedule', icon: '↻', sub: reschedItems(ids) },
     { id: 'plan', label: 'Add to Next', cmd: 'plan', icon: '★', run: () => ids.forEach((id) => A.toggleToday(id)) },

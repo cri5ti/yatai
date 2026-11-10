@@ -4,7 +4,7 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, openMdEdit, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { acceptAi, capture, openMdEdit, highlight, fireReminders, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod, tabKey } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
@@ -145,6 +145,10 @@ async function boot() {
   startPopups();
   openLinksWithModifier();
   startTracker({ toast, highlight, notify: (t, b) => void osNotify(t, b) });
+  // reminders: now (one may have come while yatai was closed), then every 10 s
+  const remind = () => fireReminders(Date.now(), (t, b) => void osNotify(t, b));
+  remind();
+  setInterval(remind, 10_000);
   if (isTauri)
     void invoke<string[]>('shortcuts_taken').then((t) => t.length && toast(`${t.join(' and ')} ${t.length > 1 ? 'are' : 'is'} used by another app — use the tray icon instead`, 'warn'));
   createRoot(document.getElementById('root')!).render(

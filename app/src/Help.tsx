@@ -16,7 +16,7 @@ const HELP: [string, [string, string][]][] = [
       ['Ctrl+1 … 5  ·  Ctrl+0', 'Quick priority (1 = highest) · the same again or Ctrl+0 clears; a collapsed item shows the highest inside; click the square to pick'],
       ['1 … 5  ·  0', 'Show only priorities up to that one (⌥2 = 1 and 2, with their parents) · show everything'],
       ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
-      ['/  or right-click', 'Commands: /consolidate /abandon /due /reschedule /tomorrow /estimate /duplicate /ai'],
+      ['/  or right-click', 'Commands: /consolidate /abandon /due /remind /reschedule /tomorrow /estimate /duplicate /ai'],
       ['−  +', 'Collapse / expand everything'],
       ['⌘Z  ⌘⇧Z', 'Undo / redo — every change goes through the undo manager'],
       ['⌘/', 'Ask AI — its changes come back as a purple proposal'],

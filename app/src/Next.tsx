@@ -14,7 +14,7 @@ import { openEstMenu, openMenu } from './commands';
 import { InlineEdit } from './Inline';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
-import { Chips, DueChip, Prio } from './Chips';
+import { Chips, DueChip, Prio, RemindChip } from './Chips';
 import { SourceOff } from './Pr';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
@@ -275,6 +275,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
               </span>
             )}
             <DueChip node={node} />
+            <RemindChip node={node} />
             {pk('est') && pm!.prev.est ? <s className="est-chip was">{fmtEst(pm!.prev.est as number)}</s> : null}
             {node.est ? (
               <button

@@ -14,6 +14,7 @@ import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
+import { PRESETS, remindLabel } from './remind';
 import { quietFlip } from './flip';
 
 /* ---------- toasts ---------- */
@@ -52,6 +53,36 @@ export const closeMenu = () => {
 export const setScale = (i: number) => (quietFlip(), set(() => ({ scale: Math.max(0, Math.min(SCALES.length - 1, i)) })));
 export const setDensity = (i: number) => (quietFlip(), set(() => ({ density: Math.max(0, Math.min(DENSITIES.length - 1, i)) })));
 /* ---------- highlights: changes the user did not make ---------- */
+/* ---------- reminders (/remind) ---------- */
+/** come back to these items at `at` (ms); null clears */
+export function setRemind(ids: string[], at: number | null) {
+  patchNodes(at ? 'Remind' : 'Clear reminder', ids, { remind: at ?? undefined });
+  toast(at ? `Reminder ${remindLabel(at)}${ids.length > 1 ? ` for ${ids.length} items` : ''}` : 'Reminder cleared', at ? 'good' : 'info');
+}
+export const remindIn = (ids: string[], preset: string) => {
+  const p = PRESETS.find((x) => x.id === preset);
+  if (p) setRemind(ids, p.at(new Date(), get().settings.workStart).getTime());
+};
+/**
+ * The main window looks every few seconds: a reminder that came (or came while yatai was closed) brings its item into
+ * Next, highlights it and says so (a toast, and a system notification unless yatai is in front). Not an undo step.
+ * Done or abandoned items just lose the reminder.
+ */
+export function fireReminders(now = Date.now(), notify?: (title: string, body: string) => void) {
+  const due = get().nodes.filter((n) => n.remind != null && n.remind <= now);
+  if (!due.length) return;
+  const ids = new Set(due.map((n) => n.id));
+  const live = due.filter((n) => n.status !== 'done' && n.status !== 'dropped');
+  const back = new Set(live.map((n) => n.id));
+  set((s) => ({ nodes: s.nodes.map((n) => (!ids.has(n.id) ? n : back.has(n.id) ? { ...n, remind: undefined, today: true, later: undefined, modified: now } : { ...n, remind: undefined })) }));
+  if (!live.length) return;
+  highlight(live.map((n) => n.id));
+  const names = live.map((n) => plain(n.title.split('\n')[0]));
+  toast(live.length === 1 ? `⏰ ${names[0]}` : `⏰ ${live.length} reminders: ${names.join(' · ')}`, 'warn');
+  const s = get();
+  if (notify && (s.hidden || typeof document === 'undefined' || document.hidden || !document.hasFocus())) notify('Reminder', names.join('\n'));
+}
+
 /** mark things yellow until the mouse passes over them */
 export function highlight(ids: string[]) {
   if (!ids.length) return;

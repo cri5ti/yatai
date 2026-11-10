@@ -4,6 +4,7 @@ import { closePrioPick, openPrioPick, setPrio, setPrioFilter } from './actions';
 import { cx, focusArea } from './kbd';
 import type { Node } from './store';
 import { alertsFor, dueLabel } from './model';
+import { remindLabel } from './remind';
 
 /** live status chips for smart items */
 export function Chips({ node }: { node: Node }) {
@@ -23,6 +24,17 @@ export function DueChip({ node }: { node: Node }) {
   if (!node.due || node.status === 'done') return null;
   const d = dueLabel(node.due);
   return <span className={`chip ${d.tone}`}>⚑ {d.text}</span>;
+}
+
+/** ⏰ when a reminder will bring it back (/remind) */
+export function RemindChip({ node }: { node: Node }) {
+  if (!node.remind || node.status === 'done' || node.status === 'dropped') return null;
+  const when = new Date(node.remind).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return (
+    <span className="chip info remind" title={`Reminder: ${when} (/remind to change or clear)`}>
+      ⏰ {remindLabel(node.remind)}
+    </span>
+  );
 }
 
 /** the priority colour: a 3-point ramp, --prio-hi (1) → --prio-mid (3) → --prio-lo (5) */

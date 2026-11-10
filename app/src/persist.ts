@@ -38,14 +38,14 @@ const T = {
     to: (n: Node, ord: number): Row => ({
       id: n.id, ord, parent_id: n.parentId, title: n.title, status: n.status, today: n.today, open: n.open, created: n.created, modified: n.modified,
       last_run: n.lastRun ?? null, scheduled: n.scheduled ?? null, est: n.est ?? null, due: n.due ?? null, later: n.later ?? null, spent: n.spent ?? null,
-      smart: json(n.smart), notify: n.notify ? true : null, origin: n.origin ?? null, prio: n.prio ?? null,
+      smart: json(n.smart), notify: n.notify ? true : null, origin: n.origin ?? null, prio: n.prio ?? null, remind: n.remind ?? null,
     }),
     from: (r: Row): Node =>
       tidy({
         id: r.id as string, parentId: (r.parent_id as string) ?? null, title: (r.title as string) ?? '', status: (r.status as Node['status']) ?? 'todo',
         today: !!r.today, open: r.open == null ? true : !!r.open, created: num(r.created) ?? Date.now(), modified: num(r.modified) ?? Date.now(),
         lastRun: num(r.last_run), scheduled: num(r.scheduled), est: num(r.est), due: str(r.due), later: num(r.later), spent: num(r.spent),
-        smart: parse<Node['smart']>(r.smart), notify: r.notify ? true : undefined, origin: str(r.origin), prio: num(r.prio),
+        smart: parse<Node['smart']>(r.smart), notify: r.notify ? true : undefined, origin: str(r.origin), prio: num(r.prio), remind: num(r.remind),
       }),
   },
   inbox: {

@@ -11,7 +11,7 @@ import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel
 import { InlineEdit } from './Inline';
 import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
-import { Chips, DueChip, Prio } from './Chips';
+import { Chips, DueChip, Prio, RemindChip } from './Chips';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
@@ -423,6 +423,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                     {n.title.includes('\n') && <span className="mini">⋯</span>}
                     <Chips node={n} />
                     {!wide && <DueChip node={n} />}
+                    <RemindChip node={n} />
                   </span>
                   {isRun && <span className="pulse-dot" title="Running" />}
                   {wide ? (
