@@ -8,7 +8,7 @@ import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
   moveRows, openAllNext, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
-  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio,
+  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { InlineEdit } from './Inline';
@@ -18,7 +18,7 @@ import { Chips, DueChip, Prio } from './Chips';
 import { SourceOff } from './Pr';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
-import { cx, focusArea, isEditable, mod } from './kbd';
+import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
 
 /** whole: the row is its card's top row, so dragging it between cards moves the whole card */
 type Drag = { t: 'row'; id: string; seg: string; whole: boolean } | { t: 'card'; key: string };
@@ -652,6 +652,8 @@ export function Next() {
       }
       return e.shiftKey ? insertAbove() : insertHere();
     }
+    // Ctrl+1–5: quick priority (same again, or Ctrl+0, clears) · 1–5: show only priorities up to it (0 / same again: all)
+    if (prioKey(e) >= 0) return ids.length ? (stop(), setPrio(ids, prioKey(e))) : undefined;
     if (M && k === ']') return (stop(), indentItems(ids, rowsOnly));
     if (M && k === '[') return (stop(), outdentItems(ids));
     if (M && (k === 'ArrowUp' || k === 'ArrowDown')) {
@@ -693,8 +695,7 @@ export function Next() {
     if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
     if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
-    // 1–5: quick priority (same digit again, or 0, clears)
-    if (/^[0-5]$/.test(k)) return ids.length ? (stop(), setPrio(ids, +k)) : undefined;
+    if (/^[0-5]$/.test(k)) return (stop(), setPrioFilter(+k));
 
     switch (k) {
       case 'ArrowDown':

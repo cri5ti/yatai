@@ -6,6 +6,7 @@ import { Inbox } from './Inbox';
 import { Organizer } from './Organizer';
 import { Focus } from './Focus';
 import { Menu } from './Menu';
+import { TAB_MOD } from './kbd';
 import { PrioPick, prioBg } from './Chips';
 import { AiPop, ProposalBar } from './AiPop';
 import { capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
@@ -105,7 +106,7 @@ function Win() {
                 role="tab"
                 aria-selected={s.tab === t.id}
                 className={s.tab === t.id ? 'on' : ''}
-                title={`${t.label} (⌘${i + 1})`}
+                title={`${t.label} (${TAB_MOD}${i + 1})`}
                 onClick={() => setTab(t.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
@@ -118,7 +119,7 @@ function Win() {
               >
                 {t.label}
                 {t.id === 'inbox' && s.inbox.length > 0 && <b className="badge">{s.inbox.length}</b>}
-                {layout !== 'dock' && <kbd>⌘{i + 1}</kbd>}
+                {layout !== 'dock' && <kbd>{TAB_MOD}{i + 1}</kbd>}
               </button>
             ))}
           </nav>
@@ -126,7 +127,7 @@ function Win() {
             {(s.prioFilter || s.tab !== 'inbox') && (
               <button
                 className={s.prioFilter ? 'pfilt on' : 'pfilt'}
-                title={s.prioFilter ? `Showing priority ${s.prioFilter === 1 ? '1' : `1–${s.prioFilter}`} only — ⌥${s.prioFilter} or ⌥0 shows everything` : 'Show only the top priorities (⌥1–⌥5)'}
+                title={s.prioFilter ? `Showing priority ${s.prioFilter === 1 ? '1' : `1–${s.prioFilter}`} only — ${s.prioFilter} or 0 shows everything` : 'Show only the top priorities (1–5)'}
                 aria-label="Priority filter"
                 onClick={(e) => {
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

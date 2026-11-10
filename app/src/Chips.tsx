@@ -35,7 +35,7 @@ export const prioBg = (p: number) => {
  *  With `ids` it is a button that opens the little picker — and shows as a faint ghost on hover when there is no priority yet. */
 export function Prio({ v, ids }: { v: { p: number; inside: boolean } | null; ids?: string[] }) {
   if (!v && !ids) return null;
-  const tip = !v ? 'Set a priority (keys 1–5)' : v.inside ? `Priority ${v.p} — the highest inside (keys 1–5)` : `Priority ${v.p} (keys 1–5 · same key again or 0 clears)`;
+  const tip = !v ? 'Set a priority (Ctrl+1–5)' : v.inside ? `Priority ${v.p} — the highest inside (Ctrl+1–5)` : `Priority ${v.p} (Ctrl+1–5 · the same again or Ctrl+0 clears)`;
   const body = v ? v.p : '';
   const style = v ? { background: prioBg(v.p) } : undefined;
   if (!ids) return <span className="prio" style={style} title={tip}>{body}</span>;
@@ -104,11 +104,11 @@ export function PrioPick() {
         <div className="ppick-t">{filter ? 'Show up to' : 'Priority'}</div>
         <div className="ppick-row">
           {[1, 2, 3, 4, 5].map((p) => (
-            <button key={p} tabIndex={-1} className={cx('prio', p === cur && 'on', p === hi && 'hi')} style={{ background: prioBg(p) }} onMouseMove={() => setHi(p)} onClick={() => pick(p)} title={filter ? (p === 1 ? 'Only priority 1 (⌥1)' : `Priorities 1–${p} (⌥${p})`) : `Priority ${p} (${p})`}>
+            <button key={p} tabIndex={-1} className={cx('prio', p === cur && 'on', p === hi && 'hi')} style={{ background: prioBg(p) }} onMouseMove={() => setHi(p)} onClick={() => pick(p)} title={filter ? (p === 1 ? 'Only priority 1 (1)' : `Priorities 1–${p} (${p})`) : `Priority ${p} (Ctrl+${p})`}>
               {p}
             </button>
           ))}
-          <button tabIndex={-1} className={cx('prio clear', hi === 0 && 'hi')} onMouseMove={() => setHi(0)} onClick={() => pick(0)} title={filter ? 'Show everything (⌥0)' : 'No priority (0)'}>
+          <button tabIndex={-1} className={cx('prio clear', hi === 0 && 'hi')} onMouseMove={() => setHi(0)} onClick={() => pick(0)} title={filter ? 'Show everything (0)' : 'No priority (Ctrl+0)'}>
             ✕
           </button>
         </div>

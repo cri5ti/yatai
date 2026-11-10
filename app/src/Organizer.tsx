@@ -4,7 +4,7 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday, setPrio,
+  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel, plain, relTime } from './model';
@@ -14,7 +14,7 @@ import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Chips, DueChip, Prio } from './Chips';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
-import { cx, focusArea, isEditable, mod } from './kbd';
+import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
 
 interface RowItem {
   n: Node;
@@ -147,6 +147,8 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       if (!cur) return set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } }));
       return e.shiftKey ? insertAbove(cur) : insertSibling(cur);
     }
+    // Ctrl+1–5: quick priority · 1–5 (below): show only priorities up to it
+    if (prioKey(e) >= 0) return ids.length ? (stop(), setPrio(ids, prioKey(e))) : undefined;
     if (M && k === ']') return (stop(), indentItems(ids));
     if (M && k === '[') return (stop(), outdentItems(ids));
     if (M && (k === 'ArrowUp' || k === 'ArrowDown')) return (stop(), reorderItems(ids, k === 'ArrowUp' ? -1 : 1));
@@ -188,7 +190,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
     else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
-    else if (!M && /^[0-5]$/.test(k) && ids.length) (stop(), setPrio(ids, +k));
+    else if (/^[0-5]$/.test(k)) (stop(), setPrioFilter(+k));
     else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
     else if (k === '/') {
       stop();

@@ -45,7 +45,7 @@ const meetingMoves = (id: string): MenuItem[] => [
 
 /** opens the little 1–5 picker under the selection */
 const prioItem = (ids: string[]): MenuItem => ({
-  id: 'prio', label: 'Priority…', cmd: 'priority', keys: '1–5', icon: '◆',
+  id: 'prio', label: 'Priority…', cmd: 'priority', keys: '⌃1–5', icon: '◆',
   run: () => {
     const at = anchor();
     A.openPrioPick(ids, at.x + 140, at.y);

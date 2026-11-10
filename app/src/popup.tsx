@@ -8,7 +8,7 @@ import { DENSITIES, SCALES, get, replaceState, useS } from './store';
 import { followHost } from './plugins/tracker';
 import type { State } from './store';
 import { act } from './act';
-import { isEditable, mod } from './kbd';
+import { isEditable, mod, tabKey } from './kbd';
 import { emitTo, listen, openLinksWithModifier, startDrag, onWindowChange, windowRect } from './platform';
 import { VIEWS, isView, viewOfLabel, wanted, popupKey } from './popups';
 import type { View } from './popups';
@@ -45,6 +45,7 @@ function Popup({ v }: { v: View }) {
       const M = mod(e);
       const k = e.key;
       const t = e.target as HTMLInputElement | null;
+      if (tabKey(e) >= 0) return (e.preventDefault(), act.setTab((['next', 'inbox', 'organizer'] as const)[tabKey(e)]), focusMain());
       if (M && !e.altKey) {
         const p = get().proposal;
         if (p && k === 'Enter') return (e.preventDefault(), e.stopPropagation(), act.acceptAi());
@@ -53,7 +54,6 @@ function Popup({ v }: { v: View }) {
         if (k === ',') return (e.preventDefault(), act.openSettings());
         if (e.shiftKey && k.toLowerCase() === 'd') return (e.preventDefault(), act.toggleDev());
         if (k === '/') return (e.preventDefault(), get().ai ? act.closeAi() : act.openAi());
-        if (['1', '2', '3'].includes(k)) return (e.preventDefault(), act.setTab((['next', 'inbox', 'organizer'] as const)[+k - 1]), focusMain());
         if (isEditable(t)) return;
         if (k.toLowerCase() === 'z') return (e.preventDefault(), e.shiftKey ? act.redo() : act.undo());
         return;

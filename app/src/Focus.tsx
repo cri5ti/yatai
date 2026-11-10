@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useS } from './store';
 import { endFocus, extendFocus, focusElapsedMin, leaveFocus, leavePill, pauseFocus, startFocus } from './actions';
 import { fmt, meetingsFor, nextActions, pathOf, plain } from './model';
-import { isEditable } from './kbd';
+import { isEditable, TAB_MOD } from './kbd';
 
 const mmss = (min: number) => {
   const t = Math.max(0, Math.round(min * 60));
@@ -61,7 +61,7 @@ export function Focus() {
             ▶ Focus <kbd>⏎</kbd>
           </button>
         )}
-        <button className="x pill-out" title="Back to the full window (Esc, ⌘1)" aria-label="Back to the full window" onClick={leavePill}>
+        <button className="x pill-out" title={`Back to the full window (Esc, ${TAB_MOD}1)`} aria-label="Back to the full window" onClick={leavePill}>
           ⤢
         </button>
       </div>

@@ -4,8 +4,8 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, openMdEdit, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setPrioFilter, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
-import { isEditable, mod } from './kbd';
+import { acceptAi, capture, openMdEdit, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { isEditable, mod, tabKey } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
 import { startPopups } from './popups';
@@ -90,10 +90,9 @@ function App() {
       if (e.altKey && !M && !isTauri) {
         if (k === ' ') return (e.preventDefault(), get().capture ? closeCapture() : openCapture());
         if (k.toLowerCase() === 'y' || k === '¥') return (e.preventDefault(), toggleHidden());
-        if (!/^Digit[0-5]$/.test(e.code)) return;
+        if (tabKey(e) < 0) return;
       }
-      // ⌥1–⌥5: show priorities up to that one (⌥0, or the same again, shows everything)
-      if (e.altKey && !M && !e.shiftKey && /^Digit[0-5]$/.test(e.code) && !isEditable(e.target)) return (e.preventDefault(), setPrioFilter(+e.code.slice(5)));
+      if (tabKey(e) >= 0) return (e.preventDefault(), setTab(tabs[tabKey(e)]));
       if (M && !e.altKey && get().proposal) {
         // a pending AI proposal: ⌘⏎ accepts, ⌘⌫ rejects (but ⌘⌫ still edits a text field that has text)
         const t = e.target as HTMLInputElement | null;
@@ -101,7 +100,6 @@ function App() {
         if (k === 'Backspace' && !(isEditable(t) && t?.value)) return (e.preventDefault(), e.stopPropagation(), rejectAi());
       }
       if (M && !e.altKey) {
-        if (['1', '2', '3'].includes(k)) return (e.preventDefault(), setTab(tabs[+k - 1]));
         if (k === ',') return (e.preventDefault(), openSettings());
         if (e.shiftKey && k.toLowerCase() === 'd') return (e.preventDefault(), toggleDev());
         if (k === '/') return (e.preventDefault(), get().ai ? closeAi() : openAi(contextId()));

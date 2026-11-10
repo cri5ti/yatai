@@ -8,15 +8,15 @@ How yatai is meant to feel to use. This is the part of the original idea notes a
 - **Create on the spot.** In every list you can add a new item in place (⏎ below, ⇧⏎ above, ⌘⏎ new). ⏎ or Esc in a blank new field cancels the creation.
 - **Everything is undoable.** Every data change goes through one undo/redo manager (⌘Z / ⌘⇧Z). Purely visual state (selection, collapsed, highlights) is not part of undo.
 - **Nothing disappears silently.** Done is only a visual marker; finished items stay where they are. Removing from Next keeps the item in the Organizer. Deleting is explicit and undoable.
-- **Calm window.** No logo, thin chrome, tabs at the top (⌘1 Next, ⌘2 Inbox, ⌘3 Organizer). One consistent set of design tokens (`app/src/tokens.css` is the only place raw colours, sizes and durations live).
+- **Calm window.** No logo, thin chrome, tabs at the top (⌘1 Next, ⌘2 Inbox, ⌘3 Organizer; Alt+1–3 on Windows, where Ctrl+digit sets the priority). One consistent set of design tokens (`app/src/tokens.css` is the only place raw colours, sizes and durations live).
 - **Motion explains, never decorates.** Reordering animates (FLIP) so you can follow what moved; starting an action expands its text with a short animation.
 
 ## 2. Items
 
 - **One kind of thing.** Project, task and action are all *items*; "task" just means "has children". An action is a leaf. Items nest to any depth.
 - **Multi-line text.** Only the first line is the headline; lines 2+ are notes in a smaller font. Basic markdown is supported in notes and titles: bold, italic, links, lists, checkboxes. A link to something yatai understands (a GitHub PR) renders as a compact reference.
-- **Quick priority.** Keys 1–5 on the selection (Next, Organizer) set a priority, 1 the highest; the same key again, or 0, clears it. It shows as a small coloured square with a light bold digit on the right of the row, on a three-point ramp (red 1 → amber 3 → blue 5). A collapsed item shows the highest priority found inside it. With the mouse: click the square (a faint one appears on hover when there is none), or `/priority`, for a little 1–5 picker. Copy / ⌘E carry it as `@p:N`.
-- **Priority filter.** ⌥1–⌥5 (or the funnel in the title bar) shows only the items of that priority or higher and their parents (⌥2 = priorities 1 and 2), unfolded, in Next and the Organizer; ⌥0 or the same key again shows everything.
+- **Quick priority.** Ctrl+1–5 on the selection (Next, Organizer; the real Ctrl key, on macOS too) sets a priority, 1 the highest; the same again, or Ctrl+0, clears it. It shows as a small coloured square with a light bold digit on the right of the row, on a three-point ramp (red 1 → amber 3 → blue 5). A collapsed item shows the highest priority found inside it. With the mouse: click the square (a faint one appears on hover when there is none), or `/priority`, for a little 1–5 picker. Copy / ⌘E carry it as `@p:N`.
+- **Priority filter.** Plain 1–5 (or the funnel in the title bar) shows only the items of that priority or higher and their parents (⌥2 = priorities 1 and 2), unfolded, in Next and the Organizer; 0 or the same key again shows everything.
 - **Estimates and due dates.** In the E menu, estimate with 1=5 min, 2=15 min, 3=30 min, 4=1 h, 5=2 h, 6=4 h, 8=8 h, 0=none; ⇧←/→ steps through them. Due dates come from `/due` (with a date picker that also understands `fri`, `+3`, `tom`, `nov 20`).
 - **Meetings are items too.** They sit in the plan at their time, can be moved and can hold items inside (typically "prep"). They carry one fixed, uneditable calendar row. Removing a meeting only removes it from yatai.
 

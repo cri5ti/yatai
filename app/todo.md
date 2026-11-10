@@ -2,10 +2,11 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
-- [ ] Quick priority: 1–5 in Next / Organizer puts a small coloured square with the digit at the right of the row (red 1 → amber 3 → blue 5; light and dark); same key again or 0 clears; works on a multi-selection; collapse a parent → it shows the highest (lowest number) inside; a collapsed meeting card's header too; Organizer table view keeps the column aligned; relaunch → kept
+- [ ] Quick priority: Ctrl+1–5 in Next / Organizer puts a small coloured square with the digit at the right of the row (red 1 → amber 3 → blue 5; light and dark); same again or Ctrl+0 clears; works on a multi-selection; collapse a parent → it shows the highest (lowest number) inside; a collapsed meeting card's header too; Organizer table view keeps the column aligned; relaunch → kept
 - [ ] Priority colours: 1 red → 3 amber → 5 blue, each step tellable apart, white bold digit readable on all five (light and dark)
 - [ ] Priority picker: click a square (or the faint one on a hovered row, or /priority) → five squares + ✕ under it; click, digits, ←→ ⏎, Esc; on a multi-selection it sets them all
-- [ ] Priority filter: ⌥1–⌥5 (⌥2 shows 1 and 2) (Windows: Alt+digit doesn't open anything else) and the title bar funnel; only matching items and their parents, unfolded, in Next and the Organizer; ⌥0 / same again clears; the funnel shows the active colour; typing ⌥digits inside an editor still types
+- [ ] Priority filter: plain 1–5 (2 shows 1 and 2) and the title bar funnel; only matching items and their parents, unfolded, in Next and the Organizer; 0 / same again clears; the funnel shows the active colour; typing digits inside an editor still types
+- [ ] Views: ⌘1–3 on macOS as before; on Windows Alt+1–3 (Ctrl+1–3 now sets a priority), also from the popups and the focus pill; the tab tooltips / kbd hints show the right one
 
 - [ ] ⌘C / ⌘V on list items still copy / paste markdown (macOS routes them through the Edit menu)
 - [ ] ⌘Z / ⌘⇧Z with nothing being edited: one undo step, not two (the Edit menu has Undo too)
