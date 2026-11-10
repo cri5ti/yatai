@@ -531,6 +531,11 @@ export function Next() {
   useEffect(() => {
     area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [sel.card, sel.row]);
+  // the priority filter changes the rows around the selection: bring it back into view (after the rows settle)
+  useEffect(() => {
+    const f = requestAnimationFrame(() => area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'center' }));
+    return () => cancelAnimationFrame(f);
+  }, [s.prioFilter]);
 
   // moving the keyboard cursor onto a yellow highlight counts as having seen it
   const lastSel = useRef<string | null>(null);
