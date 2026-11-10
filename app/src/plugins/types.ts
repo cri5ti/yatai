@@ -21,7 +21,10 @@ export interface View {
   count?: number;
   /** a passing state (queued, building): moving into it is not announced, unless the item asks to be told everything */
   quiet?: boolean;
+  /** whose move it is: 'me' (mine to act on) or 'them' (waiting on someone else); unset when it does not apply / is not known */
+  turn?: Turn;
 }
+export type Turn = 'me' | 'them';
 
 /** what a plugin currently knows about one ref */
 export interface Snapshot {
@@ -47,7 +50,7 @@ export interface Detail {
 }
 
 /** the left-hand mark of a drawer row */
-export type Lead = { glyph: string; count?: number; kind?: 'build' } | { text: string };
+export type Lead = { glyph: string; count?: number; kind?: 'build'; turn?: Turn } | { text: string };
 
 /** one row in a drawer */
 export interface Entry {

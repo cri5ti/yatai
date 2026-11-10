@@ -278,7 +278,12 @@ Mapping to the existing `PrStatus` (first match wins, so "what needs me" beats "
 | `APPROVED` and rollup `SUCCESS` and mergeable | ready | `ready` good: "Approved · mergeable" |
 | otherwise | review | `review` info: "Awaiting review" |
 
-These match the seven states and chip texts the POC already designed (`alertsFor`, `PR_STATUSES`), so the Next view does not change visually.
+These match the seven states and chip texts the POC already designed (`alertsFor`, `PR_STATUSES`).
+
+**Whose move** (`view.turn`, `map.ts turnOf`): an open PR is either mine to act on (`me`, deep blue) or waiting on someone else (`them`, muted purple); merged is green, closed grey. It comes from `viewerDidAuthor`, `viewerLatestReviewRequest` and, per unresolved thread, whether its last comment is mine.
+- My PR: draft, failing, conflicts, a thread whose last word is not mine, changes requested (no threads), or approved and green (merge it) → `me`; awaiting review, checks running, or every thread answered by me → `them`.
+- Someone else's PR: `me` only while my review is requested; otherwise (my comments, my requested changes, approved) → `them`.
+- Waiting on others turns its alerts to `info`: no pin in Next, no warning toast.
 
 **Lists** (drawer tabs), via the search API, each returning enough to build a snapshot (then one `track` call fills in the check/thread state for the visible rows):
 - *Assigned to me*: `is:pr is:open review-requested:@me archived:false`

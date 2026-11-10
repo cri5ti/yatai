@@ -34,8 +34,13 @@ const factsFor = (status: PrStatus, count: number, key = ''): Facts => ({
   approved: status === 'ready',
 });
 
+/** whose PR it is, from the demo lists: "My PRs" are mine, "Assigned to me" asks for my review; any other: unknown */
+const roleOf = (key: string): Pick<Facts, 'mine' | 'asked'> => {
+  const has = (id: string) => (GH[id] ?? []).some((g) => `${g.org}/${g.repo}#${g.num}` === key);
+  return has('mine') ? { mine: true, asked: false } : has('assigned') ? { mine: false, asked: true } : has('mentions') ? { mine: false, asked: false } : {};
+};
 const snapOf = (key: string, title: string, status: PrStatus, count: number): Snapshot =>
-  snapshot(refKey('github', key), key.replace(/^[^/]+\//, ''), title, factsFor(status, count, key));
+  snapshot(refKey('github', key), key.replace(/^[^/]+\//, ''), title, { ...factsFor(status, count, key), ...roleOf(key) });
 
 export const mock: Impl = {
   async fetch(refs) {
@@ -52,7 +57,7 @@ export const mock: Impl = {
     return (GH[id] ?? []).map((g): Entry => {
       const key = `${g.org}/${g.repo}#${g.num}`;
       const snap = snapOf(key, g.title, s.prs[key] ?? g.status, s.prc[key] ?? g.comments ?? DEFAULT_COMMENTS);
-      return { ref: snap.ref, title: g.title, sub: `${g.org} · ${g.note}`, lead: { glyph: snap.view.glyph, count: snap.view.count }, text: `${prUrl(g.org, g.repo, g.num)} ${g.title}`, snap, canInbox: true };
+      return { ref: snap.ref, title: g.title, sub: `${g.org} · ${g.note}`, lead: { glyph: snap.view.glyph, count: snap.view.count, turn: snap.view.turn }, text: `${prUrl(g.org, g.repo, g.num)} ${g.title}`, snap, canInbox: true };
     });
   },
 };

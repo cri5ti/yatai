@@ -152,7 +152,7 @@ export async function listPrs(id: string): Promise<Entry[]> {
     .filter((p): p is GqlPr => !!p && !!p.number)
     .map((p) => {
       const snap = toSnapshot(p, false);
-      return { ref: refKey(ID, prId(p)), title: p.title, sub: `${p.repository.nameWithOwner} · ${notes[id](p)}`, lead: { glyph: snap.view.glyph, count: snap.view.count }, text: `${p.url} ${p.title}${snap.desc ? `\n${snap.desc}` : ''}`, snap, canInbox: true } satisfies Entry;
+      return { ref: refKey(ID, prId(p)), title: p.title, sub: `${p.repository.nameWithOwner} · ${notes[id](p)}`, lead: { glyph: snap.view.glyph, count: snap.view.count, turn: snap.view.turn }, text: `${p.url} ${p.title}${snap.desc ? `\n${snap.desc}` : ''}`, snap, canInbox: true } satisfies Entry;
     });
 }
 export { shortName };

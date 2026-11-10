@@ -1,8 +1,8 @@
 import { useS } from './store';
 import type { BuildStatus, PrStatus } from './store';
-import { buildStatusOf, prCountOf, prStatusOf, smartRef } from './model';
+import { buildStatusOf, prCountOf, prStatusOf, prTurnOf, smartRef } from './model';
 import type { Node, State } from './store';
-import type { Snapshot } from './plugins/types';
+import type { Snapshot, Turn } from './plugins/types';
 import { pluginOf } from './plugins/types';
 import { implFor, pluginById } from './plugins/registry';
 import { BUILD_LABELS } from './plugins/devops/map';
@@ -64,19 +64,33 @@ const GLYPH: Record<PrStatus, JSX.Element | null> = {
   ),
 };
 
-/** a PR's state as a tiny icon — or, for "has feedback", a count pill of unresolved comments */
-export function PrState({ status, comments = DEFAULT_COMMENTS }: { status: PrStatus; comments?: number }) {
+/** what the turn adds to the tooltip */
+const TURN_TIP: Record<Turn, string> = { me: 'your move', them: 'waiting on someone else' };
+function feedbackTip(n: number, turn?: Turn) {
+  const c = `${n} unresolved comment${n === 1 ? '' : 's'}`;
+  if (turn === 'me') return `has feedback — ${c}, yours to address`;
+  if (turn === 'them') return `has feedback — ${c}, waiting on the others (you have answered, or it is your review on their PR)`;
+  return `has feedback — ${c}`;
+}
+
+/**
+ * a PR's state as a tiny icon — or, for "has feedback", a count pill of unresolved comments. Coloured by whose move it is
+ * (`turn`): deep blue = mine to act on, muted purple = waiting on someone else; merged green, closed grey.
+ */
+export function PrState({ status, comments = DEFAULT_COMMENTS, turn }: { status: PrStatus; comments?: number; turn?: Turn }) {
+  const t = turn ? ` t-${turn}` : '';
   if (status === 'feedback') {
     const n = Math.max(1, comments);
     return (
-      <span className="prc" title={`has feedback — ${n} unresolved comment${n === 1 ? '' : 's'}`} aria-label={`${n} unresolved comments`}>
+      <span className={`prc${t}`} title={feedbackTip(n, turn)} aria-label={`${n} unresolved comments`}>
         {n}
       </span>
     );
   }
+  const label = turn ? `${prLabel(status)} — ${TURN_TIP[turn]}` : prLabel(status);
   return (
-    <svg className={`prsi pr-${status}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={prLabel(status)}>
-      <title>{prLabel(status)}</title>
+    <svg className={`prsi pr-${status}${t}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={label}>
+      <title>{label}</title>
       {/* a filled disc in the status colour with the glyph knocked out in the surface colour */}
       <circle cx="8" cy="8" r="8" fill="currentColor" />
       <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
@@ -180,7 +194,7 @@ export function PrRef({ url, org, repo, num, icon = true }: { url: string; org: 
       <a href={url} target="_blank" rel="noreferrer" title={`${org}/${repo} #${num} — ⌘-click opens it in the browser`} onClick={(e) => e.stopPropagation()}>
         {repo}#{num}
       </a>
-      {st ? <PrState status={st} comments={prCountOf(s.snaps, key)} /> : <NoState s={s} plugin="github" snap={s.snaps[`github:${key}`]} />}
+      {st ? <PrState status={st} comments={prCountOf(s.snaps, key)} turn={prTurnOf(s.snaps, key)} /> : <NoState s={s} plugin="github" snap={s.snaps[`github:${key}`]} />}
     </span>
   );
 }

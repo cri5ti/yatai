@@ -125,6 +125,11 @@ export const prStatusOf = (snaps: Snaps, key: string): PrStatus | null => {
   return sn && !sn.gone ? (sn.view.glyph as PrStatus) : null;
 };
 export const prCountOf = (snaps: Snaps, key: string): number | undefined => snaps[`github:${key}`]?.view.count;
+/** whose move it is on a PR (unset: not known, or it is over) */
+export const prTurnOf = (snaps: Snaps, key: string) => {
+  const sn = snaps[`github:${key}`];
+  return sn && !sn.gone ? sn.view.turn : undefined;
+};
 
 /** PR states that want your attention (like a smart item with a non-neutral alert) */
 export const PR_ATTENTION: PrStatus[] = ['failing', 'feedback', 'ready'];
@@ -132,7 +137,7 @@ export function prAttention(n: Node, snaps: Snaps) {
   if (n.status === 'done') return false;
   return prLinks(n.title.split('\n')[0]).some((l) => {
     const st = prStatusOf(snaps, l.key);
-    return !!st && PR_ATTENTION.includes(st);
+    return !!st && PR_ATTENTION.includes(st) && prTurnOf(snaps, l.key) !== 'them'; // waiting on others is not for me
   });
 }
 

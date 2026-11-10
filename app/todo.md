@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] PR colours with a real token (the new GraphQL fields `viewerDidAuthor`, `viewerLatestReviewRequest`, `comments(last: 1) { viewerDidAuthor }` must be accepted, or every PR fetch fails): my PR awaiting review = muted purple; a comment on it I have not answered = deep blue count; after I reply = purple; approved = blue (mine) / purple (theirs); review requested of me = blue; merged green, closed grey (cancelled runs grey too); light and dark. Demo: "My PRs" / "Assigned to me" / "Mentions" show the same split
+- [ ] A PR waiting on someone else no longer pins an attention card in Next or toasts a warning
 - [ ] Priority filter on / off (1–5, 0) with the selection far down the list: Next and the Organizer scroll it back to the middle of the view
 - [ ] AI chat input: ⇧⏎ adds a line, ⏎ sends, pasting several lines keeps them; the box grows to ~6 lines then scrolls, and shrinks back after sending; ↑ on an empty box still goes to the chips; the message shows its line breaks
 - [ ] /tomorrow on a parent in Next: the parent and everything under it leave Next at once (no header left behind); next day the parent comes back with the sub-items that were in Next (not the done ones)

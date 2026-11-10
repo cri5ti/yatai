@@ -1,5 +1,5 @@
 /** GitHub → what yatai shows. Pure: the GraphQL shapes in, snapshots out (so it can be tested without a network). */
-import type { Alert, Detail, Snapshot, Tone } from '../types';
+import type { Alert, Detail, Snapshot, Tone, Turn } from '../types';
 import { refKey } from '../types';
 import { relTime } from '../../model';
 
@@ -32,11 +32,29 @@ export interface Facts {
   /** the unresolved review threads, by their first comment */
   open?: { id: string; author: string; body: string; path?: string; url?: string }[];
   oid?: string; // the head commit: a check failing again on a later commit is a new failure
+  mine?: boolean; // I opened it (unknown: no turn is shown)
+  asked?: boolean; // my review is requested
+  todo?: number; // unresolved threads whose last word is not mine (on my PR: the ones I still have to answer)
 }
 export const noFacts: Facts = { draft: false, merged: false, closed: false, failing: null, threads: 0, changesRequested: false, approved: false, checksOk: true, pending: false, conflicts: false };
 
+/**
+ * whose move it is on an open PR. Mine: a draft, a failing build, conflicts, threads I have not answered, changes asked
+ * for, or approved and green (merge it) are mine; waiting for a review or for checks is theirs. Someone else's: mine only
+ * when my review is requested; otherwise (my comments, my requested changes) I am waiting on the author.
+ */
+export function turnOf(f: Facts): Turn | undefined {
+  if (f.merged || f.closed || f.mine == null) return undefined;
+  if (!f.mine) return f.asked ? 'me' : 'them';
+  if (f.draft || f.failing || f.conflicts) return 'me';
+  if (f.threads > 0) return (f.todo ?? f.threads) > 0 ? 'me' : 'them';
+  if (f.changesRequested) return 'me';
+  if (f.pending) return 'them';
+  return f.approved && f.checksOk ? 'me' : 'them';
+}
+
 /** "what needs me" beats "what is true": the first match decides the glyph */
-export function summarize(f: Facts): { view: { glyph: string; label: string; tone: Tone; count?: number }; alerts: Alert[] } {
+export function summarize(f: Facts): { view: { glyph: string; label: string; tone: Tone; count?: number; turn?: Turn }; alerts: Alert[] } {
   const open = !f.merged && !f.closed;
   const alerts: Alert[] = [];
   const err = f.fails?.find((x) => x.name === f.failing)?.error;
@@ -50,7 +68,13 @@ export function summarize(f: Facts): { view: { glyph: string; label: string; ton
   if (open && !alerts.length) alerts.push({ key: 'review', tone: 'info', text: f.draft ? 'Draft' : 'Awaiting review' });
 
   const glyph = f.merged ? 'merged' : f.closed ? 'closed' : f.draft ? 'draft' : f.failing ? 'failing' : f.threads > 0 || f.changesRequested ? 'feedback' : f.pending ? 'building' : ready ? 'ready' : 'review';
-  return { view: { glyph, label: LABELS[glyph], tone: TONES[glyph] ?? 'info', ...(glyph === 'feedback' ? { count: Math.max(1, f.threads) } : {}), ...(glyph === 'building' ? { quiet: true } : {}) }, alerts };
+  const turn = turnOf(f);
+  // waiting on someone else: nothing here is mine to act on, so nothing calls for attention (no pin, no warning toast)
+  const quiet = turn === 'them' ? alerts.map((a) => (a.tone === 'info' ? a : { ...a, tone: 'info' as Tone })) : alerts;
+  return {
+    view: { glyph, label: LABELS[glyph], tone: TONES[glyph] ?? 'info', ...(glyph === 'feedback' ? { count: Math.max(1, f.threads) } : {}), ...(glyph === 'building' ? { quiet: true } : {}), ...(turn ? { turn } : {}) },
+    alerts: quiet,
+  };
 }
 
 const clip = (t: string, n: number) => {
@@ -69,7 +93,7 @@ export function detailsOf(f: Facts): Detail[] {
 export function snapshot(ref: string, name: string, title: string, f: Facts): Snapshot {
   const { view, alerts } = summarize(f);
   const details = detailsOf(f);
-  return { ref, name, title, view, alerts, details, rev: JSON.stringify([view.glyph, view.count, alerts.map((a) => a.key), title, details.map((d) => d.key + d.text)]) };
+  return { ref, name, title, view, alerts, details, rev: JSON.stringify([view.glyph, view.count, view.turn, alerts.map((a) => a.key), title, details.map((d) => d.key + d.text)]) };
 }
 
 /**
@@ -77,10 +101,11 @@ export function snapshot(ref: string, name: string, title: string, f: Facts): Sn
  * enough for the state, the counts and to notice that something changed.
  */
 export const PR_LIGHT = `fragment F on PullRequest {
-  number title body url state isDraft merged mergeable reviewDecision updatedAt
+  number title body url state isDraft merged mergeable reviewDecision updatedAt viewerDidAuthor
+  viewerLatestReviewRequest { id }
   author { login }
   repository { nameWithOwner }
-  reviewThreads(first: 100) { nodes { isResolved } }
+  reviewThreads(first: 100) { nodes { isResolved last: comments(last: 1) { nodes { viewerDidAuthor } } } }
   commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 50) { nodes {
     __typename
     ... on CheckRun { name status conclusion }
@@ -94,6 +119,8 @@ export function basisOf(p: GqlPr): string {
   return JSON.stringify([
     p.state, p.isDraft, p.merged, p.mergeable, p.reviewDecision, p.updatedAt,
     p.reviewThreads.nodes.filter((t) => !t.isResolved).length,
+    p.reviewThreads.nodes.filter((t) => !t.isResolved && t.last?.nodes[0]?.viewerDidAuthor).length,
+    !!p.viewerLatestReviewRequest,
     p.commits.nodes[0]?.commit.oid, roll?.state,
     (roll?.contexts.nodes ?? []).map((c) => (c ? `${c.name ?? c.context}:${c.status ?? ''}:${c.conclusion ?? c.state ?? ''}` : '')),
   ]);
@@ -104,10 +131,11 @@ export function basisOf(p: GqlPr): string {
  * new, whose light fields changed, or that the user refreshed.
  */
 export const PR_FIELDS = `fragment F on PullRequest {
-  number title body url state isDraft merged mergeable reviewDecision updatedAt
+  number title body url state isDraft merged mergeable reviewDecision updatedAt viewerDidAuthor
+  viewerLatestReviewRequest { id }
   author { login }
   repository { nameWithOwner }
-  reviewThreads(first: 100) { nodes { id isResolved path comments(first: 1) { nodes { author { login } body url } } } }
+  reviewThreads(first: 100) { nodes { id isResolved path comments(first: 1) { nodes { author { login } body url } } last: comments(last: 1) { nodes { viewerDidAuthor } } } }
   commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 50) { nodes {
     __typename
     ... on CheckRun { name status conclusion detailsUrl title summary annotations(first: 10) { nodes { annotationLevel message path } } }
@@ -126,9 +154,11 @@ export interface GqlPr {
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
   updatedAt: string;
+  viewerDidAuthor?: boolean;
+  viewerLatestReviewRequest?: { id: string } | null;
   author: { login: string } | null;
   repository: { nameWithOwner: string };
-  reviewThreads: { nodes: { id?: string; isResolved: boolean; path?: string | null; comments?: { nodes: { author: { login: string } | null; body: string; url: string }[] } }[] };
+  reviewThreads: { nodes: { id?: string; isResolved: boolean; path?: string | null; comments?: { nodes: { author: { login: string } | null; body: string; url: string }[] }; last?: { nodes: { viewerDidAuthor: boolean }[] } }[] };
   commits: { nodes: { commit: { oid?: string; statusCheckRollup: { state: string; contexts: { nodes: (GqlCheck | null)[] } } | null } }[] };
 }
 
@@ -201,6 +231,9 @@ export function factsOf(p: GqlPr): Facts {
     open,
     oid: p.commits.nodes[0]?.commit.oid,
     conflicts: p.mergeable === 'CONFLICTING',
+    mine: p.viewerDidAuthor,
+    asked: p.viewerDidAuthor == null ? undefined : !!p.viewerLatestReviewRequest,
+    todo: p.reviewThreads.nodes.filter((t) => !t.isResolved && !t.last?.nodes[0]?.viewerDidAuthor).length,
   };
 }
 
