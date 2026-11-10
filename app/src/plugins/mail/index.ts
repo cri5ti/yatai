@@ -1,7 +1,8 @@
 /**
  * Emails: the Inbox of the classic Outlook on this PC (COM, through src-tauri/src/mail.rs), sorted on this machine
  * into Urgent / Today / Eventually / Dismiss by a Laya decision model (or, for comparison, an Ollama LLM). Read-only: nothing is marked read or moved in Outlook.
- * It looks at the unread mail of the last N days (Settings → Emails; at most 200). Each mail is sorted once.
+ * It looks at the unread mail of the last N days in the folders picked in Settings → Emails (the user's own mailbox
+ * only, none until some are picked; at most 200). Each mail is sorted once.
  */
 import { get, set } from '../../store';
 import { isTauri, mailFetch } from '../../platform';
@@ -18,6 +19,8 @@ const BUDGET_MS = 45_000;
 /** bodies of mail not sorted yet: only needed once, so not saved */
 const bodies = new Map<string, string>();
 let lastModelError = '';
+/** picked folders Outlook does not have (renamed, deleted): Settings shows them */
+export let missing: string[] = [];
 
 /** keep the drawer's tabs in step with the state as each mail is sorted, not only at the end of a cycle */
 function save(mail: MailState) {
@@ -32,11 +35,20 @@ function save(mail: MailState) {
 async function look(): Promise<MailState> {
   const st = get().mail;
   const days = get().settings.mailDays ?? 14;
-  const raw = await mailFetch(ID, { days, limit: 200, known: knownOf(st) });
-  const res = JSON.parse(raw) as { error?: string; me?: string; items?: Fetched[] };
+  const folders = get().settings.mailFolders ?? [];
+  // nothing picked (the default): nothing is read
+  if (!folders.length) {
+    const next = { ...st, items: [], polled: Date.now() };
+    save(next);
+    return next;
+  }
+  const raw = await mailFetch(ID, { days, limit: 200, known: knownOf(st), folders });
+  const res = JSON.parse(raw) as { error?: string; me?: string; missing?: string[]; items?: Fetched[] };
   if (res.error) throw new Error(`Outlook: ${res.error}`);
   for (const f of res.items ?? []) if (f.body != null) bodies.set(f.id, f.body);
-  const next = { ...merge(get().mail, res.items ?? [], Date.now(), days), me: res.me || st.me };
+  if (res.missing?.length) missing = res.missing;
+  else missing = [];
+  const next = { ...merge(get().mail, res.items ?? [], Date.now(), days, folders), me: res.me || st.me };
   save(next);
   return next;
 }

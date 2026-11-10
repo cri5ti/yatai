@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { get, useS } from './store';
 import { act } from './act';
-import { aiKeyStatus, aiSetKey, invoke, isTauri } from './platform';
+import { aiKeyStatus, aiSetKey, invoke, isTauri, mailFetch } from './platform';
 import type { KeyStatus } from './platform';
 import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
@@ -24,6 +24,34 @@ interface BackupStatus { dbPath: string; dbSize: number; dir: string; config: Ba
 const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const EVERY = [5, 15, 30, 60];
+
+/** Settings → Emails: tick the folders to read (indented by depth, with their unread counts) */
+function FolderPicker({ list, picked, onChange }: { list: { path: string; depth: number; unread: number }[] | string | null; picked: string[]; onChange: (p: string[]) => void }) {
+  if (!isTauri) return <span className="set-hint">needs the desktop app</span>;
+  if (list === null) return <span className="set-hint">Reading the folders from Outlook…</span>;
+  if (typeof list === 'string') return <span className="set-hint">{list}</span>;
+  const toggle = (p: string) => onChange(picked.includes(p) ? picked.filter((x) => x !== p) : [...picked, p]);
+  const gone = picked.filter((p) => !list.some((f) => f.path === p));
+  return (
+    <div className="set-flist" role="group" aria-label="Folders">
+      {list.map((f) => (
+        <label key={f.path} style={{ paddingLeft: 4 + f.depth * 16 }} title={f.path}>
+          <input type="checkbox" checked={picked.includes(f.path)} onChange={() => toggle(f.path)} />
+          <span>{f.path.slice(f.path.lastIndexOf('\\') + 1)}</span>
+          {f.unread > 0 && <small>{f.unread}</small>}
+        </label>
+      ))}
+      {gone.map((p) => (
+        <label key={p} className="gone" title="Not in Outlook any more (renamed or deleted)">
+          <input type="checkbox" checked onChange={() => toggle(p)} />
+          <span>{p}</span>
+          <small>not found</small>
+        </label>
+      ))}
+      <div className="set-fcount">{picked.length ? `${picked.length} picked` : 'none picked: nothing is read'}</div>
+    </div>
+  );
+}
 
 /** the database file, and its automatic backups (src-tauri/src/backup.rs does the work; this only sets the schedule) */
 function Database({ draft, onLoad, onChange }: { draft: BackupCfg | null; onLoad: (c: BackupCfg) => void; onChange: (p: Partial<BackupCfg>) => void }) {
@@ -132,6 +160,21 @@ export function Settings() {
     void aiKeyStatus().then(setSt);
     requestAnimationFrame(() => box.current?.querySelector<HTMLElement>('input, select')?.focus());
   }, [s.settingsOpen]);
+  // Emails: the folders of the user's own mailbox, read from Outlook when the section is opened
+  const [folders, setFolders] = useState<{ path: string; depth: number; unread: number }[] | string | null>(null);
+  const loadFolders = () => {
+    setFolders(null);
+    mailFetch('mail', { mode: 'folders' }).then(
+      (raw) => {
+        const r = JSON.parse(raw) as { error?: string; folders?: { path: string; depth: number; unread: number }[] };
+        setFolders(r.error ? `Outlook: ${r.error}` : r.folders ?? []);
+      },
+      (e) => setFolders(String(e)),
+    );
+  };
+  useEffect(() => {
+    if (s.settingsOpen && sec === 'mail' && isTauri) loadFolders();
+  }, [s.settingsOpen, sec]);
   if (!s.settingsOpen) return null;
 
   const cfg = d ?? s.settings;
@@ -147,7 +190,7 @@ export function Settings() {
       if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
       const resort = cfg.mailSorter !== s.settings.mailSorter || (cfg.mailSorter === 'laya' ? cfg.mailLaya !== s.settings.mailLaya : cfg.mailModel !== s.settings.mailModel);
       if (resort) act.resortMail();
-      else if (cfg.mailDays !== s.settings.mailDays) act.refreshMail();
+      else if (cfg.mailDays !== s.settings.mailDays || !same(cfg.mailFolders, s.settings.mailFolders)) act.refreshMail();
       if (bk.draft && !same(bk.draft, bk.base)) await invoke('backup_set_config', { config: bk.draft });
       if (key.trim()) {
         setSt(await aiSetKey(key));
@@ -307,6 +350,17 @@ export function Settings() {
                 <input type="number" min={0} max={365} value={cfg.mailDays} disabled={!isTauri} onChange={(e) => patch({ mailDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })} onKeyDown={enter} style={{ width: '5em' }} />
                 <span>days</span>
               </span>
+            </div>
+            <div className="set-row set-folders">
+              <span className="set-lbl">
+                Folders<small>In your own mailbox (no shared ones; the system folders are left out). Only the ticked ones are read: none ticked, nothing is.</small>
+                {isTauri && (
+                  <button className="btn sm" onClick={loadFolders}>
+                    Reload
+                  </button>
+                )}
+              </span>
+              <FolderPicker list={folders} picked={cfg.mailFolders ?? []} onChange={(mailFolders) => patch({ mailFolders })} />
             </div>
             <div className="set-row">
               <span className="set-lbl">

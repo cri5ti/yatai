@@ -377,7 +377,7 @@ export function Drawer() {
         ) : (
           entries.length === 0 && (
             <div className="dempty">
-              {picked.length ? 'Nothing in the selected repositories.' : 'Nothing here.'}{!picked.length &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
+              {picked.length ? 'Nothing in the selected repositories.' : d.kind === 'mail' && !s.demo && !s.settings.mailFolders?.length ? 'No folders picked: choose them in Settings → Emails.' : 'Nothing here.'}{!picked.length &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
             </div>
           )
         )}

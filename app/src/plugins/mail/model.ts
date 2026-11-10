@@ -16,6 +16,7 @@ export const isBucket = (x: unknown): x is Bucket => BUCKETS.some((b) => b.id ==
 /** one mail as mail.ps1 reports it (`body` only the first time) */
 export interface Fetched {
   id: string;
+  folder?: string; // 'Inbox', 'Inbox\Team' (relative to the mailbox)
   conv?: string;
   received: string; // ISO, UTC
   from: string;
@@ -31,6 +32,7 @@ export interface Fetched {
 
 export interface MailItem {
   id: string;
+  folder?: string;
   from: string;
   addr?: string;
   to?: string;
@@ -63,22 +65,24 @@ const MAX = 300;
  * (a new one is `fresh` unless this is the first look); a mail it no longer returns has been read (or moved) elsewhere.
  * Mail older than the window goes (0 = no window).
  */
-export function merge(st: MailState, got: Fetched[], now: number, days = 0): MailState {
+export function merge(st: MailState, got: Fetched[], now: number, days = 0, folders?: string[]): MailState {
   const by = new Map(got.map((f) => [f.id, f]));
   const items: MailItem[] = st.items.map((m) => {
     const f = by.get(m.id);
     if (!f) return m.unread ? { ...m, unread: false } : m;
     by.delete(m.id);
-    return f.unread === m.unread && f.subject === m.subject ? m : { ...m, unread: f.unread, subject: f.subject };
+    return f.unread === m.unread && f.subject === m.subject && f.folder === m.folder ? m : { ...m, unread: f.unread, subject: f.subject, folder: f.folder };
   });
   for (const f of by.values()) {
     items.push({
-      id: f.id, from: f.from, addr: f.fromAddr || undefined, to: f.to.slice(0, 300), cc: f.cc.slice(0, 300) || undefined, subject: f.subject, received: f.received,
+      id: f.id, folder: f.folder, from: f.from, addr: f.fromAddr || undefined, to: f.to.slice(0, 300), cc: f.cc.slice(0, 300) || undefined, subject: f.subject, received: f.received,
       unread: f.unread, important: f.importance === 2 || undefined, fresh: st.polled != null || undefined,
     });
   }
   const age = (m: MailItem) => now - Date.parse(m.received);
-  const kept = items.filter((m) => (m.unread || age(m) < KEEP_READ_MS) && (!days || age(m) < days * 864e5));
+  // a folder no longer picked: its mail goes
+  const picked = (m: MailItem) => !folders || (!!m.folder && folders.includes(m.folder));
+  const kept = items.filter((m) => (m.unread || age(m) < KEEP_READ_MS) && (!days || age(m) < days * 864e5) && picked(m));
   kept.sort((a, b) => b.received.localeCompare(a.received));
   return { ...st, items: kept.slice(0, MAX), polled: now };
 }
@@ -97,6 +101,9 @@ export function tabsOf(st: MailState): ListDef[] {
   return pending ? [...tabs, { id: 'pending', label: `Sorting… ${pending}` }] : tabs;
 }
 
+/** a subfolder's name on the row (the Inbox itself goes without saying) */
+export const folderLabel = (f?: string) => (f && f.includes('\\') ? f.slice(f.lastIndexOf('\\') + 1) : f && f !== 'Inbox' ? f : '');
+
 /** when it came: the time today, the weekday this week, else the date */
 export function whenOf(iso: string, now = Date.now()): string {
   const d = new Date(iso);
@@ -113,7 +120,7 @@ export function entriesOf(st: MailState, tab: string, now = Date.now()): Entry[]
   return order.map((m) => ({
     ref: `mail:${m.id}`,
     title: m.subject || '(no subject)',
-    sub: [m.from, m.why].filter(Boolean).join(' · '),
+    sub: [folderLabel(m.folder), m.from, m.why].filter(Boolean).join(' · '),
     lead: { text: whenOf(m.received, now) },
     text: `${m.subject || '(no subject)'} — ✉ ${m.from}`,
     dim: !m.unread,

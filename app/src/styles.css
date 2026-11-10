@@ -470,6 +470,17 @@ button.prio:hover { filter: brightness(1.08); }
 .set-hint { font-size: var(--fs-sm); color: var(--text-muted); }
 .set-row { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: var(--sp-5); padding: var(--sp-4) 0; font-size: var(--fs-md); }
 .set-row + .set-row { border-top: var(--bw) solid var(--border); }
+/* Settings → Emails: the folder checklist */
+.set-row.set-folders { align-items: start; }
+.set-folders .set-lbl .btn { margin-top: var(--sp-3); align-self: flex-start; }
+.set-flist { display: flex; flex-direction: column; max-height: 240px; overflow: auto; border: var(--bw) solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); padding: 4px 0; }
+.set-flist label { display: flex; align-items: center; gap: 8px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.set-flist label:hover { background: var(--surface); }
+.set-flist label span { overflow: hidden; text-overflow: ellipsis; }
+.set-flist label small { margin-left: auto; color: var(--text-muted); font-size: var(--fs-sm); }
+.set-flist label.gone span { color: var(--text-muted); text-decoration: line-through; }
+.set-row .set-flist input[type='checkbox'] { padding: 0; min-width: auto; margin: 0; }
+.set-fcount { padding: 4px 10px 2px; border-top: var(--bw) solid var(--border); margin-top: 4px; color: var(--text-muted); font-size: var(--fs-sm); }
 .set-lbl { display: flex; flex-direction: column; gap: 2px; color: var(--text); }
 .set-lbl small { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.35; }
 .set-row input, .set-row select { background: var(--surface-2); border: var(--bw) solid var(--border); border-radius: var(--r-sm); padding: 7px 10px; color: var(--text); min-width: 0; font-size: var(--fs-md); }

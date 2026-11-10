@@ -200,6 +200,7 @@ export interface Settings {
   mailLaya: 'english' | 'multilingual' | 'typed-decisions'; // the Laya checkpoint
   mailModel: string; // the Ollama model
   mailDays: number; // Emails looks at the unread mail of this many days (0 = any age)
+  mailFolders: string[]; // …in these folders of the user's own mailbox ('Inbox', 'Inbox\Team'); none = nothing is read (the default)
 }
 
 export interface State extends Doc {
@@ -368,7 +369,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailSorter: 'ollama', mailLaya: 'english', mailModel: 'qwen3:4b-instruct-2507-q4_K_M', mailDays: 14 };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailSorter: 'ollama', mailLaya: 'english', mailModel: 'qwen3:4b-instruct-2507-q4_K_M', mailDays: 14, mailFolders: [] };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
