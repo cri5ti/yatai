@@ -425,11 +425,20 @@ export const setDue = (ids: string[], days: number | null) =>
   patchNodes(days == null ? 'Clear due date' : 'Set due date', ids, { due: days == null ? undefined : isoDay(days) });
 /** due on a specific day (yyyy-mm-dd), from the date picker */
 export const setDueOn = (ids: string[], iso: string) => patchNodes('Set due date', ids, { due: iso });
+/** /tomorrow, /reschedule: the whole subtree leaves Next (the parent too, so it does not linger as a header);
+ *  what was in Next — or, when nothing was, the open leaves — comes back on that day (rollDay) */
 export function deferTo(ids: string[], days: number) {
   const nodes = get().nodes;
-  const all = new Set<string>();
-  ids.forEach((id) => leavesOf(nodes, id).forEach((l) => all.add(l.id)));
-  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, [...all], { today: false, later: days });
+  const all = subtreeIds(nodes, ids);
+  const open = (n: Node) => n.status !== 'done' && n.status !== 'dropped';
+  const back = new Set<string>();
+  for (const id of ids) {
+    const ids = subtree(nodes, id);
+    const sub = nodes.filter((n) => ids.has(n.id));
+    const inNext = sub.filter((n) => n.today && open(n));
+    (inNext.length ? inNext : leavesOf(nodes, id).filter(open)).forEach((n) => back.add(n.id));
+  }
+  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, [...all], (n) => (back.has(n.id) ? { today: false, later: days } : { today: false }));
   toast(days === 1 ? 'Moved to tomorrow' : `Rescheduled to ${days} days from now`, 'good');
 }
 export const abandon = (ids: string[]) => {
