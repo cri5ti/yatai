@@ -41,7 +41,7 @@ const live: Impl = {
 
 export const outlook: Plugin = {
   id: ID,
-  name: 'Outlook',
+  name: 'Calendar',
   auth: {
     field: {
       label: 'Calendar link (ICS)',

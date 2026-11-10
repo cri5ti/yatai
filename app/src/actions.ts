@@ -73,7 +73,7 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
-/** the Outlook drawer: list ↔ day schedule */
+/** the Calendar drawer: list ↔ day schedule */
 export const setOutlookView = (v: 'list' | 'day') => set(() => ({ outlookView: v }));
 /** a popup window was moved / resized by the user: remember it under its key (the main window's own placing is ignored) */
 export function setPopupRect(view: string, key: string, r: { x: number; y: number; w: number; h: number }) {
@@ -108,7 +108,7 @@ export function setPrComments(key: string, n: number) {
   void refreshNow('github');
 }
 
-/* ---------- meetings: delete here, bring back from the Outlook drawer ---------- */
+/* ---------- meetings: delete here, bring back from the Calendar drawer ---------- */
 export function removeMeeting(id: string) {
   const m = get().meetings.find((x) => x.id === id);
   if (!m) return;
@@ -121,7 +121,7 @@ export function removeMeeting(id: string) {
       multi: [],
     };
   });
-  toast(`${m.title} removed — bring it back from the Outlook drawer`, 'info');
+  toast(`${m.title} removed — bring it back from the Calendar drawer`, 'info');
 }
 /** a meeting into Next: today's from the agenda; one ahead (to prepare) comes with its data and its day */
 export function bringMeeting(id: string, ahead?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }) {
@@ -133,7 +133,7 @@ export function bringMeeting(id: string, ahead?: { id: string; title: string; st
   toast(ahead && day !== today() ? `${m.title} is in Next (${new Date(day + 'T00:00').toLocaleDateString(undefined, { weekday: 'long' })}): add your prep under it` : `${m.title} is back in Next`, 'good');
 }
 
-/* ---------- the Outlook / GitHub / DevOps drawers ---------- */
+/* ---------- the Calendar / GitHub / DevOps / Emails drawers ---------- */
 export const openDrawer = (kind: DrawerKind) =>
   set((s) => {
     const p = pluginById(kind);

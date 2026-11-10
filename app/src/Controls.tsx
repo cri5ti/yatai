@@ -21,7 +21,7 @@ const scenarios: { k: keyof Flags; label: string; group: string }[] = [
   { k: 'workItemChanged', label: 'Work item: state changed', group: 'DevOps' },
   { k: 'aiNeedsFeedback', label: 'Claude: needs feedback', group: 'AI sessions' },
   { k: 'aiDone', label: 'Claude: finished', group: 'AI sessions' },
-  { k: 'meetingMoved', label: 'Design review moved 14:00 → 11:30', group: 'Outlook' },
+  { k: 'meetingMoved', label: 'Design review moved 14:00 → 11:30', group: 'Calendar' },
 ];
 
 /** developer panel (tray → Developer panel, or ⌘⇧D): the POC's mock bar — simulated clock, connectors, scenarios, data */
@@ -51,7 +51,7 @@ export function DevPanel() {
       <section>
         <h3>Data</h3>
         <label className="check-row">
-          <input type="checkbox" checked={s.demo} onChange={(e) => act.setDemo(e.target.checked)} /> Demo connectors (mocked Outlook / GitHub / DevOps)
+          <input type="checkbox" checked={s.demo} onChange={(e) => act.setDemo(e.target.checked)} /> Demo connectors (mocked Calendar / GitHub / DevOps / Emails)
         </label>
         <div className="btnrow">
           <button onClick={() => act.loadDemo()}>Load demo data</button>

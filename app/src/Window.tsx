@@ -172,8 +172,8 @@ function Win() {
       {!pill && (
         <div className="uibar" role="toolbar" aria-label="Sources and display">
           <div className="ugrp drawers" role="group" aria-label="Sources">
-            <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Outlook — bring meetings in" onClick={() => openDrawer('outlook')}>
-              <span aria-hidden>📅</span> Outlook
+            <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Calendar — bring meetings in" onClick={() => openDrawer('outlook')}>
+              <span aria-hidden>📅</span> Calendar
             </button>
             <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
               <GhIcon /> GitHub
