@@ -3,7 +3,7 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, whenLabel, inLabel } from './model';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
@@ -104,6 +104,8 @@ interface Shared {
   setDragId: (id: string | null) => void;
   endDrag: () => void;
   onSelect: (e: React.MouseEvent, card: CardM, row: string | null) => void;
+  /** where each yellow highlight shows (hlTargets): `row:<id>` / `card:<key>` -> the highlighted ids */
+  hlAt: Map<string, string[]>;
 }
 
 /* ---------- one row ---------- */
@@ -203,7 +205,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
   const open = !!s.expanded[node.id];
   const hasBody = info.rest.some((l) => l.trim());
   const container = hasKids(s.nodes, node.id); // "task": has children → square check, derived done
-  const hlIds = hlForRow(s.nodes, s.hl, row);
+  const hlIds = x.hlAt.get(`row:${row.id}`) ?? [];
   const isPr = prLinks(info.first).length > 0;
   const done = isDone(s.nodes, node.id);
   const pm = x.marks?.[node.id];
@@ -346,8 +348,8 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
   const cardSel = sel.card === card.key && !sel.row;
   const hasSel = sel.card === card.key;
   const picked = !!card.task && x.multi.has(card.task.id);
-  // a change the user did not make: highlight the card when it is a meeting, or when the item is hidden inside it
-  const hlIds = hlForCard(s.nodes, s.hl, card);
+  // a change the user did not make: on the card when it is a meeting, or when the item is hidden inside it
+  const hlIds = x.hlAt.get(`card:${card.key}`) ?? [];
   // purple header: the owner itself is touched, or a proposed change hides inside the collapsed card
   const pm = card.task ? x.marks?.[card.task.id] : undefined;
   const propHidden = !!x.marks && card.collapsed && card.rows.some((r) => r.node && x.marks![r.node.id]);
@@ -510,6 +512,7 @@ export function Next() {
   const { s, marks } = useView();
   const m = useMemo(() => (s.prioFilter ? filterNext(s, s.prioFilter) : nextModel(s)), [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter]);
   const nav = useMemo(() => navList(m.cards), [m]);
+  const hlAt = useMemo(() => hlTargets(m.cards, s.nodes, s.hl), [m, s.nodes, s.hl]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;
   const area = useRef<HTMLDivElement>(null);
@@ -543,7 +546,7 @@ export function Next() {
     const k = keyOf(sel.card, sel.row);
     if (lastSel.current !== null && lastSel.current !== k && card) {
       const row = sel.row ? card.rows.find((r) => r.id === sel.row) : undefined;
-      dismissHl(row ? hlForRow(s.nodes, s.hl, row) : hlForCard(s.nodes, s.hl, card));
+      dismissHl((row ? hlAt.get(`row:${row.id}`) : hlAt.get(`card:${card.key}`)) ?? []);
     }
     lastSel.current = k;
   }, [sel.card, sel.row]);
@@ -576,7 +579,7 @@ export function Next() {
     }
     pick(c.key, row);
   };
-  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect };
+  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt };
 
   /** what a command applies to: the multi-selection, or the one selected item */
   const targets = (): string[] => {

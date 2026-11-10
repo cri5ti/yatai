@@ -156,17 +156,47 @@ export function hlSubtree(nodes: Node[], hl: Record<string, true>, id: string): 
   for (const n of nodes) if (n.parentId && ids.has(n.parentId)) ids.add(n.id);
   return nodes.filter((n) => ids.has(n.id) && hl[n.id]).map((n) => n.id);
 }
-/** what hovering / moving the cursor onto a row clears: the row itself, or what is hidden under it */
-export function hlForRow(nodes: Node[], hl: Record<string, true>, row: Row): string[] {
-  if (!row.node || !Object.keys(hl).length) return [];
-  if (hl[row.node.id]) return [row.node.id];
-  return row.kids && row.node.open === false ? hlSubtree(nodes, hl, row.node.id) : [];
-}
-/** …and a card: a changed meeting, or anything changed inside a collapsed card */
-export function hlForCard(nodes: Node[], hl: Record<string, true>, card: CardM): string[] {
-  if (!Object.keys(hl).length) return [];
-  if (card.kind === 'meeting' && hl[card.ownerId]) return [card.ownerId];
-  return card.collapsed ? card.rows.flatMap((r) => (r.node ? hlSubtree(nodes, hl, r.node.id) : [])) : [];
+/**
+ * Where each yellow highlight shows in Next: on its own row when that is visible, else on the first visible thing above
+ * it: a row (its parent collapsed, or not in Next itself), or the card's header when the card is collapsed (or the item
+ * hangs under a meeting / the card's item). Keys: `row:<row id>` and `card:<card key>`; values: the highlighted ids that
+ * show there, which is also what hovering it clears. A highlight with nothing of it in Next shows nowhere here.
+ */
+export function hlTargets(cards: CardM[], nodes: Node[], hl: Record<string, true>): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (!Object.keys(hl).length) return out;
+  const vis = new Map<string, string>(); // node (or meeting) id -> where it is seen
+  const see = (id: string, at: string) => !vis.has(id) && vis.set(id, at);
+  for (const c of cards) {
+    const card = `card:${c.key}`;
+    if (c.collapsed) {
+      see(c.ownerId, card);
+      for (const r of c.rows) if (r.node) see(r.node.id, card);
+      continue;
+    }
+    let hideBelow = Infinity; // rows deeper than a collapsed row are hidden
+    for (const r of c.rows) {
+      if (r.depth > hideBelow) continue;
+      hideBelow = Infinity;
+      if (!r.node) continue;
+      see(r.node.id, `row:${r.id}`);
+      if (r.kids && r.node.open === false) hideBelow = r.depth;
+    }
+    see(c.ownerId, card); // the card's item (when it is not a row of its own) or its meeting
+  }
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const id of Object.keys(hl)) {
+    let cur: string | null | undefined = id;
+    for (let guard = 0; cur && guard < 64; guard++) {
+      const at = vis.get(cur);
+      if (at) {
+        out.set(at, [...(out.get(at) ?? []), id]);
+        break;
+      }
+      cur = byId.get(cur)?.parentId;
+    }
+  }
+  return out;
 }
 
 /** the priority a row shows: its own, or — when collapsed — the highest (lowest number) in its subtree */
