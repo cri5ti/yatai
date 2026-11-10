@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { AccountState, AgendaEvent, ListState, Snapshot } from './plugins/types';
+import type { MailState } from './plugins/mail/model';
 
 export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
@@ -195,6 +196,7 @@ export interface Settings {
   devopsOrg: string; // Azure DevOps organization: 'acme', 'dev.azure.com/acme' or 'acme.visualstudio.com' (its token is in the keychain)
   workStart: number; // working hours, minutes of the day (the Outlook schedule fits them on 80% of the drawer)
   workEnd: number;
+  mailModel: string; // the local (Ollama) model that sorts emails
 }
 
 export interface State extends Doc {
@@ -229,6 +231,7 @@ export interface State extends Doc {
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
+  mail: MailState; // the Emails source: what it has seen, and how the local model sorted it (saved, so nothing is sorted twice)
   accounts: Record<string, AccountState>; // plugin id -> connected?
   drawer: { kind: DrawerKind; tab: string; sel: number } | null; // a plugin's pop-up
   hl: Record<string, true>; // yellow highlights: changes the user did not make, cleared only by hovering them
@@ -362,7 +365,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60 };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailModel: 'llama3.2' };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
@@ -401,6 +404,7 @@ export function initialState(): State {
     snaps: {},
     agenda: {},
     lists: {},
+    mail: { items: [] },
     accounts: {},
     drawer: null,
     hl: {},

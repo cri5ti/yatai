@@ -14,7 +14,7 @@ const mins = (v: string) => {
   const [h, m] = v.split(':').map(Number);
   return h * 60 + (m || 0);
 };
-const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇', display: 'Aa' };
+const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
@@ -145,6 +145,7 @@ export function Settings() {
     setBusy(true);
     try {
       if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
+      if (cfg.mailModel !== s.settings.mailModel) act.resortMail();
       if (bk.draft && !same(bk.draft, bk.base)) await invoke('backup_set_config', { config: bk.draft });
       if (key.trim()) {
         setSt(await aiSetKey(key));
@@ -189,7 +190,7 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
@@ -258,6 +259,32 @@ export function Settings() {
             <input value={cfg.baseUrl} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
           </div>
         </section>}
+        {sec === 'mail' && (
+          <section className="set-sec">
+            <header>
+              <h4>Emails</h4>
+              <span className="set-hint">{!isTauri ? 'needs the desktop app' : s.mail.polled ? `${s.mail.items.length} emails · read ${new Date(s.mail.polled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'not read yet'}</span>
+            </header>
+            <p className="set-note">
+              Reads the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email with a local model: Urgent, Today, Eventually or Dismiss.
+              Nothing leaves the machine, and nothing is changed in Outlook.
+            </p>
+            <div className="set-row">
+              <span className="set-lbl">
+                Local model<small>An Ollama model on this PC (ollama pull &lt;name&gt;). Changing it sorts every email again.</small>
+              </span>
+              <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="llama3.2" />
+            </div>
+            <div className="set-row">
+              <span className="set-lbl">
+                Sort again<small>Forget how every email was sorted and ask the model again.</small>
+              </span>
+              <button className="btn sm" disabled={!isTauri || !s.mail.items.length} onClick={() => act.resortMail()}>
+                Sort all again
+              </button>
+            </div>
+          </section>
+        )}
         {accts.filter((p) => p.id === sec).map((p) => {
           const acc = s.accounts[p.id];
           const state =

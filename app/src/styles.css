@@ -369,6 +369,7 @@ button.prio:hover { filter: brightness(1.08); }
 .uibar .drawers button { gap: 6px; padding: 0 10px; font-size: var(--fs-md); color: var(--text); }
 .uibar .drawers button > span[aria-hidden] { font-size: 1.1em; }
 .uibar .drawers .gh { width: 14px; height: 14px; }
+.uibar .drawers .ucount { min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--bad, #d13438); color: #fff; font-size: var(--fs-sm); line-height: 16px; text-align: center; }
 .uibar .drawers .gh { margin: 0; color: inherit; }
 .drawer { position: absolute; left: 0; right: 0; bottom: 20px; z-index: 6; height: min(62%, 460px); display: flex; flex-direction: column; background: var(--surface); border-top: 2px solid var(--border-strong); box-shadow: 0 -10px 30px rgba(10, 14, 40, .22); animation: drawer-up var(--dur-3) var(--ease); zoom: var(--ui-scale, 1); }
 @keyframes drawer-up { from { transform: translateY(24px); opacity: 0; } }

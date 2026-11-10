@@ -1,6 +1,8 @@
 mod ai;
 mod backup;
 mod db;
+mod llm;
+mod mail;
 mod plugin;
 
 use std::sync::{
@@ -384,6 +386,8 @@ pub fn run() {
             plugin::plugin_secret_set,
             plugin::plugin_http,
             plugin::plugin_get_secret_url,
+            mail::mail_fetch,
+            llm::llm_local,
         ])
         .build(tauri::generate_context!())
         .expect("error while building yatai");

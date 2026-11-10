@@ -9,6 +9,7 @@ import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mo
 import { implFor, pluginById } from './plugins/registry';
 import { placedAt } from './popupguard';
 import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
+import { resort } from './plugins/mail';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
@@ -1285,6 +1286,12 @@ export async function disconnectPlugin(id: string) {
   } catch (e) {
     toast(`Keychain: ${String(e)}`, 'bad');
   }
+}
+/** Emails: forget how every mail was sorted and sort them again (another model) */
+export function resortMail() {
+  set((s) => ({ mail: resort(s.mail) }));
+  toast('Emails: sorting them all again', 'info');
+  void refreshNow('mail');
 }
 export const toggleDev = () => set((s) => ({ dev: !s.dev, hidden: false }));
 export const setDemo = (demo: boolean) => set(() => ({ demo }));

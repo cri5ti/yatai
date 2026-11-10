@@ -1,0 +1,93 @@
+/**
+ * Emails: the Inbox of the classic Outlook on this PC (COM, through src-tauri/src/mail.rs), sorted by a local model
+ * into Urgent / Today / Eventually / Dismiss. Read-only: nothing is marked read or moved in Outlook.
+ * The first look takes the newest 50 unread; after that, everything that arrives. Each mail is sorted once.
+ */
+import { get, set } from '../../store';
+import { isTauri, mailFetch } from '../../platform';
+import type { Impl, ListState, Notice, Plugin } from '../types';
+import { classify } from './classify';
+import { BUCKETS, entriesOf, knownOf, merge, sinceOf, tabsOf } from './model';
+import type { Fetched, MailState } from './model';
+import { mock } from './mock';
+
+const ID = 'mail';
+/** how long one cycle may spend sorting (the rest waits for the next one) */
+const BUDGET_MS = 45_000;
+
+/** bodies of mail not sorted yet: only needed once, so not saved */
+const bodies = new Map<string, string>();
+let lastModelError = '';
+
+/** keep the drawer's tabs in step with the state as each mail is sorted, not only at the end of a cycle */
+function save(mail: MailState) {
+  const at = Date.now();
+  set((s) => {
+    const lists: Record<string, ListState> = { ...s.lists };
+    for (const t of [...BUCKETS.map((b) => b.id), 'pending']) lists[`${ID}/${t}`] = { entries: entriesOf(mail, t, at), at };
+    return { mail, lists };
+  });
+}
+
+async function look(): Promise<MailState> {
+  const st = get().mail;
+  const raw = await mailFetch(ID, { since: sinceOf(st), limit: 50, known: knownOf(st) });
+  const res = JSON.parse(raw) as { error?: string; me?: string; items?: Fetched[] };
+  if (res.error) throw new Error(`Outlook: ${res.error}`);
+  for (const f of res.items ?? []) if (f.body != null) bodies.set(f.id, f.body);
+  const next = { ...merge(get().mail, res.items ?? [], Date.now()), me: res.me || st.me };
+  save(next);
+  return next;
+}
+
+async function sort(): Promise<Notice[]> {
+  const out: Notice[] = [];
+  const t0 = Date.now();
+  const model = get().settings.mailModel || 'llama3.2';
+  for (;;) {
+    const st = get().mail;
+    const m = st.items.find((x) => !x.cls);
+    if (!m || Date.now() - t0 > BUDGET_MS) break;
+    let r;
+    try {
+      r = await classify(model, st.me ?? '', { ...m, body: bodies.get(m.id) });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg !== lastModelError) out.push({ text: `Emails: ${msg}`, tone: 'warn' });
+      lastModelError = msg;
+      break;
+    }
+    lastModelError = '';
+    bodies.delete(m.id);
+    const cur = get().mail;
+    save({ ...cur, items: cur.items.map((x) => (x.id === m.id ? { ...x, ...r, by: model } : x)) });
+    if (m.fresh && m.unread && r.cls === 'urgent') out.push({ text: `Urgent email from ${m.from}: ${m.subject}`, tone: 'bad' });
+  }
+  return out;
+}
+
+const live: Impl = {
+  get lists() {
+    return tabsOf(get().mail);
+  },
+  async list(id) {
+    return entriesOf(get().mail, id);
+  },
+  async poll() {
+    await look();
+    return sort();
+  },
+};
+
+/** forget how everything was sorted (another model, a better prompt): it is all sorted again over the next cycles */
+export function resort(s: MailState): MailState {
+  return { ...s, items: s.items.map(({ cls: _c, why: _w, by: _b, ...m }) => m) };
+}
+
+export const mail: Plugin = {
+  id: ID,
+  name: 'Emails',
+  live: isTauri ? live : undefined,
+  mock,
+  pollMs: { active: 2 * 60_000, idle: 5 * 60_000 },
+};

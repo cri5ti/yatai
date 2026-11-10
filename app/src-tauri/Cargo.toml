@@ -23,6 +23,7 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 tauri-plugin-notification = "2"
+tokio = { version = "1", features = ["time"] }
 
 [profile.release]
 codegen-units = 1
@@ -32,4 +33,4 @@ strip = true
 
 # the visible window frame (DWM), for snapping it flush to the screen's edges
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }

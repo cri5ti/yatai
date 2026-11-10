@@ -189,6 +189,7 @@ async function runPlugin(p: Plugin) {
   const refs = trackedRefs(s).get(p.id) ?? [];
   const drawer = s.drawer?.kind === p.id ? s.drawer : null;
   try {
+    if (impl.poll) for (const n of await impl.poll()) sink.toast(n.text, n.tone);
     if (impl.fetch && refs.length) applySnapshots(await impl.fetch(refs));
     if (impl.agenda) {
       // today's, and the days of meetings brought in ahead (to prepare), so a move there is noticed too
@@ -231,6 +232,7 @@ const counted = (p: Plugin, impl: Impl): Impl =>
         fetch: impl.fetch && ((refs, o) => (countRequest(p.id), impl.fetch!(refs, o))),
         list: impl.list && ((id) => (countRequest(p.id), impl.list!(id))),
         agenda: impl.agenda && ((d) => (countRequest(p.id), impl.agenda!(d))),
+        poll: impl.poll && (() => (countRequest(p.id), impl.poll!())),
       };
 
 /** look at these refs right now, whether or not their items are in Next (the item menu's Refresh) */

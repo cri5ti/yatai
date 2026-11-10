@@ -3,11 +3,12 @@ import type { State } from '../store';
 import { ai } from './ai';
 import { devops } from './devops';
 import { github } from './github';
+import { mail } from './mail';
 import { outlook } from './outlook';
 import type { Impl, Plugin } from './types';
 
 /** every source yatai knows. Adding one: a file in plugins/, one line here. */
-export const PLUGINS: Plugin[] = [github, outlook, devops, ai];
+export const PLUGINS: Plugin[] = [github, outlook, devops, mail, ai];
 export const pluginById = (id: string) => PLUGINS.find((p) => p.id === id);
 
 /**

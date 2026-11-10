@@ -74,6 +74,7 @@ function useOsWindow() {
 /* ---------- the yatai window ---------- */
 function Win() {
   const s = useS();
+  const urgentMail = s.mail.items.filter((m) => m.unread && m.cls === 'urgent').length;
   const layout = effLayout(s);
   useOsWindow();
   const key = isTauri && (layout === 'dock' || layout === 'float' || layout === 'max') ? layout : null;
@@ -180,6 +181,10 @@ function Win() {
             </button>
             <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — pipelines and work items" onClick={() => openDrawer('devops')}>
               <span aria-hidden>◈</span> DevOps
+            </button>
+            <button className={s.drawer?.kind === 'mail' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'mail'} title="Emails — sorted by a local model" onClick={() => openDrawer('mail')}>
+              <span aria-hidden>✉</span> Emails
+              {urgentMail > 0 && <b className="ucount" title={`${urgentMail} urgent`}>{urgentMail}</b>}
             </button>
           </div>
           <span className="grow" />

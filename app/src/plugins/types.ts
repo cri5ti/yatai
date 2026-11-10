@@ -96,6 +96,12 @@ export interface Impl {
   lists?: ListDef[];
   list?(id: string): Promise<Entry[]>;
   agenda?(day: string): Promise<AgendaEvent[]>;
+  /** a source that pulls a stream of its own (new emails): called every cycle; what it returns is toasted */
+  poll?(): Promise<Notice[]>;
+}
+export interface Notice {
+  text: string;
+  tone: Tone;
 }
 
 export interface Plugin {
