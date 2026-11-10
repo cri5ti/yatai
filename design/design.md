@@ -8,7 +8,7 @@ Start here for context. Related documents:
 |---|---|
 | [interaction.md](interaction.md) | the rules every view follows: keyboard model, items, starting, commands |
 | [ux.md](ux.md) | cross-cutting UX principles: highlights, links as references, drawers, AI proposals |
-| [plugins.md](plugins.md) | external sources (GitHub, Outlook, Azure DevOps, more later): the plugin system |
+| [plugins.md](plugins.md) | external sources (GitHub, Outlook calendar and mail, Azure DevOps, more later): the plugin system |
 | [../app/todo.md](../app/todo.md) | what is built, what is left, what needs checking by hand |
 
 ## 1. Goals and non-goals
@@ -74,7 +74,7 @@ AI is always a suggestion, never a silent change: proposals are shown in place a
 │   Next · Inbox · Organizer · Focus · drawers · popups                              │
 ├────────────────────────────────────────────────────────────────────────────────────┤
 │  Core (TS): store + undo, actions, plan model, command menu, AI service            │
-│  Plugins (TS): tracker (poll loop, change detection) · github · outlook · devops   │
+│  Plugins (TS): tracker (poll loop, change detection) · github · outlook · devops · mail  │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

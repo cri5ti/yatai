@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Emails (POC), on Windows with classic Outlook set up: the Emails button opens a drawer whose tabs fill in as the model sorts ("Sorting… N" goes down; no console window flashes); Settings → Emails shows the count and the time of the last read; a mail read in Outlook fades within ~2 min; a new urgent mail toasts and the button shows a red count; ⏎ / I bring one in as `Subject — ✉ Sender`; Ollama stopped → one toast, the mail is still listed under Sorting…; a model that is not pulled → toast says `ollama pull …`; changing the model in Settings sorts everything again; Task Manager shows Ollama at Low (idle) priority while it sorts
+- [ ] The drawer button reads "Calendar" (was Outlook); Settings lists Calendar
 - [ ] PR colours with a real token (the new GraphQL fields `viewerDidAuthor`, `viewerLatestReviewRequest`, `comments(last: 1) { viewerDidAuthor }` must be accepted, or every PR fetch fails): my PR awaiting review = muted purple; a comment on it I have not answered = deep blue count; after I reply = purple; approved = blue (mine) / purple (theirs); review requested of me = blue; merged green, closed grey (cancelled runs grey too); light and dark. Demo: "My PRs" / "Assigned to me" / "Mentions" show the same split
 - [ ] A PR waiting on someone else no longer pins an attention card in Next or toasts a warning
 - [ ] Priority filter on / off (1–5, 0) with the selection far down the list: Next and the Organizer scroll it back to the middle of the view
@@ -130,6 +132,11 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] a run that fails: toast + highlight; one that finishes: "…: done" toast; queued → building is quiet unless the item notifies
   - [ ] a run link of another organization says it can't be seen
 - [ ] Azure DevOps: work items and the drawer lists over REST (`_apis/wit/wiql`, `workitemsbatch`, recent builds); the drawer shows the mocked tabs only with the demo connectors
+- [ ] **Emails** (POC: classic Outlook through COM + an Ollama model)
+  - [ ] hook the buckets into tasks: Urgent / Today straight into Next or the Inbox? Dismiss → archive in Outlook (a write)?
+  - [ ] new Outlook (olk) has no COM: if classic Outlook goes away, Graph `Mail.Read` (needs the admin) or an Outlook add-in
+  - [ ] a better prompt / model (comparison in design/plugins.md: qwen3 4B instruct beats llama3.2); learn from corrections (moving a mail to another bucket)
+  - [ ] the 45 s sorting budget per cycle delays the drawer's other lists while it runs
 - [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback: hooks, logs, or APIs?
 - [ ] Polling while the window is hidden: it keeps running in the webview at a slower rate (3 min); decide if it needs to move to Rust
 - [ ] The tracker only looks at items in Next (and items bound with `smart`); an item in the Organizer shows the last state it had

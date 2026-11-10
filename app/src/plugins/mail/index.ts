@@ -43,7 +43,7 @@ async function look(): Promise<MailState> {
 async function sort(): Promise<Notice[]> {
   const out: Notice[] = [];
   const t0 = Date.now();
-  const model = get().settings.mailModel || 'llama3.2';
+  const model = get().settings.mailModel || 'qwen3:4b-instruct-2507-q4_K_M';
   for (;;) {
     const st = get().mail;
     const m = st.items.find((x) => !x.cls);

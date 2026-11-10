@@ -273,7 +273,7 @@ export function Settings() {
               <span className="set-lbl">
                 Local model<small>An Ollama model on this PC (ollama pull &lt;name&gt;). Changing it sorts every email again.</small>
               </span>
-              <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="llama3.2" />
+              <input value={cfg.mailModel} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ mailModel: e.target.value.trim() })} onKeyDown={enter} placeholder="qwen3:4b-instruct-2507-q4_K_M" />
             </div>
             <div className="set-row">
               <span className="set-lbl">
