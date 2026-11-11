@@ -547,7 +547,7 @@ button.prio:hover { filter: brightness(1.08); }
 /* Azure DevOps pipeline runs: queued / building (spinning) / failed / done / cancelled */
 .prsi.bs-queued { color: var(--gh-draft); } .prsi.bs-building { color: var(--gh-review); } .prsi.bs-failed { color: var(--gh-failing); }
 .prsi.bs-done { color: var(--gh-ready); } .prsi.bs-cancelled { color: var(--gh-closed); }
-/* Claude Code sessions: working (spinning) / needs you / finished / ended */
+/* Claude Code and Copilot sessions: working (spinning) / needs you / finished / ended */
 .prsi.cs-working { color: var(--gh-review); } .prsi.cs-waiting { color: var(--gh-feedback); } .prsi.cs-idle { color: var(--gh-ready); } .prsi.cs-ended { color: var(--gh-closed); }
 .prsi.pr-building { color: var(--gh-review); }
 /* whose move (after the per-state colours, so it wins): mine = deep blue, waiting on others = muted purple */

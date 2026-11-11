@@ -125,6 +125,6 @@ Next, roughly in order: real Azure DevOps; Outlook via Microsoft Graph where a t
 ## 11. Open questions
 
 - Does background polling need to run while the window is hidden or closed (tray-resident), and should the loop move to Rust?
-- AI-session state: Claude Code is solved by reading its own per-session files (plugins.md, Claude sessions); Copilot CLI is still open (its session folder under `~/.copilot`, or hooks).
+- AI-session state: Claude Code is solved by reading its own per-session files (plugins.md, Claude sessions); Copilot is solved the same way, from its session folders (plugins.md, Copilot sessions).
 - Embedding source for history: local model or API.
 - Next: how much is auto-ordered and how much is pinned by the user?

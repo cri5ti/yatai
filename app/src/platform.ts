@@ -4,6 +4,7 @@
  */
 import type { Layout } from './store';
 import type { Session as ClaudeSession } from './plugins/claude/map';
+import type { Session as CopilotSession } from './plugins/copilot/map';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** macOS resizes frameless windows natively (and has no resize-drag API); elsewhere the edges are ours */
@@ -379,6 +380,8 @@ export const pluginGetSecretUrl = (plugin: string) => (requests.count(plugin), i
 export const mailFetch = (plugin: string, input: unknown) => (requests.count(plugin), invoke<string>('mail_fetch', { input: JSON.stringify(input) }));
 /** the Claude Code sessions running on this PC (src-tauri/src/claude.rs: read from ~/.claude/sessions, nothing else) */
 export const claudeSessions = async (): Promise<ClaudeSession[]> => JSON.parse(await invoke<string>('claude_sessions'));
+/** the GitHub Copilot sessions on this PC (src-tauri/src/copilot.rs: the kind of the last events in ~/.copilot/session-state, nothing else) */
+export const copilotSessions = async (): Promise<CopilotSession[]> => JSON.parse(await invoke<string>('copilot_sessions'));
 /** the local model server (Ollama) on loopback (src-tauri/src/llm.rs); an empty body is a GET */
 /** the Laya decision-model helper on loopback, started by Rust when needed (src-tauri/src/laya.rs) */
 export const layaPredict = (body: unknown) => invoke<{ status: number; body: string }>('laya_predict', { body: JSON.stringify(body) });

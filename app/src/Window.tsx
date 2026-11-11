@@ -189,6 +189,9 @@ function Win() {
             <button className={s.drawer?.kind === 'claude' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'claude'} title="Claude — follow Claude Code sessions" onClick={() => openDrawer('claude')}>
               <span aria-hidden>✦</span> Claude
             </button>
+            <button className={s.drawer?.kind === 'copilot' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'copilot'} title="Copilot — follow GitHub Copilot sessions" onClick={() => openDrawer('copilot')}>
+              <span aria-hidden>◐</span> Copilot
+            </button>
           </div>
           <span className="grow" />
           <DisplayButton />

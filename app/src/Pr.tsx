@@ -174,8 +174,8 @@ const CGLYPH: Record<ClaudeGlyph, JSX.Element> = {
   idle: <path d="M3.8 8.4l3 3 5.6-6.4" {...line} strokeWidth="2.2" />,
   ended: <path d="M4.6 8h6.8" {...line} strokeWidth="2.2" />,
 };
-export function ClaudeState({ status }: { status: ClaudeGlyph }) {
-  const label = `Claude: ${CLAUDE_LABELS[status]}`;
+export function ClaudeState({ status, who = 'Claude' }: { status: ClaudeGlyph; who?: string }) {
+  const label = `${who}: ${CLAUDE_LABELS[status]}`;
   return (
     <svg className={`prsi cs-${status}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={label}>
       <title>{label}</title>

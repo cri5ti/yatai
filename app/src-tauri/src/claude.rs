@@ -60,28 +60,11 @@ fn parse(text: &str) -> Option<(Session, u64)> {
 }
 
 /// is `pid` still the process that wrote the file? (`start`: its creation time as a Windows FILETIME; a reused pid has another one)
-#[cfg(windows)]
 fn alive(pid: u32, start: u64) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME};
-    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-    unsafe {
-        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if h.is_null() {
-            return false;
-        }
-        let mut code = 0u32;
-        let running = GetExitCodeProcess(h, &mut code) != 0 && code == 259; // STILL_ACTIVE
-        let z = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
-        let (mut created, mut a, mut b, mut c) = (z, z, z, z);
-        let same = start == 0 || (GetProcessTimes(h, &mut created, &mut a, &mut b, &mut c) != 0 && ((created.dwHighDateTime as u64) << 32 | created.dwLowDateTime as u64).abs_diff(start) < 20_000_000);
-        CloseHandle(h);
-        running && same
+    match crate::proc::started(pid) {
+        None => false,
+        Some(c) => start == 0 || c == 0 || c.abs_diff(start) < 20_000_000,
     }
-}
-
-#[cfg(not(windows))]
-fn alive(pid: u32, _start: u64) -> bool {
-    std::process::Command::new("kill").args(["-0", &pid.to_string()]).output().map(|o| o.status.success()).unwrap_or(true)
 }
 
 fn read(dir: &std::path::Path, check: &dyn Fn(u32, u64) -> bool) -> Vec<Session> {

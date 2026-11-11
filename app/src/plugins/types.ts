@@ -50,7 +50,7 @@ export interface Detail {
 }
 
 /** the left-hand mark of a drawer row */
-export type Lead = { glyph: string; count?: number; kind?: 'build' | 'claude'; turn?: Turn } | { text: string };
+export type Lead = { glyph: string; count?: number; kind?: 'build' | 'claude' | 'copilot'; turn?: Turn } | { text: string };
 
 /** one row in a drawer */
 export interface Entry {

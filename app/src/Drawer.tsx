@@ -50,7 +50,7 @@ function blocked(s: State, kind: string): { text: string; connect?: boolean } | 
 
 const rowOf = (en: PluginEntry, s: State): Row => ({
   id: en.ref,
-  lead: 'text' in en.lead ? <span className="dtime">{en.lead.text}</span> : en.lead.kind === 'build' ? <BuildState status={en.lead.glyph as never} /> : en.lead.kind === 'claude' ? <ClaudeState status={en.lead.glyph as ClaudeGlyph} /> : <PrState status={en.lead.glyph as never} comments={en.lead.count} turn={en.lead.turn} />,
+  lead: 'text' in en.lead ? <span className="dtime">{en.lead.text}</span> : en.lead.kind === 'build' ? <BuildState status={en.lead.glyph as never} /> : en.lead.kind === 'claude' || en.lead.kind === 'copilot' ? <ClaudeState status={en.lead.glyph as ClaudeGlyph} who={en.lead.kind === 'claude' ? 'Claude' : 'Copilot'} /> : <PrState status={en.lead.glyph as never} comments={en.lead.count} turn={en.lead.turn} />,
   title: en.snap ? (
     <>
       <b>{en.snap.name}</b> {en.title}
@@ -378,7 +378,7 @@ export function Drawer() {
         ) : (
           entries.length === 0 && (
             <div className="dempty">
-              {picked.length ? 'Nothing in the selected repositories.' : d.kind === 'claude' ? 'No Claude Code sessions are running (they show up here while a CLI or VS Code session is open).' : d.kind === 'mail' && !s.demo && !s.settings.mailFolders?.length ? 'No folders picked: choose them in Settings → Emails.' : 'Nothing here.'}{!picked.length &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
+              {picked.length ? 'Nothing in the selected repositories.' : d.kind === 'claude' ? 'No Claude Code sessions are running (they show up here while a CLI or VS Code session is open).' : d.kind === 'copilot' ? 'No Copilot sessions are open (CLI, VS Code or JetBrains); ones idle for days are left out.' : d.kind === 'mail' && !s.demo && !s.settings.mailFolders?.length ? 'No folders picked: choose them in Settings → Emails.' : 'Nothing here.'}{!picked.length &&d.kind === 'github' && s.accounts.github?.state === 'connected' && !s.demo && ' If you expected pull requests of an organisation, the token probably cannot see its repositories (repository access, the org’s approval, SSO).'}
             </div>
           )
         )}
@@ -427,7 +427,7 @@ export function Drawer() {
       </div>
       <div className="dfoot">
         <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
-        {d.kind !== 'claude' && <ReqCount r={s.reqs[d.kind]} />}
+        {d.kind !== 'claude' && d.kind !== 'copilot' && <ReqCount r={s.reqs[d.kind]} />}
       </div>
     </div>
   );

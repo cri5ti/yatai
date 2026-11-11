@@ -6,7 +6,9 @@ mod claude;
 mod laya;
 mod llm;
 mod mail;
+mod copilot;
 mod plugin;
+mod proc;
 
 mod updater;
 use std::sync::{
@@ -402,6 +404,7 @@ pub fn run() {
             entra::entra_sign_out,
             mail::mail_fetch,
             claude::claude_sessions,
+            copilot::copilot_sessions,
             llm::llm_local,
             laya::laya_predict,
             updater::update_status,
