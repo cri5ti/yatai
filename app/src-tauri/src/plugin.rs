@@ -71,6 +71,9 @@ pub struct HttpReq {
     auth: bool,
     /// how: "bearer" (default) or "basic" (an empty user name and the token as password: Azure DevOps personal access tokens)
     scheme: Option<String>,
+    /// instead of the plugin's own token: an access token of the Microsoft account for this resource ("graph", "devops"),
+    /// renewed when it is about to expire (entra.rs); only sent to that resource's hosts
+    entra: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -96,8 +99,19 @@ fn check_url(url: &str, bound: Option<&str>) -> Result<Url, String> {
 
 #[tauri::command]
 pub async fn plugin_http(req: HttpReq) -> Result<HttpRes, String> {
-    let secret = if req.auth { Some(load(&req.plugin).ok_or("not connected")?) } else { None };
+    let mut secret = if req.auth && req.entra.is_none() { Some(load(&req.plugin).ok_or("not connected")?) } else { None };
     let url = check_url(&req.url, secret.as_ref().map(|(h, _)| h.as_str()))?;
+    if let Some(res) = &req.entra {
+        if !url.host_str().is_some_and(|h| crate::entra::host_ok(res, h)) {
+            return Err(format!("the Microsoft account's {res} token is not for this host"));
+        }
+        match crate::entra::access_token(res).await {
+            Ok(t) => secret = Some((url.host_str().unwrap_or_default().to_string(), t)),
+            // the sign-in is gone or was withdrawn: the same as a rejected token (the page asks to sign in again)
+            Err((true, why)) => return Ok(HttpRes { status: 401, headers: HashMap::new(), body: why }),
+            Err((false, why)) => return Err(why),
+        }
+    }
     let method = reqwest::Method::from_bytes(req.method.as_deref().unwrap_or("GET").to_ascii_uppercase().as_bytes()).map_err(|_| "bad method")?;
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none()) // a redirect could point anywhere; the token stays with the host it was given for

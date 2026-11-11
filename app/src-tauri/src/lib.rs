@@ -1,6 +1,7 @@
 mod ai;
 mod backup;
 mod db;
+mod entra;
 mod claude;
 mod laya;
 mod llm;
@@ -395,6 +396,10 @@ pub fn run() {
             plugin::plugin_secret_set,
             plugin::plugin_http,
             plugin::plugin_get_secret_url,
+            entra::entra_status,
+            entra::entra_begin,
+            entra::entra_finish,
+            entra::entra_sign_out,
             mail::mail_fetch,
             claude::claude_sessions,
             llm::llm_local,

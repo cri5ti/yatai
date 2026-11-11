@@ -5568,12 +5568,15 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 name = "yatai"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
+ "getrandom 0.2.17",
  "keyring",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
