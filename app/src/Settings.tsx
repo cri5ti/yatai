@@ -10,13 +10,16 @@ import { GhIcon } from './Pr';
 import { Guide } from './guides';
 import { DisplayControls } from './display';
 import { MicrosoftSettings } from './MicrosoftSettings';
+import { AzSection, SourcesSettings } from './SourcesSettings';
+import { enabled, methodOf } from './plugins/config';
+import { wanted } from './plugins/entra';
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const mins = (v: string) => {
   const [h, m] = v.split(':').map(Number);
   return h * 60 + (m || 0);
 };
-const GLYPH: Record<string, string> = { microsoft: '⊞', update: '↻', db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
+const GLYPH: Record<string, string> = { sources: '☰', microsoft: '⊞', update: '↻', db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
@@ -228,9 +231,8 @@ export function Settings() {
   }, [s.settingsOpen, sec]);
   if (!s.settingsOpen) return null;
 
-  // which sources use the Microsoft account is decided at once (it signs in), not by Save: always the stored value
-  const cfg = { ...(d ?? s.settings), entraSources: s.settings.entraSources };
-  const accts = PLUGINS.filter((p) => p.auth);
+  const cfg = d ?? s.settings;
+  const accts = PLUGINS.filter((p) => p.auth && enabled(cfg, p.id)); // the pages of the sources that are switched on
   const patch = (p: Partial<typeof cfg>) => setD({ ...cfg, ...p });
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const dirty = !same(cfg, s.settings) || !!key.trim() || Object.values(tok).some((t) => t?.trim()) || (!!bk.draft && !same(bk.draft, bk.base));
@@ -240,6 +242,7 @@ export function Settings() {
     setBusy(true);
     try {
       if (!same(cfg, s.settings)) act.patchUi({ settings: cfg });
+      if (!same(cfg.sources, s.settings.sources)) act.sourcesChanged();
       const resort = cfg.mailSorter !== s.settings.mailSorter || (cfg.mailSorter === 'laya' ? cfg.mailLaya !== s.settings.mailLaya : cfg.mailModel !== s.settings.mailModel);
       if (resort) act.resortMail();
       else if (cfg.mailDays !== s.settings.mailDays || !same(cfg.mailFolders, s.settings.mailFolders)) act.refreshMail();
@@ -287,7 +290,7 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, { id: 'microsoft', name: 'Microsoft' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }, { id: 'update', name: 'Updates' }].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, { id: 'sources', name: 'Sources' }, ...(wanted(cfg).length ? [{ id: 'microsoft', name: 'Microsoft' }] : []), ...accts, ...(enabled(cfg, 'mail') ? [{ id: 'mail', name: 'Emails' }] : []), { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }, { id: 'update', name: 'Updates' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
@@ -308,6 +311,7 @@ export function Settings() {
             </div>
           </section>
         )}
+        {sec === 'sources' && <SourcesSettings cfg={cfg} patch={patch} />}
         {sec === 'microsoft' && <MicrosoftSettings cfg={cfg} patch={patch} enter={enter} />}
         {sec === 'update' && <Updates />}
         {sec === 'db' && <Database draft={bk.draft} onLoad={(c) => setBk((x) => (x.base ? x : { base: c, draft: c }))} onChange={(p) => setBk((x) => x.draft ? { ...x, draft: { ...x.draft, ...p } } : x)} />}
@@ -365,7 +369,7 @@ export function Settings() {
               <span className="set-hint">{!isTauri ? 'needs the desktop app' : s.mail.polled ? `${s.mail.items.length} emails · read ${new Date(s.mail.polled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'not read yet'}</span>
             </header>
             <p className="set-note">
-              Reads the unread mail in the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background) and sorts each email on this PC: Urgent, Today, Eventually or Dismiss.
+              {methodOf(cfg, 'mail') === 'app' ? 'Reads the unread mail of your mailbox through Microsoft Graph (read-only)' : 'Reads the unread mail in the Inbox of the classic Outlook on this PC (it has to be set up; it starts in the background)'} and sorts each email on this PC: Urgent, Today, Eventually or Dismiss.
               Nothing leaves the machine, and nothing is changed in Outlook.
             </p>
             <div className="set-row">
@@ -428,13 +432,15 @@ export function Settings() {
         )}
         {accts.filter((p) => p.id === sec).map((p) => {
           const acc = s.accounts[p.id];
+          const how = methodOf(cfg, p.id);
+          const own = how === 'token' || how === 'ics'; // a token / link of its own, kept in the keychain
           const state =
             !isTauri
               ? 'needs the desktop app'
               : acc?.state === 'connected'
                 ? `✓ connected${acc.as ? ` as ${acc.as}` : ''}${p.id === 'github' ? ` (${normHost(cfg.githubHost)})` : p.id === 'devops' && cfg.devopsOrg ? ` (${cfg.devopsOrg})` : ''}`
                 : acc?.state === 'expired'
-                  ? 'token rejected'
+                  ? (own ? 'token rejected' : 'sign-in rejected')
                   : 'not connected';
           return (
             <section className="set-sec" key={p.id}>
@@ -468,6 +474,10 @@ export function Settings() {
                   <input value={cfg.devopsOrg} spellCheck={false} disabled={!isTauri} onChange={(e) => patch({ devopsOrg: e.target.value })} placeholder="dev.azure.com/acme (or acme.visualstudio.com)" />
                 </div>
               )}
+              {how === 'app' && <p className="set-note">Signs in with the Microsoft account: see Settings → Microsoft{acc?.state === 'connected' ? '.' : ' (sign in there first).'}</p>}
+              {how === 'az' && <AzSection cfg={cfg} connected={acc?.state === 'connected'} />}
+              {own && (
+                <>
               <div className="set-row">
                 <span className="set-lbl">
                   {p.auth!.field.label}
@@ -492,6 +502,8 @@ export function Settings() {
                 </span>
               </div>
               <Guide id={p.id} cfg={cfg} connected={acc?.state === 'connected'} />
+                </>
+              )}
             </section>
           );
         })}

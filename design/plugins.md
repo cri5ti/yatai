@@ -302,13 +302,20 @@ Live versions: the published ICS feed (no sign-in, slow), or Microsoft Graph `GE
 
 ### 8.3.1 The Microsoft account (Entra ID), shared by Calendar, Emails and Azure DevOps
 
-One sign-in, several sources. The user registers yatai once as an Entra *public client* (redirect `http://localhost`, delegated `User.Read`, `Calendars.Read`, `Mail.Read`, `offline_access`, Azure DevOps `user_impersonation`) and pastes its client id in Settings → Microsoft, where a tick box per source (Calendar · Emails · Azure DevOps) switches that source onto the account. Ticking one that needs a permission not consented yet opens the browser once (authorization code + PKCE, loopback redirect: device code is often blocked by conditional access).
+One sign-in, several sources. The user registers yatai once as an Entra *public client* (redirect `http://localhost`, delegated `User.Read`, `Calendars.Read`, `Mail.Read`, `offline_access`, Azure DevOps `user_impersonation`) and pastes its client id in Settings → Microsoft. A source uses the account when Settings → Sources sets it to *Microsoft app registration* (§8.3.2); the page's *Sign in* button then opens the browser once, for the permissions not consented yet (authorization code + PKCE, loopback redirect: device code is often blocked by conditional access).
 
 - **Tokens stay in Rust** (`src-tauri/src/entra.rs`). The refresh token is in the OS keychain (split in pieces: a Windows credential is small); an access token per resource (`graph`, `devops`) is minted from it and renewed five minutes before it expires. The refresh token rotates and is saved again. The page only asks `plugin_http` for a request `entra: 'graph' | 'devops'`; Rust adds the bearer and refuses any host that is not that resource's (`graph.microsoft.com`; `dev.azure.com`, `*.visualstudio.com`).
 - A grant that no longer works (expired, revoked, conditional access wants a new sign-in) answers like a rejected token (401 → `AuthError` → the account shows *expired*).
 - GitHub is not part of this: Entra does not issue GitHub tokens (a PAT or the `gh` token, as before).
 - Emails reads through Graph (`plugins/mail/graph.ts`, same input and output as `mail.ps1`) when ticked, else through the classic Outlook's COM, which new Outlook does not have.
-- The old token / ICS fields stay as the fallback for Azure DevOps and Calendar when the account is not ticked for them.
+
+### 8.3.2 Sources: on or off, and how each one signs in
+
+Settings → Sources lists every source with a switch and, where there is a choice, a method: Calendar (ICS link · Microsoft app registration), Emails (classic Outlook COM · Microsoft app registration), Azure DevOps (personal access token · Azure CLI · Microsoft app registration), GitHub (token); Claude and Copilot only have the switch. `plugins/config.ts` holds the catalogue (`enabled`, `methodOf`). A source with no entry is on with its first method, so existing setups are unchanged.
+
+- A source that is off has no implementation (`implFor` returns none): it is not polled, has no footer button, no Settings page, and its drawer says it is switched off. The pages shown in Settings are those of the sources that are on; *Microsoft* only appears while some source uses the app registration.
+- A source uses exactly one method; they never mix (a missing sign-in is an error to fix, not a silent fall back to another route).
+- **Azure CLI** (`src-tauri/src/azcli.rs`): Rust runs `az account get-access-token --resource <Azure DevOps>`, keeps the token in memory until five minutes before it expires and adds it to requests (`plugin_http` with `az: 'devops'`, only to dev.azure.com and *.visualstudio.com). Azure DevOps only: the CLI's client is not pre-authorised for the Graph mail and calendar scopes. No app registration, nothing stored by yatai.
 
 ### 8.4 Azure DevOps (pipeline runs live; work items mocked)
 

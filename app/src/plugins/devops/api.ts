@@ -3,6 +3,8 @@ import { get } from '../../store';
 import { pluginHttp, pluginSecretSet, pluginSecretStatus } from '../../platform';
 import { AuthError } from '../types';
 import { entraHttp, entraOn, entraStatus } from '../entra';
+import { azHttp } from '../azcli';
+import { methodOf } from '../config';
 import type { Entry, ListDef, Snapshot } from '../types';
 import { BUILD_LISTS, WIQL, WI_FIELDS, byNewest, entryOf, toSnapshot, wiEntry, wiSnapshot } from './map';
 import type { AdoWorkItem } from './map';
@@ -35,8 +37,9 @@ async function call<T>(url: string, body?: unknown): Promise<T> {
     headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   };
-  // the Microsoft account when it is signed in for Azure DevOps, else the personal access token
-  const r = entraOn('devops') ? await entraHttp(ID, 'devops', req) : await pluginHttp(ID, { ...req, auth: true, scheme: 'basic' });
+  // how Settings → Sources says to sign in: the Azure CLI's sign-in, the Microsoft app registration, or a personal access token
+  const how = methodOf(get().settings, 'devops');
+  const r = how === 'az' ? await azHttp(ID, req) : how === 'app' ? await entraHttp(ID, 'devops', req) : await pluginHttp(ID, { ...req, auth: true, scheme: 'basic' });
   // a rejected token is a 401, or a 203 / 302 to the sign-in page
   if (r.status === 401 || r.status === 203 || (r.status >= 300 && r.status < 400)) throw new AuthError('Azure DevOps rejected the token');
   if (r.status === 404) throw Object.assign(new Error('not found'), { gone: true });
@@ -75,8 +78,9 @@ export async function connect(token: string): Promise<string> {
 }
 export const disconnect = async () => void (await pluginSecretSet(ID, orgOf(get().settings.devopsOrg)?.host ?? 'dev.azure.com', ''));
 export async function configured() {
-  await entraStatus();
-  if (entraOn('devops')) return true;
+  const how = methodOf(get().settings, 'devops');
+  if (how === 'az') return true; // `az` is asked when a request is made; who() says whether it is signed in
+  if (how === 'app') return (await entraStatus(), entraOn('devops'));
   const st = await pluginSecretStatus(ID);
   return st.configured && st.host === orgOf(get().settings.devopsOrg)?.host;
 }

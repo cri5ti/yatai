@@ -9,6 +9,7 @@ import type { ClaudeGlyph } from './plugins/claude/map';
 import { cx } from './kbd';
 import { isTauri } from './platform';
 import { pluginById, implFor } from './plugins/registry';
+import { enabled } from './plugins/config';
 import { clashes, range } from './plugins/outlook/days';
 import { Schedule } from './Schedule';
 import type { Entry as PluginEntry, ListDef } from './plugins/types';
@@ -41,6 +42,7 @@ function tabsOf(s: State, kind: string): ListDef[] {
 function blocked(s: State, kind: string): { text: string; connect?: boolean } | null {
   const p = pluginById(kind);
   if (!p || implFor(p, s)) return null;
+  if (!enabled(s.settings, kind)) return { text: `${p.name} is switched off: turn it on in Settings → Sources.` };
   if (p.live && !isTauri) return { text: `${p.name} needs the desktop app.` };
   if (p.live && p.auth) {
     const st = s.accounts[kind]?.state;

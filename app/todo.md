@@ -130,13 +130,17 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] revoke the token on GitHub: one toast, polling stops, drawer says "rejected the token"
   - [ ] Remove in Settings clears the keychain entry (Keychain Access → `yatai` / `plugin:github`)
 - [ ] GitHub: device flow once a GitHub App client_id exists; issues (links + state); review actions are out of scope
-- [ ] **Microsoft account** (Settings → Microsoft; Entra sign-in shared by Calendar, Emails and Azure DevOps): check by hand
-  - [ ] register the app (guide in Settings), paste the client id (+ tenant), tick Calendar: the browser opens, you sign in, "Signed in" page, Settings says "✓ signed in as …" and the Calendar drawer shows today's meetings (compare with Outlook; a move shows within a poll, 3 min)
+- [ ] **Sources** (Settings → Sources): switches and methods
+  - [ ] every source has a switch; off: its footer button and Settings page go, it stops polling, its drawer (by shortcut) says it is switched off; on again: all returns
+  - [ ] Calendar / Emails / DevOps list their methods; change one and Save: the account is checked again (header: connected / rejected); the Microsoft page exists only while some source is set to Microsoft app registration
+  - [ ] **Azure CLI** (DevOps): `az login`, then Settings → Azure DevOps → Check says "✓ signed in"; a pasted run link is tracked with no PAT; `az logout` → within a poll the account says sign-in rejected ("Run `az login` again"); without `az`: "not installed or not on the PATH". Does `az` on this machine satisfy the tenant's conditional access (MFA, device compliance)? Does `cmd /C az` flash a console window?
+- [ ] **Microsoft account** (parked until the Entra registration is approved; Settings → Microsoft, shared by the sources set to Microsoft app registration): check by hand
+  - [ ] Settings → Sources: Calendar → Microsoft app registration; register the app (guide in Settings), paste the client id (+ tenant), Sign in: the browser opens, you sign in, "Signed in" page, Settings says "✓ signed in as …" and the Calendar drawer shows today's meetings (compare with Outlook; a move shows within a poll, 3 min)
   - [ ] **find out what the tenant says**: consent screen, or "needs admin approval" (AADSTS65001 / 90094), or app registrations are not allowed. If an admin must approve, ask for `Calendars.Read`, `Mail.Read`, `User.Read`
-  - [ ] tick Emails (a second consent only if the permission is new): Settings → Emails lists your folders through Graph (no classic Outlook running); tick Inbox → unread mail appears in the drawer and is sorted. Filter / order errors ("InefficientFilter") would show as "Outlook: …"
-  - [ ] tick Azure DevOps: with a DevOps organization set, a pasted run link is tracked without a PAT
-  - [ ] untick one: that source falls back to the PAT / ICS link / classic Outlook; Sign out removes it from the keychain (`yatai` / `entra`, `entra.rt0…`)
-  - [ ] leave the app running for over an hour (the access token expires after ~60–90 min): the next poll still works, silently. After a long time off (refresh token ~90 days, or a conditional-access policy) the source says it needs a new sign-in: untick and tick it again. **Missing: an explicit "sign in again" button** (today: untick / tick)
+  - [ ] Emails → Microsoft app registration, Sign in for the new permissions: Settings → Emails lists your folders through Graph (no classic Outlook running); tick Inbox → unread mail appears in the drawer and is sorted. Filter / order errors ("InefficientFilter") would show as "Outlook: …"
+  - [ ] Azure DevOps → Microsoft app registration: with a DevOps organization set, a pasted run link is tracked without a PAT
+  - [ ] set a source back to its other method: it uses the PAT / ICS link / classic Outlook again; Sign out removes the sign-in from the keychain (`yatai` / `entra`, `entra.rt0…`)
+  - [ ] leave the app running for over an hour (the access token expires after ~60–90 min): the next poll still works, silently. After a long time off (refresh token ~90 days, or a conditional-access policy) the source says it needs a new sign-in: sign in again in Settings → Microsoft. **Missing: a "sign in again" button** (the Sign in button is disabled while everything is granted)
   - [ ] closing the browser tab before signing in: the settings spinner times out after 3 minutes
 - [ ] **Outlook** (published ICS feed; Graph needs an admin to approve `Calendars.Read` in the work tenant, so it is parked)
   - [ ] Settings → Accounts → Calendar link: paste the ICS link (Outlook on the web → Settings → Calendar → Shared calendars → Publish a calendar) → "Connected as <calendar> · N meetings today"

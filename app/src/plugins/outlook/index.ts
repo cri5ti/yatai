@@ -1,4 +1,4 @@
-import { today } from '../../store';
+import { get, today } from '../../store';
 import { pluginGetSecretUrl, pluginSecretSet, pluginSecretStatus } from '../../platform';
 import { isTauri } from '../../platform';
 import { AuthError } from '../types';
@@ -8,6 +8,7 @@ import { meetingsOn, parseIcs } from './ics';
 import type { Calendar } from './ics';
 import { mock } from './mock';
 import { entraOn, entraStatus, whoAmI } from '../entra';
+import { methodOf } from '../config';
 import { addDays } from './days';
 import { fetchRange, toAgenda } from './graph';
 import type { GraphEvent } from './graph';
@@ -31,7 +32,8 @@ async function fetchCalendar() {
   return parseIcs(r.body);
 }
 
-const viaGraph = () => entraOn('calendar');
+/** Settings → Sources decides: the Microsoft app registration (Graph), or the published feed. Never a mix. */
+const viaGraph = () => methodOf(get().settings, 'outlook') === 'app';
 
 /** Graph events for a window of days, at most once every 30 s per window (the agenda and a drawer tab ask in the same cycle) */
 const windows = new Map<string, { at: number; events: GraphEvent[] }>();
@@ -88,7 +90,7 @@ export const outlook: Plugin = {
       placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics',
       help: 'Your published calendar’s ICS link. Outlook refreshes a published calendar slowly (minutes to hours).',
     },
-    configured: async () => (await entraStatus(), viaGraph() || (await pluginSecretStatus(ID)).configured),
+    configured: async () => (viaGraph() ? (await entraStatus(), entraOn('calendar')) : (await pluginSecretStatus(ID)).configured),
     async who() {
       if (viaGraph()) {
         const evs = await graphDay(today());

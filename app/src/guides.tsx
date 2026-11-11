@@ -184,7 +184,23 @@ function microsoft() {
   );
 }
 
-const GUIDES: Record<string, (cfg: Settings) => ReactNode> = { github, devops, outlook, microsoft };
+/** Azure DevOps through the Azure CLI's sign-in */
+function azcli() {
+  return (
+    <>
+      <h5>Sign in with the Azure CLI</h5>
+      <p>
+        Install the Azure CLI (<Link href="https://learn.microsoft.com/cli/azure/install-azure-cli">install guide</Link>), then sign in once, as yourself:
+      </p>
+      <Cmd>az login</Cmd>
+      <p>
+        yatai asks the CLI for an Azure DevOps token whenever it needs one; the CLI keeps you signed in and renews it, and yatai stores nothing. If your tenant asks for a new sign-in now and then, run the command again.
+      </p>
+    </>
+  );
+}
+
+const GUIDES: Record<string, (cfg: Settings) => ReactNode> = { github, devops, outlook, microsoft, azcli };
 
 /** "How to get it", open until the account is connected */
 export function Guide({ id, cfg, connected }: { id: string; cfg: Settings; connected: boolean }) {

@@ -9,7 +9,7 @@ import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mo
 import { implFor, pluginById } from './plugins/registry';
 import { placedAt } from './popupguard';
 import { connectAccount, disconnectAccount, refreshAccounts, refreshNow, refreshRefs } from './plugins/tracker';
-import { SOURCES, setSource, signOut } from './plugins/entra';
+import { grant, signOut } from './plugins/entra';
 import type { Source } from './plugins/entra';
 import { resort } from './plugins/mail';
 import type { Snapshot } from './plugins/types';
@@ -1348,21 +1348,21 @@ export async function disconnectPlugin(id: string) {
     toast(`Keychain: ${String(e)}`, 'bad');
   }
 }
-/** Settings → Microsoft: use the Microsoft account for a source (signs in on the first one, in the browser), or stop using it for that one */
-export async function microsoftSource(src: Source, on: boolean, client: string, tenant: string): Promise<boolean> {
-  const name = SOURCES.find((x) => x.id === src)?.label ?? src;
+/** Settings → Microsoft: sign in (the browser opens) for the sources set to use the Microsoft app registration; `sources` is what Settings has now */
+export async function microsoftSignIn(client: string, tenant: string, sources: Source[]): Promise<boolean> {
   try {
-    await setSource(src, on, client, tenant);
-    toast(on ? `${name}: using your Microsoft account` : `${name}: no longer using the Microsoft account`, on ? 'good' : 'info');
+    await grant(client, tenant, sources);
+    toast('Signed in to Microsoft', 'good');
   } catch (e) {
-    toast(`${name}: ${e instanceof Error ? e.message : String(e)}`, 'bad');
+    toast(`Microsoft: ${e instanceof Error ? e.message : String(e)}`, 'bad');
     return false;
   }
-  await refreshAccounts();
-  const plugin = SOURCES.find((x) => x.id === src)!.plugin;
-  if (plugin === 'mail') refreshMail();
-  else void refreshNow(plugin);
+  sourcesChanged();
   return true;
+}
+/** Settings → Sources was saved (a source switched on or off, another way to sign in): look at the accounts again and fetch */
+export function sourcesChanged() {
+  void refreshAccounts().then(() => void refreshNow());
 }
 export async function microsoftSignOut() {
   try {

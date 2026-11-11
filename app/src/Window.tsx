@@ -13,6 +13,7 @@ import { AiPop, ProposalBar } from './AiPop';
 import { capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { Drawer } from './Drawer';
 import { DisplayButton } from './display';
+import { enabled } from './plugins/config';
 import { GhIcon } from './Pr';
 import { Settings } from './Settings';
 import { MdEditor } from './MdEditorLazy';
@@ -174,25 +175,37 @@ function Win() {
       {!pill && (
         <div className="uibar" role="toolbar" aria-label="Sources and display">
           <div className="ugrp drawers" role="group" aria-label="Sources">
-            <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Calendar — bring meetings in" onClick={() => openDrawer('outlook')}>
-              <span aria-hidden>📅</span> Calendar
-            </button>
-            <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
-              <GhIcon /> GitHub
-            </button>
-            <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — pipelines and work items" onClick={() => openDrawer('devops')}>
-              <span aria-hidden>◈</span> DevOps
-            </button>
-            <button className={s.drawer?.kind === 'mail' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'mail'} title="Emails — sorted by a local model" onClick={() => openDrawer('mail')}>
-              <span aria-hidden>✉</span> Emails
-              {urgentMail > 0 && <b className="ucount" title={`${urgentMail} urgent`}>{urgentMail}</b>}
-            </button>
-            <button className={s.drawer?.kind === 'claude' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'claude'} title="Claude — follow Claude Code sessions" onClick={() => openDrawer('claude')}>
-              <span aria-hidden>✦</span> Claude
-            </button>
-            <button className={s.drawer?.kind === 'copilot' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'copilot'} title="Copilot — follow GitHub Copilot sessions" onClick={() => openDrawer('copilot')}>
-              <span aria-hidden>◐</span> Copilot
-            </button>
+            {enabled(s.settings, 'outlook') && (
+              <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Calendar — bring meetings in" onClick={() => openDrawer('outlook')}>
+                <span aria-hidden>📅</span> Calendar
+              </button>
+            )}
+            {enabled(s.settings, 'github') && (
+              <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
+                <GhIcon /> GitHub
+              </button>
+            )}
+            {enabled(s.settings, 'devops') && (
+              <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — pipelines and work items" onClick={() => openDrawer('devops')}>
+                <span aria-hidden>◈</span> DevOps
+              </button>
+            )}
+            {enabled(s.settings, 'mail') && (
+              <button className={s.drawer?.kind === 'mail' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'mail'} title="Emails — sorted by a local model" onClick={() => openDrawer('mail')}>
+                <span aria-hidden>✉</span> Emails
+                {urgentMail > 0 && <b className="ucount" title={`${urgentMail} urgent`}>{urgentMail}</b>}
+              </button>
+            )}
+            {enabled(s.settings, 'claude') && (
+              <button className={s.drawer?.kind === 'claude' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'claude'} title="Claude — follow Claude Code sessions" onClick={() => openDrawer('claude')}>
+                <span aria-hidden>✦</span> Claude
+              </button>
+            )}
+            {enabled(s.settings, 'copilot') && (
+              <button className={s.drawer?.kind === 'copilot' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'copilot'} title="Copilot — follow GitHub Copilot sessions" onClick={() => openDrawer('copilot')}>
+                <span aria-hidden>◐</span> Copilot
+              </button>
+            )}
           </div>
           <span className="grow" />
           <DisplayButton />

@@ -7,6 +7,8 @@ import { get, set } from '../store';
 import { invoke, isTauri, openUrl, requests } from '../platform';
 import type { HttpRes } from '../platform';
 import { AuthError } from './types';
+import { enabled, methodOf } from './config';
+import type { Settings } from '../store';
 
 export type Source = 'calendar' | 'mail' | 'devops';
 export type Resource = 'graph' | 'devops';
@@ -35,10 +37,13 @@ export async function entraStatus(): Promise<EntraStatus> {
   return cached;
 }
 
-/** is the source switched on in Settings and covered by what the account has been consented for? (sync: reads the last status) */
+/** the sources that are on and set to sign in with the Microsoft app registration (Settings → Sources) */
+export const wanted = (settings: Pick<Settings, 'sources'>): Source[] => SOURCES.filter((s) => enabled(settings, s.plugin) && methodOf(settings, s.plugin) === 'app').map((s) => s.id);
+
+/** does the source use the Microsoft account, and is it covered by what the account has been consented for? (sync: reads the last status) */
 export function entraOn(src: Source): boolean {
   const s = sourceOf(src);
-  return get().settings.entraSources.includes(src) && !!cached.scopes[s.res]?.includes(s.scope);
+  return wanted(get().settings).includes(src) && !!cached.scopes[s.res]?.includes(s.scope);
 }
 
 /** what has to be asked from a resource for these sources (Graph also needs User.Read to say who is signed in) */
@@ -57,25 +62,25 @@ async function signIn(client: string, tenant: string, res: Resource, names: stri
 }
 
 /**
- * Switch a source on or off. Switching on signs in when the account was not yet consented for what it needs (one browser
- * round trip, nothing else); off only stops using it (the consent stays in Entra until the user removes it there).
+ * Sign in (the browser opens) for everything the sources set to "Microsoft app registration" need, asking only for what
+ * the account has not been consented for yet. `sources` is what Settings has now, saved or not.
  */
-export async function setSource(src: Source, on: boolean, client: string, tenant: string): Promise<void> {
-  const { settings } = get();
-  const next = on ? [...new Set([...settings.entraSources, src])] : settings.entraSources.filter((x) => x !== src);
-  if (on) {
-    await entraStatus();
-    const need = scopesFor(sourceOf(src).res, next as Source[]);
-    const have = cached.scopes[sourceOf(src).res] ?? [];
-    const sameAccount = cached.configured && cached.client === client.trim();
-    if (!sameAccount || need.some((n) => !have.includes(n))) await signIn(client, tenant, sourceOf(src).res, need);
+export async function grant(client: string, tenant: string, sources: Source[]): Promise<void> {
+  client = client.trim();
+  if (!client) throw new Error('fill in the application (client) ID first');
+  if (!sources.length) throw new Error('no source is set to use the Microsoft app registration');
+  await entraStatus();
+  for (const res of ['graph', 'devops'] as Resource[]) {
+    const need = scopesFor(res, sources);
+    if (!need.length) continue;
+    const have = cached.configured && cached.client === client ? cached.scopes[res] ?? [] : [];
+    if (need.some((n) => !have.includes(n))) await signIn(client, tenant, res, need);
   }
-  set((s) => ({ settings: { ...s.settings, entraClient: client.trim(), entraTenant: tenant.trim(), entraSources: next } }));
+  set((s) => ({ settings: { ...s.settings, entraClient: client, entraTenant: tenant.trim() } }));
 }
 
 export async function signOut(): Promise<void> {
   cached = await invoke<EntraStatus>('entra_sign_out');
-  set((s) => ({ settings: { ...s.settings, entraSources: [] } }));
 }
 
 /** a request to Graph / Azure DevOps as the signed-in user; a 401 (signed out, or Microsoft wants a new sign-in) is an AuthError */
