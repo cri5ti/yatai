@@ -2,6 +2,7 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Organizer: Delete on a row (with sub-items open) selects the next sibling, else the previous sibling, else the parent; the cursor no longer jumps to the top; ⇧Delete the same
 - [ ] Claude / Copilot drawer rows: bold folder name + one line (no wrapping), a ▾ at the right of each row; click it, or D / Space on the selected row → a small popup under the row with Session (full name, scrolls when long), Folder, Where, State, Branch, Id; text in it can be selected; Esc closes the popup (a second Esc closes the drawer); moving the selection or opening another row closes it; the last rows' popups stay readable (scroll the list); light and dark
 
 - Next: the faint "+N" pill on a row with sub-items outside Next (stronger when the selection is on or inside it); click opens the tick list, ticking brings an item in with everything under it, unticking takes it out; Esc / click away closes.

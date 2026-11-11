@@ -4,7 +4,7 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, openStepTree, foldStep, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
+  fileInboxTo, openAllTree, openStepTree, foldStep, pasteItems, subtree, subtreeIds, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { childrenOf, depthOf, fmtEst, prioShown, viewKeep, insideOf, laterLabel, plain, relTime } from './model';
@@ -241,8 +241,15 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
     else if (k === 'e') (stop(), openEstMenu(ids));
     else if (k === 'Delete' || k === 'Backspace') {
       stop();
+      // the cursor lands on the nearest sibling (next, else previous), then on the parent; never on a row that is about to go with the subtree
       const gone = new Set(bulk ? live : [cur.id]);
-      const next = rows.find((r, j) => j > i && !gone.has(r.n.id))?.n.id ?? [...rows].reverse().find((r) => !gone.has(r.n.id))?.n.id ?? null;
+      const dead = subtreeIds(s.nodes, [...gone]);
+      const sibs = rows.filter((r) => r.n.parentId === cur.parentId && !dead.has(r.n.id));
+      const si = sibs.findIndex((r) => r.n.id === cur.id);
+      const parent = cur.parentId && cur.parentId !== top && !dead.has(cur.parentId) && s.nodes.some((n) => n.id === cur.parentId) ? cur.parentId : null;
+      const next = bulk
+        ? rows.find((r, j) => j > i && !dead.has(r.n.id))?.n.id ?? [...rows].reverse().find((r) => !dead.has(r.n.id))?.n.id ?? null
+        : sibs[si + 1]?.n.id ?? sibs[si - 1]?.n.id ?? parent ?? rows.find((r, j) => j > i && !dead.has(r.n.id))?.n.id ?? null;
       removeNodes([...gone]);
       select(next);
     }
