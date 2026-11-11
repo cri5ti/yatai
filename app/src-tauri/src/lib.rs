@@ -1,6 +1,7 @@
 mod ai;
 mod backup;
 mod db;
+mod claude;
 mod laya;
 mod llm;
 mod mail;
@@ -315,9 +316,9 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| to_main(app, "yatai://show")))
         .plugin(tauri_plugin_notification::init())
-        .plugin(
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::Pending::default())
+        .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, sc, e| {
                     if e.state() != ShortcutState::Pressed {
@@ -349,8 +350,8 @@ pub fn run() {
                 }
             }
             app.manage(Taken(taken));
-            Ok(())
             updater::start(app.handle());
+            Ok(())
         })
         .on_window_event(|w, e| {
             // closing a window only hides it; yatai lives in the tray
@@ -395,13 +396,14 @@ pub fn run() {
             plugin::plugin_http,
             plugin::plugin_get_secret_url,
             mail::mail_fetch,
+            claude::claude_sessions,
             llm::llm_local,
             laya::laya_predict,
-        ])
-        .build(tauri::generate_context!())
             updater::update_status,
             updater::update_check,
             updater::update_install,
+        ])
+        .build(tauri::generate_context!())
         .expect("error while building yatai");
 
     app.run(|app, e| {

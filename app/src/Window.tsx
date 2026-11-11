@@ -186,6 +186,9 @@ function Win() {
               <span aria-hidden>✉</span> Emails
               {urgentMail > 0 && <b className="ucount" title={`${urgentMail} urgent`}>{urgentMail}</b>}
             </button>
+            <button className={s.drawer?.kind === 'claude' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'claude'} title="Claude — follow Claude Code sessions" onClick={() => openDrawer('claude')}>
+              <span aria-hidden>✦</span> Claude
+            </button>
           </div>
           <span className="grow" />
           <DisplayButton />

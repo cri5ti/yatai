@@ -3,6 +3,7 @@
  * The rest of the UI only talks to this module, so it runs in both.
  */
 import type { Layout } from './store';
+import type { Session as ClaudeSession } from './plugins/claude/map';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** macOS resizes frameless windows natively (and has no resize-drag API); elsewhere the edges are ours */
@@ -376,6 +377,8 @@ export const pluginGetSecretUrl = (plugin: string) => (requests.count(plugin), i
 /** the tray icon: 'normal', 'attention' (changes to look at) or 'meeting' (in one now) */
 /** the classic Outlook's Inbox through COM (src-tauri/src/mail.rs); input and output as in mail.ps1 */
 export const mailFetch = (plugin: string, input: unknown) => (requests.count(plugin), invoke<string>('mail_fetch', { input: JSON.stringify(input) }));
+/** the Claude Code sessions running on this PC (src-tauri/src/claude.rs: read from ~/.claude/sessions, nothing else) */
+export const claudeSessions = async (): Promise<ClaudeSession[]> => JSON.parse(await invoke<string>('claude_sessions'));
 /** the local model server (Ollama) on loopback (src-tauri/src/llm.rs); an empty body is a GET */
 /** the Laya decision-model helper on loopback, started by Rust when needed (src-tauri/src/laya.rs) */
 export const layaPredict = (body: unknown) => invoke<{ status: number; body: string }>('laya_predict', { body: JSON.stringify(body) });

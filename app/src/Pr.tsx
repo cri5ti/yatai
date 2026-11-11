@@ -6,6 +6,8 @@ import type { Snapshot, Turn } from './plugins/types';
 import { pluginOf } from './plugins/types';
 import { implFor, pluginById } from './plugins/registry';
 import { BUILD_LABELS } from './plugins/devops/map';
+import { CLAUDE_LABELS } from './plugins/claude/map';
+import type { ClaudeGlyph } from './plugins/claude/map';
 
 export const PR_STATUSES: { id: PrStatus; label: string }[] = [
   { id: 'draft', label: 'draft' },
@@ -156,6 +158,30 @@ export function BuildState({ status }: { status: BuildStatus }) {
       <circle cx="8" cy="8" r="8" fill="currentColor" />
       <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
         <g className={status === 'building' ? 'spin' : undefined}>{BGLYPH[status]}</g>
+      </g>
+    </svg>
+  );
+}
+/** a Claude Code session's state as a tiny icon: working (spins), needs you, finished, ended */
+const CGLYPH: Record<ClaudeGlyph, JSX.Element> = {
+  working: <path d="M8 2.2a5.8 5.8 0 1 0 5.8 5.8" {...line} strokeWidth="2.1" />,
+  waiting: (
+    <>
+      <path d="M8 3.6v5" {...line} strokeWidth="2.2" />
+      <circle cx="8" cy="11.9" r="1.2" fill="currentColor" />
+    </>
+  ),
+  idle: <path d="M3.8 8.4l3 3 5.6-6.4" {...line} strokeWidth="2.2" />,
+  ended: <path d="M4.6 8h6.8" {...line} strokeWidth="2.2" />,
+};
+export function ClaudeState({ status }: { status: ClaudeGlyph }) {
+  const label = `Claude: ${CLAUDE_LABELS[status]}`;
+  return (
+    <svg className={`prsi cs-${status}`} width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={label}>
+      <title>{label}</title>
+      <circle cx="8" cy="8" r="8" fill="currentColor" />
+      <g style={{ color: 'var(--surface)' }} transform="translate(8 8) scale(.66) translate(-8 -8)">
+        <g className={status === 'working' ? 'spin' : undefined}>{CGLYPH[status]}</g>
       </g>
     </svg>
   );
