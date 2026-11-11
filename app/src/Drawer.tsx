@@ -23,6 +23,7 @@ interface Row {
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
   repo?: string; // 'org/repo' of a pull request, for the filter
+  details?: [string, string][]; // the little popup behind the arrow
   clash?: boolean; // a double-booked meeting
   at?: { start: number; dur: number }; // a meeting's time (the schedule view plots it)
   /** where "now" is: a line inside this row (0–1 of the way through it), or just above / below it */
@@ -51,9 +52,10 @@ function blocked(s: State, kind: string): { text: string; connect?: boolean } | 
 const rowOf = (en: PluginEntry, s: State): Row => ({
   id: en.ref,
   lead: 'text' in en.lead ? <span className="dtime">{en.lead.text}</span> : en.lead.kind === 'build' ? <BuildState status={en.lead.glyph as never} /> : en.lead.kind === 'claude' || en.lead.kind === 'copilot' ? <ClaudeState status={en.lead.glyph as ClaudeGlyph} who={en.lead.kind === 'claude' ? 'Claude' : 'Copilot'} /> : <PrState status={en.lead.glyph as never} comments={en.lead.count} turn={en.lead.turn} />,
-  title: en.snap ? (
+  details: en.details,
+  title: en.snap || en.label ? (
     <>
-      <b>{en.snap.name}</b> {en.title}
+      <b>{en.label ?? en.snap!.name}</b> {en.title}
     </>
   ) : (
     en.title
@@ -171,6 +173,7 @@ export function Drawer() {
   const [mi, setMi] = useState(0); // highlighted row of the drop-down
   const [manual, setManual] = useState(false); // a refresh the user asked for is running: show placeholders
   const [listH, setListH] = useState(400); // the list's height: the schedule fits the working hours on 80% of it
+  const [more, setMore] = useState<string | null>(null); // the row whose details popup is open
   useEffect(() => {
     const el = list.current;
     if (!el) return;
@@ -184,6 +187,7 @@ export function Drawer() {
   }, [d?.kind, d?.tab]);
   useEffect(() => {
     list.current?.querySelector('.drow.is-sel, .sblock.is-sel')?.scrollIntoView({ block: 'nearest' });
+  useEffect(() => setMore(null), [d?.kind, d?.tab, d?.sel]);
   }, [d?.sel]);
   // the schedule opens at the start of the working day (today: a little before now, if that is later)
   const plotKey = d && d.kind === 'outlook' && (d.tab === 'today' || d.tab === 'tomorrow') && s.outlookView === 'day' ? d.tab : '';
@@ -256,7 +260,8 @@ export function Drawer() {
       return;
     }
     if ((k === 'f' || k === 'F' || k === '/') && canFilter) return stop(), openBar();
-    if (k === 'Escape') (stop(), act.closeDrawer());
+    if (k === 'Escape') (stop(), more ? setMore(null) : act.closeDrawer());
+    else if ((k === 'd' || k === 'D' || k === ' ') && cur?.details) (stop(), setMore(more === cur.id ? null : cur.id));
     else if (k === 'ArrowDown') (stop(), act.setDrawerSel(Math.min(entries.length - 1, sel + 1)));
     else if (k === 'ArrowUp') (stop(), act.setDrawerSel(Math.max(0, sel - 1)));
     else if ((k === 'ArrowRight' || k === 'ArrowLeft') && tabs.length > 1) {
@@ -399,12 +404,12 @@ export function Drawer() {
             className={cx('drow', i === sel && 'is-sel', en.have && 'have', en.dim && 'dim', en.clash && 'clash', en.now != null && `now-${typeof en.now === 'number' ? 'in' : en.now}`)}
             style={typeof en.now === 'number' ? ({ ['--now' as string]: `${Math.round(en.now * 100)}%` } as React.CSSProperties) : undefined}
             title={en.clash ? 'Double booked: overlaps another meeting' : undefined}
-            onClick={() => act.setDrawerSel(i)}
+            onClick={() => (act.setDrawerSel(i), more && more !== en.id && setMore(null))}
             onDoubleClick={() => !en.have && en.add('next')}
           >
             {en.lead}
             <div className="dmain">
-              <div className="dt">{en.title}</div>
+              <div className={cx('dt', en.details && 'one')}>{en.title}</div>
               {en.sub && <div className="ds">{en.sub}</div>}
             </div>
             {en.have ? (
@@ -424,9 +429,24 @@ export function Drawer() {
             {en.have && <span className="dgo" />}
           </div>
         ))}
+            {en.details && (
+              <button className={cx('dmore', more === en.id && 'on')} tabIndex={-1} aria-label="Details" aria-expanded={more === en.id} title="Details (D)" onClick={(e) => (e.stopPropagation(), act.setDrawerSel(i), setMore(more === en.id ? null : en.id))}>
+                ▾
+              </button>
+            )}
+            {en.details && more === en.id && (
+              <dl className="dpop" role="dialog" aria-label="Details" onClick={(e) => e.stopPropagation()}>
+                {en.details.map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
       </div>
       <div className="dfoot">
-        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
+        <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {cur?.details && (<><kbd>D</kbd> details · </>)}{canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
         {d.kind !== 'claude' && d.kind !== 'copilot' && <ReqCount r={s.reqs[d.kind]} />}
       </div>
     </div>

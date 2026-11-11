@@ -22,7 +22,7 @@ export const STALE_MS = 2 * 86_400_000;
 export const idOf = (ref: string) => ref.slice(PLUGIN.length + 1);
 const glyphOf = (s: Pick<Session, 'state'>): SessionGlyph => (s.state === 'working' || s.state === 'waiting' || s.state === 'idle' ? s.state : 'ended');
 const where = (c: string) => (c.includes('vscode') ? 'VS Code' : c.includes('cli') ? 'terminal' : c.includes('intellij') ? 'IntelliJ' : c || 'Copilot');
-const item = (s: Session): S.Item => ({ id: s.sessionId, name: s.name, cwd: s.cwd, where: where(s.client), glyph: glyphOf(s), at: s.stateAt });
+const item = (s: Session): S.Item => ({ id: s.sessionId, name: s.name, cwd: s.cwd, where: where(s.client), glyph: glyphOf(s), at: s.stateAt, branch: s.branch });
 
 export const snapshotOf = (s: Session): Snapshot => S.snapshotOf(BRAND, PLUGIN, item(s));
 export const endedSnapshot = (ref: string, prev?: Snapshot): Snapshot => S.endedSnapshot(BRAND, PLUGIN, ref, prev);

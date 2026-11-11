@@ -401,6 +401,13 @@ button.prio:hover { filter: brightness(1.08); }
 .drow:hover .dgo, .drow.is-sel .dgo { opacity: 1; }
 .drow.have { opacity: .6; } .drow.have .dgo { opacity: 0; }
 .dhave { color: var(--good); font-size: var(--fs-xs); flex: none; }
+/* a row's arrow, and the little popup it opens: a title on one line, the rest behind the arrow */
+.drow .dt.one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmore { flex: none; border: 0; background: transparent; color: var(--text-muted); font-size: var(--fs-sm); line-height: 1; padding: 4px 6px; border-radius: var(--r-sm); cursor: pointer; }
+.dmore:hover, .dmore.on { background: var(--hover); color: var(--text); } .dmore.on { transform: none; }
+.dpop { position: absolute; z-index: 5; right: 10px; top: 100%; margin: 2px 0 0; width: min(340px, calc(100% - 24px)); padding: var(--sp-4) var(--sp-5); background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md, 8px); box-shadow: 0 6px 20px rgba(0, 0, 0, .25); font-size: var(--fs-sm); user-select: text; cursor: auto; opacity: 1; }
+.dpop div { display: grid; grid-template-columns: 64px 1fr; gap: var(--sp-3); padding: 2px 0; }
+.dpop dt { color: var(--text-muted); } .dpop dd { margin: 0; overflow-wrap: anywhere; max-height: 9.5em; overflow-y: auto; white-space: pre-wrap; }
 .dtype { color: var(--text-muted); font-size: var(--fs-xs); }
 .dempty { padding: 24px; text-align: center; color: var(--text-muted); }
 .dfoot { flex: none; padding: 3px 12px; color: var(--text-muted); font-size: var(--fs-xs); border-top: var(--bw) solid var(--border); }

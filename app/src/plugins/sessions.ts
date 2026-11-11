@@ -16,9 +16,15 @@ export interface Item {
   glyph: SessionGlyph;
   at: number; // when it got into that state
   waitingFor?: string | null;
+  branch?: string;
 }
 
-const folder = (cwd: string) => cwd.split(/[\\/]/).filter(Boolean).slice(-2).join('/');
+/** the first line of a (possibly long, multi-line) text, on one line, at most `n` characters */
+export function oneLine(s: string, n: number) {
+  const t = (s.split(/\r?\n/).find((l) => l.trim()) ?? '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+}
+const leaf = (cwd: string) => cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? '';
 export function ago(ms: number, now: number) {
   const m = Math.max(0, Math.round((now - ms) / 60_000));
   return m < 1 ? 'just now' : m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h` : `${Math.floor(m / 1440)} d`;
@@ -27,7 +33,7 @@ export function ago(ms: number, now: number) {
 /** the state of a session: the glyph and chip. Each time it waits or finishes is a new alert (the key has its time), so a second one toasts again. */
 export function snapshotOf(brand: string, plugin: string, it: Item): Snapshot {
   const g = it.glyph;
-  const named = `${brand} ${it.name}`;
+  const named = `${brand} ${oneLine(it.name, 40)}`;
   const why = it.waitingFor && it.waitingFor !== 'input needed' ? it.waitingFor : '';
   const view: View = { glyph: g, label: SESSION_LABELS[g], tone: g === 'waiting' ? 'warn' : g === 'idle' ? 'good' : 'info', quiet: g === 'working' || g === 'ended' };
   const alert =
@@ -38,7 +44,7 @@ export function snapshotOf(brand: string, plugin: string, it: Item): Snapshot {
         : g === 'ended'
           ? ({ key: `${plugin}:ended`, tone: 'info', text: 'Session ended' } as const)
           : ({ key: `${plugin}:working`, tone: 'info', text: 'Working…' } as const);
-  return { ref: `${plugin}:${it.id}`, name: named, title: `${brand}: ${it.name}`, view, alerts: [alert], rev: `${g}|${it.at}|${it.waitingFor ?? ''}|${it.name}` };
+  return { ref: `${plugin}:${it.id}`, name: named, title: `${brand}: ${oneLine(it.name, 80)}`, view, alerts: [alert], rev: `${g}|${it.at}|${it.waitingFor ?? ''}|${it.name}` };
 }
 
 /** a tracked session that is not among the open ones any more (closed, or its window quit) */
@@ -59,10 +65,19 @@ export function entriesOf(brand: string, plugin: string, items: Item[], now: num
       const snap = snapshotOf(brand, plugin, i);
       return {
         ref: snap.ref,
-        title: i.name,
-        sub: [folder(i.cwd), i.where, `${SESSION_LABELS[i.glyph]} ${ago(i.at, now)}`].filter(Boolean).join(' · '),
+        label: leaf(i.cwd) || undefined,
+        title: oneLine(i.name, 90),
+        sub: [i.where, `${SESSION_LABELS[i.glyph]} ${ago(i.at, now)}`, i.branch].filter(Boolean).join(' · '),
+        details: [
+          ['Session', i.name.trim()],
+          ['Folder', i.cwd],
+          ['Where', i.where],
+          ['State', `${SESSION_LABELS[i.glyph]}${i.waitingFor && i.waitingFor !== 'input needed' ? `: ${i.waitingFor}` : ''} (${ago(i.at, now)})`],
+          ...(i.branch ? [['Branch', i.branch] as [string, string]] : []),
+          ['Id', i.id],
+        ].filter(([, v]) => v) as [string, string][],
         lead: { glyph: i.glyph, kind: plugin as 'claude' | 'copilot' },
-        text: `${brand}: ${i.name}`,
+        text: `${brand}: ${oneLine(i.name, 80)}`,
         snap,
         smart: 'ai',
         canInbox: false,

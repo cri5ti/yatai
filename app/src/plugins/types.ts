@@ -66,6 +66,10 @@ export interface Entry {
   meeting?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }; // a calendar entry: brought in as a meeting card on its day
   clash?: boolean; // a calendar entry that overlaps another one (double booked)
   canInbox: boolean;
+  /** the bold word before the title (default: the snapshot's name) */
+  label?: string;
+  /** more about it, for the little popup behind the row's arrow: [what, value] */
+  details?: [string, string][];
 }
 
 export interface ListDef {

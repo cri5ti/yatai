@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Claude / Copilot drawer rows: bold folder name + one line (no wrapping), a ▾ at the right of each row; click it, or D / Space on the selected row → a small popup under the row with Session (full name, scrolls when long), Folder, Where, State, Branch, Id; text in it can be selected; Esc closes the popup (a second Esc closes the drawer); moving the selection or opening another row closes it; the last rows' popups stay readable (scroll the list); light and dark
+
 - Next: the faint "+N" pill on a row with sub-items outside Next (stronger when the selection is on or inside it); click opens the tick list, ticking brings an item in with everything under it, unticking takes it out; Esc / click away closes.
 - [ ] Copilot button (bottom bar, ◐): the drawer lists the open Copilot sessions (VS Code, CLI, JetBrains) with the session's own title, folder, where, state and how long; a closed VS Code window or a finished CLI run is gone within ~10 s (or marked ended when it is an item); ⏎ adds one to Next; ask it something → Working…, then a toast `Copilot … finished`; a tool permission prompt (run a command) → amber `Needs you` + toast, answering it → working again; a plain question Copilot asks you in the chat: does it say `Needs you`? (not confirmed: if not, note what the log shows); sessions finished 2+ days ago while VS Code is open are not listed; demo connectors → two made-up sessions
 
