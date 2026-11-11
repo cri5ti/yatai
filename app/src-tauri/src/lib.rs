@@ -6,6 +6,7 @@ mod llm;
 mod mail;
 mod plugin;
 
+mod updater;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
@@ -279,8 +280,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let dev = MenuItem::with_id(app, "dev", "Developer panel", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit yatai", true, Some("CmdOrCtrl+Q"))?;
+    let update = updater::menu_item(app)?;
+    app.manage(updater::UpdateMenu(update.clone()));
     let sep = || PredefinedMenuItem::separator(app);
-    let menu = Menu::with_items(app, &[&show, &capture, &sep()?, &settings, &dev, &sep()?, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &capture, &sep()?, &settings, &dev, &update, &sep()?, &quit])?;
     TrayIconBuilder::with_id("yatai")
         .icon(tray_image("normal"))
         .icon_as_template(false)
@@ -293,6 +296,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
             "settings" => to_main(app, "yatai://settings"),
             "dev" => to_main(app, "yatai://dev"),
             "quit" => app.exit(0), // goes through ExitRequested, which lets the UI flush first
+            "update" => updater::tray_clicked(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, e| {
@@ -312,6 +316,8 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| to_main(app, "yatai://show")))
         .plugin(tauri_plugin_notification::init())
         .plugin(
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::Pending::default())
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, sc, e| {
                     if e.state() != ShortcutState::Pressed {
@@ -344,6 +350,7 @@ pub fn run() {
             }
             app.manage(Taken(taken));
             Ok(())
+            updater::start(app.handle());
         })
         .on_window_event(|w, e| {
             // closing a window only hides it; yatai lives in the tray
@@ -392,6 +399,9 @@ pub fn run() {
             laya::laya_predict,
         ])
         .build(tauri::generate_context!())
+            updater::update_status,
+            updater::update_check,
+            updater::update_install,
         .expect("error while building yatai");
 
     app.run(|app, e| {

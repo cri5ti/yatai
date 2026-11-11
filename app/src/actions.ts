@@ -16,12 +16,24 @@ import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
 import { PRESETS, remindLabel } from './remind';
 import { quietFlip } from './flip';
+import { flush } from './persist';
+import { invoke } from './platform';
 
 /* ---------- toasts ---------- */
 export function toast(text: string, tone: Toast['tone'] = 'info') {
   const id = uid();
   set((s) => ({ toasts: [...s.toasts, { id, text, tone }] }));
   setTimeout(() => dismissToast(id), 5000);
+}
+
+/** install the downloaded update: write what is pending first (the installer ends the app) */
+export async function installUpdate() {
+  try {
+    await flush();
+    await invoke('update_install');
+  } catch (e) {
+    toast(`Update failed: ${String(e)}`, 'bad');
+  }
 }
 export const dismissToast = (id: string) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 

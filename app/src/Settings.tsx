@@ -14,7 +14,7 @@ const mins = (v: string) => {
   const [h, m] = v.split(':').map(Number);
   return h * 60 + (m || 0);
 };
-const GLYPH: Record<string, string> = { db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
+const GLYPH: Record<string, string> = { update: '↻', db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
@@ -50,6 +50,55 @@ function FolderPicker({ list, picked, onChange }: { list: { path: string; depth:
       ))}
       <div className="set-fcount">{picked.length ? `${picked.length} picked` : 'none picked: nothing is read'}</div>
     </div>
+  );
+}
+
+interface UpdateStatus { current: string; ready: string | null; enabled: boolean }
+
+/** Settings → Updates: yatai checks GitHub Releases by itself (src-tauri/src/updater.rs); this shows where it is */
+function Updates() {
+  const [st, setSt] = useState<UpdateStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void invoke<UpdateStatus>('update_status').then(setSt, () => {}), []);
+  if (!isTauri) {
+    return (
+      <section className="set-sec">
+        <header><h4>Updates</h4><span className="set-hint">browser build</span></header>
+        <p className="set-note">Updates are part of the desktop app.</p>
+      </section>
+    );
+  }
+  const check = async () => {
+    setBusy(true);
+    try {
+      const x = await invoke<UpdateStatus>('update_check');
+      setSt(x);
+      if (!x.ready) act.toast('yatai is up to date', 'good');
+    } catch (e) {
+      act.toast(`Update check: ${String(e)}`, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="set-sec">
+      <header>
+        <h4>Updates</h4>
+        <span className="set-hint">{st ? `v${st.current}` : '…'}</span>
+      </header>
+      <div className="set-row">
+        <span className="set-lbl">
+          New versions<small>yatai looks on GitHub a few seconds after it starts, then every few hours, and downloads what it finds. You choose when to restart into it.</small>
+        </span>
+        <span className="set-opt">
+          {st?.ready ? (
+            <button className="btn sm" onClick={() => act.installUpdate()}>Restart to update to v{st.ready}</button>
+          ) : (
+            <button className="btn sm" disabled={busy || st?.enabled === false} onClick={check}>{busy ? 'Checking…' : st?.enabled === false ? 'Off in dev builds' : 'Check now'}</button>
+          )}
+        </span>
+      </div>
+    </section>
   );
 }
 
@@ -235,7 +284,7 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }, { id: 'update', name: 'Updates' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
@@ -256,6 +305,7 @@ export function Settings() {
             </div>
           </section>
         )}
+        {sec === 'update' && <Updates />}
         {sec === 'db' && <Database draft={bk.draft} onLoad={(c) => setBk((x) => (x.base ? x : { base: c, draft: c }))} onChange={(p) => setBk((x) => x.draft ? { ...x, draft: { ...x.draft, ...p } } : x)} />}
         {sec === 'ai' && <section className="set-sec">
           <header>

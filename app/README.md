@@ -9,6 +9,11 @@ bun run dev       # the same UI in a browser at :5174 (localStorage, AI via the 
 bun run bundle    # release build → src-tauri/target/release/bundle
 ```
 
+**Releases and auto-update.** `.github/workflows/app.yml` type-checks, builds and tests every PR; every push to `main` also publishes a signed NSIS installer + `latest.json` as a GitHub Release (version = `major.minor` from `tauri.conf.json` + the run number; bump the minor by hand for bigger releases). Installed builds read `releases/latest/download/latest.json` (endpoint and public key in `tauri.conf.json`), download updates in the background and ask for a restart. Needs the repo public and two Actions secrets: `TAURI_SIGNING_PRIVATE_KEY` (from `bunx tauri signer generate`; the matching public key is in `tauri.conf.json`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (empty). Dev builds never update.
+
+```sh
+```
+
 Emails (Windows, classic Outlook) sorts mail on this PC: with Ollama (`ollama pull qwen3:4b-instruct-2507-q4_K_M`), or with the Laya decision model, set up once with `powershell -ExecutionPolicy Bypass -File sidecar\laya\setup.ps1` (a Python 3.12 venv in `%LOCALAPPDATA%\yatai\laya`; the app starts the helper when needed). Settings → Emails picks one.
 
 The Rust toolchain is pinned in `src-tauri/rust-toolchain.toml` (Tauri 2.12 needs rustc ≥ 1.90).
@@ -42,4 +47,4 @@ Schema: `item` (the one tree: projects / tasks / actions), `inbox`, `meeting` (w
 
 ## Not built yet
 
-Real Azure DevOps and AI-session connectors, Outlook through Microsoft Graph (the app reads a published calendar link today): see `design/plugins.md` and `app/todo.md`. OS notifications, launch at login, signing and auto-update.
+Real Azure DevOps and AI-session connectors, Outlook through Microsoft Graph (the app reads a published calendar link today): see `design/plugins.md` and `app/todo.md`. OS notifications, launch at login, macOS / Linux release builds (CI builds the Windows installer only).

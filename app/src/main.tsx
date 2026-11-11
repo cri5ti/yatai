@@ -4,7 +4,7 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, openMdEdit, highlight, fireReminders, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { acceptAi, installUpdate, capture, openMdEdit, highlight, fireReminders, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
 import { isEditable, mod, tabKey } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
@@ -45,6 +45,9 @@ function App() {
       listen('yatai://hide', () => (set(() => ({ hidden: true })), void flush())),
       listen('yatai://settings', openSettings),
       listen('yatai://dev', toggleDev),
+      listen<string>('yatai://update-ready', (v) => toast(`yatai v${v} is downloaded: Settings → Updates, or the tray menu, to restart into it`, 'good')),
+      listen('yatai://update-install', () => void installUpdate()),
+      listen<string>('yatai://update-msg', (m) => toast(m, 'info')),
       listen<string>('yatai://captured', (text) => {
         if (!text.trim()) return;
         capture(text);

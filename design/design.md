@@ -118,7 +118,9 @@ poc/      the React UX prototype: frozen, the UX playground the app was built fr
 
 Built: the desktop app with all views, SQLite, tray, global hotkeys, popup windows, undo, the AI assistant (OpenAI-compatible), and the plugin system with GitHub / GitHub Enterprise (live, token), Outlook (live through the published calendar feed) and Azure DevOps / AI sessions (mocked).
 
-Next, roughly in order: real Azure DevOps; Outlook via Microsoft Graph where a tenant allows it (real-time); AI v2 (plan today, history and similarity, "can I help" handoff); AI-session monitoring; Teams messages; OS notifications while hidden; launch at login; signing and auto-update; Windows and Linux hardening (the app has mostly been run on macOS).
+Releases: every push to `main` that touches `app/` builds on GitHub Actions and publishes a signed Windows installer as a GitHub Release (version `<major>.<minor>.<run number>`). Installed copies check the latest release a few seconds after start and every few hours, download in the background, and offer "Restart to update" (toast, tray menu, Settings → Updates).
+
+Next, roughly in order: real Azure DevOps; Outlook via Microsoft Graph where a tenant allows it (real-time); AI v2 (plan today, history and similarity, "can I help" handoff); AI-session monitoring; Teams messages; OS notifications while hidden; launch at login; Windows and Linux hardening (the app has mostly been run on macOS).
 
 ## 11. Open questions
 
