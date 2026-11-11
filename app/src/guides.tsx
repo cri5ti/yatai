@@ -156,7 +156,35 @@ function outlook() {
   );
 }
 
-const GUIDES: Record<string, (cfg: Settings) => ReactNode> = { github, devops, outlook };
+/** the app registration behind the Microsoft sign-in (once, by whoever may create one in the tenant) */
+function microsoft() {
+  return (
+    <>
+      <h5>Register yatai once in Microsoft Entra</h5>
+      <ol>
+        <li>
+          Open <Link href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/isMSAApp~/false">New app registration</Link>: name <b>yatai</b>, accounts in this organizational directory only.
+        </li>
+        <li>
+          Redirect URI: platform <b>Mobile and desktop applications</b> (a public client), value <code>http://localhost</code>. No secret is needed.
+        </li>
+        <li>
+          API permissions → Add → Microsoft Graph → <b>Delegated</b>: <code>User.Read</code>, <code>Calendars.Read</code>, <code>Mail.Read</code>, <code>offline_access</code>. For Azure DevOps: Add → Azure DevOps → Delegated →{' '}
+          <code>user_impersonation</code>.
+        </li>
+        <li>
+          Copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> from the Overview page into the fields above.
+        </li>
+      </ol>
+      <p className="set-fine">
+        These permissions are read-only and need no admin, unless the organization restricts user consent: Microsoft then says so when you tick a box, and an administrator has to approve it once for the registration. Only what is ticked is used.
+        The sign-in itself stays in the OS keychain and is renewed in the background; a conditional-access policy can ask for a new sign-in now and then.
+      </p>
+    </>
+  );
+}
+
+const GUIDES: Record<string, (cfg: Settings) => ReactNode> = { github, devops, outlook, microsoft };
 
 /** "How to get it", open until the account is connected */
 export function Guide({ id, cfg, connected }: { id: string; cfg: Settings; connected: boolean }) {

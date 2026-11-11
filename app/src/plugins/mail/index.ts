@@ -5,12 +5,13 @@
  * only, none until some are picked; at most 200). Each mail is sorted once.
  */
 import { get, set } from '../../store';
-import { isTauri, mailFetch } from '../../platform';
+import { isTauri } from '../../platform';
 import type { Impl, ListState, Notice, Plugin } from '../types';
 import { classify, sorterOf } from './classify';
 import { BUCKETS, entriesOf, knownOf, merge, tabsOf } from './model';
 import type { Fetched, MailState } from './model';
 import { mock } from './mock';
+import { mailRead } from './source';
 
 const ID = 'mail';
 /** how long one cycle may spend sorting (the rest waits for the next one) */
@@ -42,7 +43,7 @@ async function look(): Promise<MailState> {
     save(next);
     return next;
   }
-  const raw = await mailFetch(ID, { days, limit: 200, known: knownOf(st), folders });
+  const raw = await mailRead({ days, limit: 200, known: knownOf(st), folders });
   const res = JSON.parse(raw) as { error?: string; me?: string; missing?: string[]; items?: Fetched[] };
   if (res.error) throw new Error(`Outlook: ${res.error}`);
   for (const f of res.items ?? []) if (f.body != null) bodies.set(f.id, f.body);

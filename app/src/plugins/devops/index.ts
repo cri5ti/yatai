@@ -14,7 +14,7 @@ export const devops: Plugin = {
   id: 'devops',
   name: 'DevOps',
   auth: {
-    field: { label: 'Personal access token', placeholder: 'Azure DevOps PAT', help: 'Build (Read) and Work Items (Read) scopes, for the organization above.' },
+    field: { label: 'Personal access token', placeholder: 'Azure DevOps PAT', help: 'Build (Read) and Work Items (Read) scopes, for the organization above. Not needed when the Microsoft account is used (Settings → Microsoft).' },
     configured, who: whoAmI, connect, disconnect,
   },
   match: (text) => buildLinks(text).map((l) => `devops:build/${l.key}`),

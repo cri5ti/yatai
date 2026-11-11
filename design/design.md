@@ -50,7 +50,7 @@ Metadata kept automatically: created, last modified, last run (last started), sc
 
 ## 4. Sources (smart items, meetings)
 
-External systems are not mirrored into yatai. **Plugins** (GitHub, Outlook, Azure DevOps, later Jira / Teams / AI sessions) recognise links, report the live state of what is in Next, list what is browsable in a drawer, and supply calendar agendas. Changes become highlights and toasts. Details, auth and security: [plugins.md](plugins.md).
+External systems are not mirrored into yatai. **Plugins** (GitHub, Outlook, Azure DevOps, later Jira / Teams / AI sessions) recognise links, report the live state of what is in Next, list what is browsable in a drawer, and supply calendar agendas. Changes become highlights and toasts. Outlook (calendar, mail) and Azure DevOps can share one Microsoft sign-in (Entra ID, tokens kept in Rust). Details, auth and security: [plugins.md](plugins.md).
 
 ## 5. AI
 

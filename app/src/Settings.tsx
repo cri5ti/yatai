@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { get, useS } from './store';
 import { act } from './act';
-import { aiKeyStatus, aiSetKey, invoke, isTauri, mailFetch } from './platform';
+import { aiKeyStatus, aiSetKey, invoke, isTauri } from './platform';
+import { mailRead } from './plugins/mail/source';
 import type { KeyStatus } from './platform';
 import { PLUGINS } from './plugins/registry';
 import { normHost } from './model';
 import { GhIcon } from './Pr';
 import { Guide } from './guides';
 import { DisplayControls } from './display';
+import { MicrosoftSettings } from './MicrosoftSettings';
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const mins = (v: string) => {
   const [h, m] = v.split(':').map(Number);
   return h * 60 + (m || 0);
 };
-const GLYPH: Record<string, string> = { update: '↻', db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
+const GLYPH: Record<string, string> = { microsoft: '⊞', update: '↻', db: '▤', ai: '✦', outlook: '▦', devops: '◇', mail: '✉', display: 'Aa' };
 const Ico = ({ id }: { id: string }) => <span className="set-ico">{id === 'github' ? <GhIcon /> : GLYPH[id] ?? '●'}</span>;
 
 interface BackupCfg { daily: boolean; dailyKeep: number; frequent: boolean; frequentEveryMin: number; frequentKeep: number }
@@ -213,7 +215,7 @@ export function Settings() {
   const [folders, setFolders] = useState<{ path: string; depth: number; unread: number }[] | string | null>(null);
   const loadFolders = () => {
     setFolders(null);
-    mailFetch('mail', { mode: 'folders' }).then(
+    mailRead({ mode: 'folders' }).then(
       (raw) => {
         const r = JSON.parse(raw) as { error?: string; folders?: { path: string; depth: number; unread: number }[] };
         setFolders(r.error ? `Outlook: ${r.error}` : r.folders ?? []);
@@ -226,7 +228,8 @@ export function Settings() {
   }, [s.settingsOpen, sec]);
   if (!s.settingsOpen) return null;
 
-  const cfg = d ?? s.settings;
+  // which sources use the Microsoft account is decided at once (it signs in), not by Save: always the stored value
+  const cfg = { ...(d ?? s.settings), entraSources: s.settings.entraSources };
   const accts = PLUGINS.filter((p) => p.auth);
   const patch = (p: Partial<typeof cfg>) => setD({ ...cfg, ...p });
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -284,7 +287,7 @@ export function Settings() {
         <h3>Settings</h3>
         <div className="set-layout">
         <nav className="set-nav" aria-label="Sections">
-          {[{ id: 'ai', name: 'AI assistant' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }, { id: 'update', name: 'Updates' }].map((x) => (
+          {[{ id: 'ai', name: 'AI assistant' }, { id: 'microsoft', name: 'Microsoft' }, ...accts, { id: 'mail', name: 'Emails' }, { id: 'display', name: 'Display' }, { id: 'db', name: 'Database' }, { id: 'update', name: 'Updates' }].map((x) => (
             <button key={x.id} className={sec === x.id ? 'on' : ''} aria-current={sec === x.id} onClick={() => setSec(x.id)}>
               <Ico id={x.id} /> {x.name}
             </button>
@@ -305,6 +308,7 @@ export function Settings() {
             </div>
           </section>
         )}
+        {sec === 'microsoft' && <MicrosoftSettings cfg={cfg} patch={patch} enter={enter} />}
         {sec === 'update' && <Updates />}
         {sec === 'db' && <Database draft={bk.draft} onLoad={(c) => setBk((x) => (x.base ? x : { base: c, draft: c }))} onChange={(p) => setBk((x) => x.draft ? { ...x, draft: { ...x.draft, ...p } } : x)} />}
         {sec === 'ai' && <section className="set-sec">

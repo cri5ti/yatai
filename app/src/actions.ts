@@ -8,7 +8,9 @@ import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrSta
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
 import { implFor, pluginById } from './plugins/registry';
 import { placedAt } from './popupguard';
-import { connectAccount, disconnectAccount, refreshNow, refreshRefs } from './plugins/tracker';
+import { connectAccount, disconnectAccount, refreshAccounts, refreshNow, refreshRefs } from './plugins/tracker';
+import { SOURCES, setSource, signOut } from './plugins/entra';
+import type { Source } from './plugins/entra';
 import { resort } from './plugins/mail';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
@@ -1341,6 +1343,33 @@ export async function disconnectPlugin(id: string) {
   } catch (e) {
     toast(`Keychain: ${String(e)}`, 'bad');
   }
+}
+/** Settings → Microsoft: use the Microsoft account for a source (signs in on the first one, in the browser), or stop using it for that one */
+export async function microsoftSource(src: Source, on: boolean, client: string, tenant: string): Promise<boolean> {
+  const name = SOURCES.find((x) => x.id === src)?.label ?? src;
+  try {
+    await setSource(src, on, client, tenant);
+    toast(on ? `${name}: using your Microsoft account` : `${name}: no longer using the Microsoft account`, on ? 'good' : 'info');
+  } catch (e) {
+    toast(`${name}: ${e instanceof Error ? e.message : String(e)}`, 'bad');
+    return false;
+  }
+  await refreshAccounts();
+  const plugin = SOURCES.find((x) => x.id === src)!.plugin;
+  if (plugin === 'mail') refreshMail();
+  else void refreshNow(plugin);
+  return true;
+}
+export async function microsoftSignOut() {
+  try {
+    await signOut();
+    toast('Signed out of Microsoft: the sign-in is removed from the keychain', 'info');
+  } catch (e) {
+    toast(`Keychain: ${String(e)}`, 'bad');
+  }
+  await refreshAccounts();
+  for (const p of ['outlook', 'devops']) void refreshNow(p);
+  refreshMail();
 }
 /** Emails: forget how every mail was sorted and sort them again (another model) */
 export function resortMail() {

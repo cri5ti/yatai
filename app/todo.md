@@ -125,6 +125,14 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] revoke the token on GitHub: one toast, polling stops, drawer says "rejected the token"
   - [ ] Remove in Settings clears the keychain entry (Keychain Access → `yatai` / `plugin:github`)
 - [ ] GitHub: device flow once a GitHub App client_id exists; issues (links + state); review actions are out of scope
+- [ ] **Microsoft account** (Settings → Microsoft; Entra sign-in shared by Calendar, Emails and Azure DevOps): check by hand
+  - [ ] register the app (guide in Settings), paste the client id (+ tenant), tick Calendar: the browser opens, you sign in, "Signed in" page, Settings says "✓ signed in as …" and the Calendar drawer shows today's meetings (compare with Outlook; a move shows within a poll, 3 min)
+  - [ ] **find out what the tenant says**: consent screen, or "needs admin approval" (AADSTS65001 / 90094), or app registrations are not allowed. If an admin must approve, ask for `Calendars.Read`, `Mail.Read`, `User.Read`
+  - [ ] tick Emails (a second consent only if the permission is new): Settings → Emails lists your folders through Graph (no classic Outlook running); tick Inbox → unread mail appears in the drawer and is sorted. Filter / order errors ("InefficientFilter") would show as "Outlook: …"
+  - [ ] tick Azure DevOps: with a DevOps organization set, a pasted run link is tracked without a PAT
+  - [ ] untick one: that source falls back to the PAT / ICS link / classic Outlook; Sign out removes it from the keychain (`yatai` / `entra`, `entra.rt0…`)
+  - [ ] leave the app running for over an hour (the access token expires after ~60–90 min): the next poll still works, silently. After a long time off (refresh token ~90 days, or a conditional-access policy) the source says it needs a new sign-in: untick and tick it again. **Missing: an explicit "sign in again" button** (today: untick / tick)
+  - [ ] closing the browser tab before signing in: the settings spinner times out after 3 minutes
 - [ ] **Outlook** (published ICS feed; Graph needs an admin to approve `Calendars.Read` in the work tenant, so it is parked)
   - [ ] Settings → Accounts → Calendar link: paste the ICS link (Outlook on the web → Settings → Calendar → Shared calendars → Publish a calendar) → "Connected as <calendar> · N meetings today"
   - [ ] today's meetings (times in your local zone, recurring ones, none of the all-day ones) match Outlook; a meeting brought into Next follows a move (highlight + toast) and a cancellation / removal
@@ -143,7 +151,7 @@ Plugin system is in (`app/src/plugins/`): Outlook / DevOps / AI sessions run on 
   - [ ] **Review: keep Ollama or drop it?** Laya (decision model, no LLM) is wired in as a sorter; Ollama (qwen3) stays the default until Laya is trained, and stays behind Settings → Emails → Sorter for comparison. Once Laya has run on real mail for a while: compare the buckets (Sort all again with each), and if Laya is good enough, remove the Ollama path (`classifyOllama` in `plugins/mail/classify.ts`, `src-tauri/src/llm.rs` with its idle-priority code, the `mailModel` setting, the Ollama rows in Settings and the docs). If it is not, decide between training Laya on labelled mail and keeping qwen3
   - [ ] **Laya needs training before it can be the default** (untrained it agreed with qwen3 on 8–13 of 38 mails; design/plugins.md): label a few hundred mails (qwen3's buckets as a first pass, corrected by hand, plus corrections made in the drawer), fine-tune / temperature-fit a checkpoint on them, point the helper at it, then make Laya the default sorter. Keep a low-confidence mail out of Urgent
   - [ ] hook the buckets into tasks: Urgent / Today straight into Next or the Inbox? Dismiss → archive in Outlook (a write)?
-  - [ ] new Outlook (olk) has no COM: if classic Outlook goes away, Graph `Mail.Read` (needs the admin) or an Outlook add-in
+  - [ ] new Outlook (olk) has no COM: Graph `Mail.Read` through Settings → Microsoft is now the way out (check by hand above); remove COM (`mail.rs`, `mail.ps1`) once it has proved itself. Classic Outlook can run out of MAPI resources ("Outlook has exhausted all shared resources"), which is one more reason
   - [ ] a better prompt / model (comparison in design/plugins.md: qwen3 4B instruct beats llama3.2); learn from corrections (moving a mail to another bucket)
   - [ ] the 45 s sorting budget per cycle delays the drawer's other lists while it runs
 - [ ] **AI sessions** (Claude / Copilot): how to detect done / needs feedback: hooks, logs, or APIs?
