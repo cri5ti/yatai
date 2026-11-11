@@ -4,7 +4,7 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday, setPrio, setPrioFilter,
+  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel, plain, relTime } from './model';
@@ -22,7 +22,7 @@ interface RowItem {
   kids: boolean;
 }
 /** keep: the priority filter (only these, everything unfolded) */
-function visibleRows(nodes: Node[], keep?: Set<string>): RowItem[] {
+function visibleRows(nodes: Node[], keep?: Set<string>, root: string | null = null): RowItem[] {
   const out: RowItem[] = [];
   const walk = (pid: string | null, d: number) => {
     for (const n of childrenOf(nodes, pid)) {
@@ -32,7 +32,7 @@ function visibleRows(nodes: Node[], keep?: Set<string>): RowItem[] {
       if ((n.open || keep) && kids) walk(n.id, d + 1);
     }
   };
-  walk(null, 0);
+  walk(root, 0);
   return out;
 }
 
@@ -40,10 +40,14 @@ type Hint = { id: string; zone: 'before' | 'inside' | 'after' };
 export const INBOX_MIME = 'application/x-yatai-inbox';
 const TABLE_AT = 880; // px: below this the organizer is a list, above it the same rows grow columns
 
-/** Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room). */
-export function Organizer({ embedded = false }: { embedded?: boolean }) {
+/**
+ * Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room).
+ * `root`: only what is under that item (a sub-view, e.g. in the list opened from a row of Next).
+ * `checks`: a tick box on every row for being in Next — ticking brings the item in with what is under it, unticking takes it out.
+ */
+export function Organizer({ embedded = false, root: top = null, checks = false }: { embedded?: boolean; root?: string | null; checks?: boolean }) {
   const { s, marks } = useView();
-  const rows = useMemo(() => visibleRows(s.nodes, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined), [s.nodes, s.prioFilter]);
+  const rows = useMemo(() => visibleRows(s.nodes, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined, top), [s.nodes, s.prioFilter, top]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
@@ -149,7 +153,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       // Enter adds below, ⇧Enter adds above, ⌘⇧Enter starts focus mode
       stop();
       if (M && e.shiftKey) return cur && focusItem(cur.id);
-      if (!cur) return set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } }));
+      if (!cur) return set(() => ({ ins: { kind: 'node', parentId: top, afterId: null } }));
       return e.shiftKey ? insertAbove(cur) : insertSibling(cur);
     }
     // Ctrl+1–5: quick priority · 1–5 (below): show only priorities up to it
@@ -196,7 +200,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
     else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
     else if (/^[0-5]$/.test(k)) (stop(), setPrioFilter(+k));
-    else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
+    else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: top, afterId: null } })));
     else if (k === '/') {
       stop();
       openMenu(bulk ? { t: 'multi', ids: live } : cur ? { t: 'node', id: cur.id } : null, undefined, undefined, { slash: true });
@@ -245,7 +249,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const ins = s.ins?.kind === 'node' ? s.ins : null;
   const list: ({ row: RowItem } | { draft: true; depth: number })[] = rows.map((row) => ({ row }));
   if (ins) {
-    const depth = ins.parentId ? depthOf(s.nodes, ins.parentId) + 1 : 0;
+    const depth = (ins.parentId ? depthOf(s.nodes, ins.parentId) + 1 : 0) - (top ? depthOf(s.nodes, top) + 1 : 0);
     const bi = ins.beforeId ? rows.findIndex((r) => r.n.id === ins.beforeId) : -1;
     const ai = ins.afterId ? rows.findIndex((r) => r.n.id === ins.afterId) : -1;
     let at = rows.length;
@@ -322,14 +326,14 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           if (isExt(e) && !e.defaultPrevented) {
             e.preventDefault();
             setHint(null);
-            return fileInboxTo(extIds(e), null, null); // empty space: top level
+            return fileInboxTo(extIds(e), top, null); // empty space: top level
           }
           if (!dnd.current || e.defaultPrevented) return;
           e.preventDefault();
           const src = dnd.current;
           dnd.current = null;
           setHint(null);
-          moveNode(src, null, null); // dropped on empty space: becomes a top-level item
+          moveNode(src, top, null); // dropped on empty space: becomes a top-level item (a child of the root, in a sub-view)
         }}
       >
         {list.map((it) => {
@@ -436,7 +440,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                     </>
                   ) : (
                     <>
-                      {n.today && <span className="todaydot" title="In Next">★</span>}
+                      {n.today && !checks && <span className="todaydot" title="In Next">★</span>}
                       {n.est && <span className={cx('est', pk('est') && 'pk')}>{fmtEst(n.est)}</span>}
                     </>
                   )}
@@ -446,6 +450,17 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                     </span>
                   ) : (
                     <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                  )}
+                  {checks && (
+                    <input
+                      type="checkbox"
+                      className="innext"
+                      tabIndex={-1}
+                      checked={n.today}
+                      title={n.today ? 'In Next — untick to take it out (with what is under it)' : 'Tick to bring it into Next (with what is under it)'}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleScope(n.id)}
+                    />
                   )}
                 </>
               )}

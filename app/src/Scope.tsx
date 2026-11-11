@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useS } from './store';
-import type { Node } from './store';
-import { closeScopePick, openScopePick, toggleScope } from './actions';
+import { Organizer } from './Organizer';
+import { closeScopePick, openScopePick } from './actions';
 import { cx, focusArea } from './kbd';
 import { plain } from './model';
 
@@ -23,68 +23,36 @@ export function ScopePill({ id, count, active }: { id: string; count: number; ac
   );
 }
 
-interface Line {
-  node: Node;
-  depth: number;
-}
-/** the open items under `id`, in organizer order (an item already in Next stays listed, ticked, so it can be taken out again) */
-function linesOf(nodes: Node[], id: string): Line[] {
-  const out: Line[] = [];
-  const walk = (pid: string, depth: number) => {
-    for (const n of nodes) {
-      if (n.parentId !== pid) continue;
-      if (n.status === 'dropped' || (n.status === 'done' && !n.today)) continue;
-      out.push({ node: n, depth });
-      walk(n.id, depth + 1);
-    }
-  };
-  walk(id, 0);
-  return out;
-}
-
-/** the dropdown: every item under one item, with a tick box for being in Next. Ticking brings it in with everything under it. */
+/** the dropdown: the organizer, cut down to what is under one item, with a tick box on every row for being in Next */
 export function ScopePick() {
   const s = useS();
   const pk = s.scopePick;
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [hi, setHi] = useState(0);
-  const lines = pk ? linesOf(s.nodes, pk.id) : [];
+  const owner = pk && s.nodes.find((n) => n.id === pk.id);
   useLayoutEffect(() => {
     const r = box.current?.getBoundingClientRect();
     if (!pk || !r) return setPos(null);
     setPos({ x: Math.max(8, Math.min(pk.x - r.width, window.innerWidth - r.width - 8)), y: Math.max(8, Math.min(pk.y, window.innerHeight - r.height - 8)) });
-    setHi(0);
-    box.current?.focus();
   }, [pk?.id, pk?.x, pk?.y]);
-  if (!pk) return null;
-  const owner = s.nodes.find((n) => n.id === pk.id);
+  if (!pk || !owner) return null;
   const close = () => (closeScopePick(), focusArea());
   return (
-    <div className="menu-veil" onMouseDown={close} onContextMenu={(e) => (e.preventDefault(), close())}>
+    <div className="menu-veil spick-veil" onMouseDown={close} onContextMenu={(e) => (e.preventDefault(), close())}>
       <div
         ref={box}
         className="spick"
-        role="menu"
-        tabIndex={-1}
         aria-label="Under this item"
         style={pos ? { left: pos.x, top: pos.y } : { visibility: 'hidden' }}
         onMouseDown={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Escape') return (e.preventDefault(), close());
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') return (e.preventDefault(), setHi((h) => Math.max(0, Math.min(lines.length - 1, h + (e.key === 'ArrowDown' ? 1 : -1)))));
-          if ((e.key === ' ' || e.key === 'Enter') && lines[hi]) return (e.preventDefault(), toggleScope(lines[hi].node.id));
+          if (e.key === 'Escape') (e.preventDefault(), close());
         }}
       >
-        <div className="spick-t">{owner ? plain(owner.title.split('\n')[0]) : 'Under this item'}</div>
-        {lines.length === 0 && <div className="spick-none">Nothing under it</div>}
-        {lines.map((l, i) => (
-          <label key={l.node.id} className={cx('spick-row', i === hi && 'hi', l.node.status === 'done' && 'done')} style={{ paddingLeft: 6 + l.depth * 14 }} onMouseMove={() => setHi(i)}>
-            <input type="checkbox" tabIndex={-1} checked={l.node.today} onChange={() => toggleScope(l.node.id)} />
-            <span className="spick-x">{plain(l.node.title.split('\n')[0])}</span>
-          </label>
-        ))}
+        <div className="spick-t">{plain(owner.title.split('\n')[0])}</div>
+        <Organizer root={pk.id} checks />
       </div>
     </div>
   );
