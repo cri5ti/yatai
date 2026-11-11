@@ -4,7 +4,7 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
+  fileInboxTo, openAllTree, openStepTree, foldStep, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel, plain, relTime } from './model';
@@ -187,9 +187,18 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
       stop();
       return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
     }
-    // − / + : collapse / expand everything
-    if (!M && (k === '-' || k === '_')) return (stop(), openAll(false));
-    if (!M && (k === '+' || k === '=')) return (stop(), openAll(true));
+    // ⌘− / ⌘+ : collapse / expand everything · − / + : one level at a time under the current item(s)
+    if (M && (k === '-' || k === '_')) return (stop(), openAll(false));
+    if (M && (k === '+' || k === '=')) return (stop(), openAll(true));
+    if (!M && (k === '-' || k === '_' || k === '+' || k === '=')) {
+      stop();
+      const open = k === '+' || k === '=';
+      const roots = ids.length ? ids : childrenOf(s.nodes, top).map((n) => n.id);
+      if (!top) return openStepTree(roots, open);
+      const flip = new Set(foldStep(s.nodes, isOpen, roots, open));
+      if (flip.size) setOpened((o) => new Set(open ? [...o, ...flip] : [...o].filter((x) => !flip.has(x))));
+      return;
+    }
     if (M || (e.shiftKey && k !== 'N')) return;
 
     if (k === 'ArrowDown' || k === 'ArrowUp') {

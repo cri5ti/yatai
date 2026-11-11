@@ -17,7 +17,7 @@ const HELP: [string, [string, string][]][] = [
       ['1 … 5  ·  0', 'Show only priorities up to that one (⌥2 = 1 and 2, with their parents) · show everything'],
       ['⇧← ⇧→', 'Scroll the estimate (5m · 15m · 30m · 1h · 2h · 4h · 8h)'],
       ['/  or right-click', 'Commands: /consolidate /abandon /due /remind /reschedule /tomorrow /estimate /duplicate /ai'],
-      ['−  +', 'Collapse / expand everything'],
+      ['−  +', 'Collapse / expand the current item one level at a time · Ctrl+−  Ctrl++ : everything'],
       ['⌘Z  ⌘⇧Z', 'Undo / redo — every change goes through the undo manager'],
       ['⌘/', 'Ask AI — its changes come back as a purple proposal'],
       ['⌘⏎  ·  ⌘⌫', 'Accept · reject the AI proposal'],

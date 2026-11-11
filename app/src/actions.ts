@@ -890,6 +890,33 @@ export function openAllNext(open: boolean) {
     expanded: open ? st.expanded : {},
   }));
 }
+/**
+ * One level of folding under the given items (+ expands the shallowest closed level that shows, − closes the deepest open one).
+ * Returns the ids to flip, so an unbalanced set of items moves its longest branch first.
+ */
+export function foldStep(nodes: Node[], isOpen: (n: Node) => boolean, roots: string[], open: boolean): string[] {
+  const hasKids = new Set(nodes.map((n) => n.parentId).filter((p): p is string => !!p));
+  const found: { id: string; d: number }[] = [];
+  const walk = (n: Node, d: number) => {
+    if (!hasKids.has(n.id)) return;
+    const o = isOpen(n);
+    if (o !== open) found.push({ id: n.id, d });
+    if (o) for (const c of nodes) if (c.parentId === n.id) walk(c, d + 1);
+  };
+  for (const r of roots) {
+    const n = nodes.find((x) => x.id === r);
+    if (n) walk(n, 0);
+  }
+  if (!found.length) return [];
+  const at = open ? Math.min(...found.map((f) => f.d)) : Math.max(...found.map((f) => f.d));
+  return found.filter((f) => f.d === at).map((f) => f.id);
+}
+/** Organizer: one fold level under the given items */
+export function openStepTree(roots: string[], open: boolean) {
+  const s = get();
+  const ids = new Set(foldStep(s.nodes, (n) => !!n.open, roots, open));
+  if (ids.size) set((st) => ({ nodes: st.nodes.map((n) => (ids.has(n.id) ? { ...n, open } : n)) }));
+}
 /** Organizer: every item with children */
 export function openAllTree(open: boolean) {
   set((st) => ({ nodes: st.nodes.map((n) => (n.open !== open && st.nodes.some((c) => c.parentId === n.id) ? { ...n, open } : n)) }));

@@ -7,7 +7,7 @@ import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTarge
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
-  moveRows, openAllNext, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
+  moveRows, openAllNext, openStepTree, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
   toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
@@ -707,9 +707,16 @@ export function Next() {
       else if (card) startCard(card);
       return;
     }
-    // − / + : collapse / expand everything
-    if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
-    if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
+    // ⌘− / ⌘+ : collapse / expand everything · − / + : one level at a time under the current item
+    if (M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
+    if (M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
+    if (!M && (k === '-' || k === '_' || k === '+' || k === '=')) {
+      stop();
+      const open = k === '+' || k === '=';
+      if (card?.kind === 'meeting' && !rowNode) return toggleCardOpen(card, open);
+      const roots = rowNode ? [rowNode.id] : card?.task ? [card.task.id] : m.cards.flatMap((c) => (c.task ? [c.task.id] : []));
+      return openStepTree(roots, open);
+    }
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
     if (/^[0-5]$/.test(k)) return (stop(), setPrioFilter(+k));
 
