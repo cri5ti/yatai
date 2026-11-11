@@ -14,7 +14,7 @@ const TABLES: &[(&str, &[&str])] = &[
         "item",
         &[
             "id", "ord", "parent_id", "title", "status", "today", "open", "created", "modified", "last_run", "scheduled", "est", "due",
-            "later", "spent", "smart",
+            "later", "spent", "smart", "notify", "origin", "prio", "remind",
         ],
     ),
     ("inbox", &["id", "ord", "text", "created", "suggestion"]),
@@ -39,6 +39,14 @@ const MIGRATIONS: &[&str] = &[r#"
     );
     CREATE TABLE plan_seg (id TEXT PRIMARY KEY, ord INTEGER NOT NULL, owner TEXT NOT NULL, items TEXT NOT NULL, keep INTEGER, pulled INTEGER);
     CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+"#, r#"
+    ALTER TABLE item ADD COLUMN notify INTEGER;
+"#, r#"
+    ALTER TABLE item ADD COLUMN origin TEXT;
+"#, r#"
+    ALTER TABLE item ADD COLUMN prio INTEGER;
+"#, r#"
+    ALTER TABLE item ADD COLUMN remind INTEGER;
 "#];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
@@ -106,6 +114,12 @@ pub struct Op {
     t: String,
     put: Option<Map<String, Value>>,
     del: Option<String>,
+}
+
+impl Op {
+    pub fn table(&self) -> &str {
+        &self.t
+    }
 }
 
 pub fn apply(c: &mut Connection, ops: &[Op]) -> Result<(), String> {

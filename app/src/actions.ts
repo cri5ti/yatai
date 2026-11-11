@@ -1,23 +1,42 @@
 import { countItems } from './clip';
+import { planEdit, scopeFor } from './mdedit';
 import type { ClipItem } from './clip';
 import { DENSITIES, SCALES, commit, demoDoc, docOf, emptyDoc, get, minutesNow, onBlocked, resetDoc, seedInbox, set, today, uid } from './store';
 import { AI_CFG, chatTurn, noteToModel, refreshAiKey, resetConvo, stopTurn } from './ai';
 import { acceptProposal, rejectProposal } from './proposal';
-import type { Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
+import type { BuildStatus, Chip, Current, Doc, Meeting, DrawerKind, Flags, PrStatus, FocusState, Layout, Node, Seg, State, Status, Tab, Toast } from './store';
 import { aiBreakdown, aiEstimate, aiPlan, aiReply, aiSuggest, sleep } from './mock';
-import { pluginById } from './plugins/registry';
-import { connectAccount, disconnectAccount, refreshNow } from './plugins/tracker';
+import { implFor, pluginById } from './plugins/registry';
+import { placedAt } from './popupguard';
+import { connectAccount, disconnectAccount, refreshAccounts, refreshNow, refreshRefs } from './plugins/tracker';
+import { grant, signOut } from './plugins/entra';
+import type { Source } from './plugins/entra';
+import { resort } from './plugins/mail';
+import { pluginOf } from './plugins/types';
 import type { Snapshot } from './plugins/types';
-import { FX, ROOT, doneOf, fmt, plain, hasKids, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, startable } from './model';
+import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
 import { focusArea, stepEst } from './kbd';
+import { PRESETS, remindLabel } from './remind';
 import { quietFlip } from './flip';
+import { flush } from './persist';
+import { invoke } from './platform';
 
 /* ---------- toasts ---------- */
 export function toast(text: string, tone: Toast['tone'] = 'info') {
   const id = uid();
   set((s) => ({ toasts: [...s.toasts, { id, text, tone }] }));
   setTimeout(() => dismissToast(id), 5000);
+}
+
+/** install the downloaded update: write what is pending first (the installer ends the app) */
+export async function installUpdate() {
+  try {
+    await flush();
+    await invoke('update_install');
+  } catch (e) {
+    toast(`Update failed: ${String(e)}`, 'bad');
+  }
 }
 export const dismissToast = (id: string) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 
@@ -31,13 +50,14 @@ export const setLayout = (layout: Layout) =>
   set((s) => ({ layout, hidden: false, prevLayout: layout === 'pill' && s.layout !== 'pill' ? s.layout : s.prevLayout }));
 /** out of the idle pill, back to the layout it came from */
 export const leavePill = () => set((s) => (s.layout === 'pill' && !s.focus ? { layout: backFromPill(s), hidden: false } : {}));
-export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: number; w: number; h: number } | null) =>
+export const setBounds = (layout: 'dock' | 'float' | 'max', r: { x: number; y: number; w: number; h: number; p?: { x: number; y: number; w: number; h: number } } | null) =>
   set((s) => {
     const b = { ...s.bounds };
     if (r) b[layout] = r;
     else delete b[layout];
     return { bounds: b };
   });
+export const toggleOnTop = () => set((s) => ({ onTop: !s.onTop }));
 export const toggleHidden = () => set((s) => ({ hidden: !s.hidden }));
 export const openCapture = () => set(() => ({ capture: true }));
 export const closeCapture = () => set(() => ({ capture: false }));
@@ -48,6 +68,36 @@ export const closeMenu = () => {
 export const setScale = (i: number) => (quietFlip(), set(() => ({ scale: Math.max(0, Math.min(SCALES.length - 1, i)) })));
 export const setDensity = (i: number) => (quietFlip(), set(() => ({ density: Math.max(0, Math.min(DENSITIES.length - 1, i)) })));
 /* ---------- highlights: changes the user did not make ---------- */
+/* ---------- reminders (/remind) ---------- */
+/** come back to these items at `at` (ms); null clears */
+export function setRemind(ids: string[], at: number | null) {
+  patchNodes(at ? 'Remind' : 'Clear reminder', ids, { remind: at ?? undefined });
+  toast(at ? `Reminder ${remindLabel(at)}${ids.length > 1 ? ` for ${ids.length} items` : ''}` : 'Reminder cleared', at ? 'good' : 'info');
+}
+export const remindIn = (ids: string[], preset: string) => {
+  const p = PRESETS.find((x) => x.id === preset);
+  if (p) setRemind(ids, p.at(new Date(), get().settings.workStart).getTime());
+};
+/**
+ * The main window looks every few seconds: a reminder that came (or came while yatai was closed) brings its item into
+ * Next, highlights it and says so (a toast, and a system notification unless yatai is in front). Not an undo step.
+ * Done or abandoned items just lose the reminder.
+ */
+export function fireReminders(now = Date.now(), notify?: (title: string, body: string) => void) {
+  const due = get().nodes.filter((n) => n.remind != null && n.remind <= now);
+  if (!due.length) return;
+  const ids = new Set(due.map((n) => n.id));
+  const live = due.filter((n) => n.status !== 'done' && n.status !== 'dropped');
+  const back = new Set(live.map((n) => n.id));
+  set((s) => ({ nodes: s.nodes.map((n) => (!ids.has(n.id) ? n : back.has(n.id) ? { ...n, remind: undefined, today: true, later: undefined, modified: now } : { ...n, remind: undefined })) }));
+  if (!live.length) return;
+  highlight(live.map((n) => n.id));
+  const names = live.map((n) => plain(n.title.split('\n')[0]));
+  toast(live.length === 1 ? `⏰ ${names[0]}` : `⏰ ${live.length} reminders: ${names.join(' · ')}`, 'warn');
+  const s = get();
+  if (notify && (s.hidden || typeof document === 'undefined' || document.hidden || !document.hasFocus())) notify('Reminder', names.join('\n'));
+}
+
 /** mark things yellow until the mouse passes over them */
 export function highlight(ids: string[]) {
   if (!ids.length) return;
@@ -70,13 +120,42 @@ export function setPrStatus(key: string, status: PrStatus) {
   void refreshNow('github');
 }
 
+/** the Calendar drawer: list ↔ day schedule */
+export const setOutlookView = (v: 'list' | 'day') => set(() => ({ outlookView: v }));
+/** a popup window was moved / resized by the user: remember it under its key (the main window's own placing is ignored) */
+export function setPopupRect(view: string, key: string, r: { x: number; y: number; w: number; h: number }) {
+  if (Date.now() - (placedAt[view] ?? 0) < 1200) return;
+  set((s) => ({ popups: { ...s.popups, [key]: r } }));
+}
+/** the item menu's Refresh: ask the sources about these items now */
+export async function refreshItems(ids: string[]) {
+  const refs = [...new Set(get().nodes.filter((n) => ids.includes(n.id)).flatMap((n) => refsOf(n)))];
+  if (!refs.length) return toast('Nothing here comes from GitHub or DevOps', 'info');
+  toast('Refreshing…', 'info');
+  const snaps = await refreshRefs(refs);
+  if (!snaps.length) return;
+  toast(snaps.length === 1 ? `${snaps[0].name}: ${snaps[0].view.label}` : `Refreshed ${snaps.length} items`, 'info');
+}
+/** developer panel: the mock DevOps moves a pipeline run on */
+export function setRunStatus(ref: string, status: BuildStatus) {
+  set((s) => ({ runs: { ...s.runs, [ref]: status } }));
+  void refreshNow('devops');
+}
+/** ask to be told about every change of what these items track (or stop); one undo step */
+export function toggleNotify(ids: string[]) {
+  const nodes = get().nodes.filter((n) => ids.includes(n.id) && refsOf(n).length);
+  if (!nodes.length) return toast('Nothing here is tracked: paste a PR or pipeline link into it first', 'info');
+  const on = !nodes.every((n) => n.notify);
+  patchNodes(on ? 'Notify on changes' : 'Stop notifying', nodes.map((n) => n.id), { notify: on || undefined });
+  toast(on ? 'You will be notified when it changes' : 'No more notifications for it', 'info');
+}
 export function setPrComments(key: string, n: number) {
   if (get().prc[key] === n) return;
   set((s) => ({ prc: { ...s.prc, [key]: n } }));
   void refreshNow('github');
 }
 
-/* ---------- meetings: delete here, bring back from the Outlook drawer ---------- */
+/* ---------- meetings: delete here, bring back from the Calendar drawer ---------- */
 export function removeMeeting(id: string) {
   const m = get().meetings.find((x) => x.id === id);
   if (!m) return;
@@ -89,7 +168,7 @@ export function removeMeeting(id: string) {
       multi: [],
     };
   });
-  toast(`${m.title} removed — bring it back from the Outlook drawer`, 'info');
+  toast(`${m.title} removed — bring it back from the Calendar drawer`, 'info');
 }
 /** a meeting into Next: today's from the agenda; one ahead (to prepare) comes with its data and its day */
 export function bringMeeting(id: string, ahead?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }) {
@@ -101,15 +180,20 @@ export function bringMeeting(id: string, ahead?: { id: string; title: string; st
   toast(ahead && day !== today() ? `${m.title} is in Next (${new Date(day + 'T00:00').toLocaleDateString(undefined, { weekday: 'long' })}): add your prep under it` : `${m.title} is back in Next`, 'good');
 }
 
-/* ---------- the Outlook / GitHub / DevOps drawers ---------- */
+/* ---------- the Calendar / GitHub / DevOps / Emails drawers ---------- */
 export const openDrawer = (kind: DrawerKind) =>
   set((s) => {
     const p = pluginById(kind);
-    const tab = (p?.live?.lists ?? p?.mock?.lists ?? [])[0]?.id ?? '';
+    const tab = ((p && implFor(p, s)?.lists) ?? p?.live?.lists ?? p?.mock?.lists ?? [])[0]?.id ?? '';
     return { drawer: s.drawer?.kind === kind ? null : { kind, tab, sel: 0 }, menu: null };
   });
 export const closeDrawer = () => {
-  set(() => ({ drawer: null }));
+  // what turned up for you has been seen once the drawer that lists it is closed
+  set((s) => {
+    const kind = s.drawer?.kind;
+    const fresh = kind ? Object.fromEntries(Object.entries(s.fresh).filter(([r]) => pluginOf(r) !== kind)) : s.fresh;
+    return { drawer: null, ...(Object.keys(fresh).length !== Object.keys(s.fresh).length ? { fresh } : {}) };
+  });
   focusArea();
 };
 export const setDrawerTab = (tab: string) => set((s) => (s.drawer ? { drawer: { ...s.drawer, tab, sel: 0 } } : {}));
@@ -124,19 +208,54 @@ export function bringIn(spec: { title: string; ref?: string; smart?: string; sna
     return toast('Added to the Inbox', 'good');
   }
   const smart = spec.smart ? { source: spec.smart as NonNullable<Node['smart']>['source'], ref: spec.ref } : undefined;
-  const node = mk(null, spec.title, { today: true, smart, status: smart ? 'waiting' : 'todo' });
+  const s0 = get();
+  // under the current item; beside it when that is itself something brought in (a PR, a work item…)
+  const cur = currentItem(s0);
+  const sib = cur && typeof cur !== 'string' && (!!cur.smart || refsOf(cur).length > 0) ? cur : null;
+  const parentId = !cur ? null : typeof cur === 'string' ? cur : sib ? sib.parentId : cur.id;
+  const node = mk(parentId, spec.title, { today: true, smart, status: smart ? 'waiting' : 'todo' });
   const sn = spec.snap;
   const key = sn?.ref.startsWith('github:') ? sn.ref.slice(7) : null;
-  commit('Bring in', (s) => ({
-    nodes: [...s.nodes, node],
-    snaps: sn && !s.snaps[sn.ref] ? { ...s.snaps, [sn.ref]: sn } : s.snaps,
-    // the mock GitHub has to agree with what the drawer showed
-    prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
-    prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
-    nsel: { card: 's_' + ROOT, row: node.id },
-    multi: [],
-  }));
-  toast('Added to Next', 'good');
+  commit('Bring in', (s) => {
+    const after = sib ? sib.id : parentId ? lastChild(s.nodes, parentId) ?? parentId : null;
+    const nodes = openIt(insertAfter(s.nodes, node, after), parentId);
+    let plan = planOf({ ...s, nodes });
+    // beside a row of a card: right after it, not at the end of the card
+    const si = sib ? segOf(plan, sib.id) : -1;
+    if (sib && si >= 0 && segOf(plan, node.id) >= 0) {
+      plan = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== node.id) }));
+      const items = [...plan[si].items];
+      items.splice(items.indexOf(sib.id) + 1, 0, node.id);
+      plan = reconcilePlan(withItems(plan, si, items), nodes, s.meetings);
+    }
+    return {
+      nodes,
+      plan,
+      snaps: sn && !s.snaps[sn.ref] ? { ...s.snaps, [sn.ref]: sn } : s.snaps,
+      // the mock GitHub has to agree with what the drawer showed
+      prs: key && !s.prs[key] ? { ...s.prs, [key]: sn!.view.glyph as PrStatus } : s.prs,
+      prc: key && sn!.view.count != null && s.prc[key] == null ? { ...s.prc, [key]: sn!.view.count } : s.prc,
+      // …and so does the mock DevOps
+      runs: sn?.ref.startsWith('devops:build/') && !s.runs[sn.ref] ? { ...s.runs, [sn.ref]: sn.view.glyph as BuildStatus } : s.runs,
+      nsel: { card: null, row: node.id },
+      sel: s.tab === 'organizer' ? node.id : s.sel,
+      multi: [],
+    };
+  });
+  const under = parentId && (s0.nodes.find((n) => n.id === parentId)?.title ?? s0.meetings.find((m) => m.id === parentId)?.title);
+  toast(under ? `Added to Next, under ${plain(under.split('\n')[0])}` : 'Added to Next', 'good');
+}
+
+/** the item the user is on: the Organizer's selection, or the row picked in Next (a meeting id for its calendar row) */
+function currentItem(s: State): Node | string | null {
+  if (s.tab === 'organizer') return s.nodes.find((n) => n.id === s.sel) ?? null;
+  const cards = nextModel(s).cards;
+  const sel = effSel(cards, s.nsel);
+  const c = cards.find((x) => x.key === sel.card);
+  if (!c) return null;
+  const r = sel.row ? c.rows.find((x) => x.id === sel.row) : undefined;
+  if (r?.fx) return r.fx.id;
+  return r?.node ?? c.task ?? (c.kind === 'meeting' ? c.ownerId : null);
 }
 
 export const toggleHelp = () => set((s) => ({ help: !s.help }));
@@ -302,10 +421,10 @@ export function setStatus(ids: string[], status: Status, label: string) {
     return { nodes: nodes.map((n) => (t.has(n.id) ? { ...n, status, modified: Date.now() } : n)), current };
   });
 }
-/** an item shows as done when it is marked done itself — or when it has children and every leaf under it is done */
+/** an item is done when it is marked done; finishing its sub-items never completes it (the user does) */
 export const isDone = (nodes: Node[], id: string) => {
   const n = nodes.find((x) => x.id === id);
-  return !!n && (n.status === 'done' || (hasKids(nodes, id) && doneOf(nodes, id)));
+  return !!n && n.status === 'done';
 };
 
 /**
@@ -317,8 +436,7 @@ export function toggleDoneNodes(ids: string[]) {
   const known = ids.filter((id) => nodes.some((n) => n.id === id && n.status !== 'dropped'));
   if (!known.length) return;
   const allDone = known.every((id) => isDone(nodes, id));
-  // un-completing can only clear what was marked on the item itself (a parent whose children are all done stays done)
-  const targets = allDone ? known.filter((id) => nodes.find((n) => n.id === id)!.status === 'done') : known.filter((id) => !isDone(nodes, id));
+  const targets = allDone ? known : known.filter((id) => !isDone(nodes, id));
   setStatus(targets, allDone ? 'todo' : 'done', allDone ? 'Mark not done' : 'Mark done');
 }
 
@@ -328,8 +446,20 @@ export function toggleToday(id: string) {
   if (!n) return;
   if (!hasKids(nodes, id)) return patchNodes(n.today ? 'Remove from Next' : 'Add to Next', [id], { today: !n.today, later: n.today ? n.later : undefined });
   const open = leavesOf(nodes, id).filter((l) => l.status !== 'done');
-  if (open.every((l) => l.today)) return unplan([id]); // the whole hierarchy goes, parent included
-  patchNodes('Add to Next', open.map((l) => l.id), { today: true, later: undefined });
+  if (n.today && open.every((l) => l.today)) return unplan([id]); // all of it is in Next: the whole hierarchy goes, parent included
+  addToNext([id]);
+}
+/**
+ * Add to Next (never takes anything out): each item itself and everything open under it (so a parent shows ★ today
+ * too), and nothing in those hierarchies stays deferred (/tomorrow put `later` on the parent and middle levels as well).
+ */
+export function addToNext(ids: string[]) {
+  const nodes = get().nodes;
+  const sub = subtreeIds(nodes, ids);
+  const roots = new Set(ids);
+  const into = new Set(nodes.filter((x) => sub.has(x.id) && (roots.has(x.id) || (x.status !== 'done' && x.status !== 'dropped'))).map((x) => x.id));
+  const touch = nodes.filter((x) => sub.has(x.id) && ((into.has(x.id) && !x.today) || x.later != null)).map((x) => x.id);
+  patchNodes('Add to Next', touch, (x) => (into.has(x.id) ? { today: true, later: undefined } : { later: undefined }));
 }
 /** take items (with everything beneath them) out of Next; they stay in the Organizer */
 export const unplan = (ids: string[]) => {
@@ -343,16 +473,42 @@ export function toggleCardOpen(c: CardM, open: boolean) {
 }
 
 export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `Estimate ${v} min` : 'Clear estimate', ids, { est: v });
+/** keys 1–5: show priorities 1…p (the same one again, or 0, shows everything) */
+/** the title bar's turn filter: everything → what I can act on → what I am waiting for → everything */
+export const cycleTurnFilter = () => set((s) => ({ turnFilter: s.turnFilter === null ? 'me' : s.turnFilter === 'me' ? 'them' : null }));
+export const setPrioFilter = (p: number) => set((s) => ({ prioFilter: p && s.prioFilter !== p ? p : null, prioPick: null }));
+export const openPrioPick = (ids: string[] | undefined, x: number, y: number) => set(() => ({ prioPick: { ids, x, y }, menu: null }));
+export const closePrioPick = () => set(() => ({ prioPick: null }));
+export const openScopePick = (id: string, x: number, y: number) => set(() => ({ scopePick: { id, x, y }, prioPick: null, menu: null }));
+export const closeScopePick = () => set(() => ({ scopePick: null }));
+/** the tick box beside a sub-item: in Next → out (with everything under it); out → in (with everything open under it) */
+export const toggleScope = (id: string) => (get().nodes.find((n) => n.id === id)?.today ? unplan([id]) : addToNext([id]));
+/** Ctrl+1–5: set the quick priority (the same digit again on all of them clears it; 0 clears) */
+export function setPrio(ids: string[], p: number) {
+  const nodes = get().nodes.filter((n) => ids.includes(n.id));
+  if (!nodes.length) return;
+  const v = p && nodes.every((n) => n.prio === p) ? undefined : p || undefined;
+  patchNodes(v ? `Priority ${v}` : 'Clear priority', ids, { prio: v });
+}
 export const cycleEst = (ids: string[], dir: 1 | -1) => patchNodes('Estimate', ids, (n) => ({ est: stepEst(n.est, dir) }));
 export const setDue = (ids: string[], days: number | null) =>
   patchNodes(days == null ? 'Clear due date' : 'Set due date', ids, { due: days == null ? undefined : isoDay(days) });
 /** due on a specific day (yyyy-mm-dd), from the date picker */
 export const setDueOn = (ids: string[], iso: string) => patchNodes('Set due date', ids, { due: iso });
+/** /tomorrow, /reschedule: the whole subtree leaves Next (the parent too, so it does not linger as a header);
+ *  what was in Next — or, when nothing was, the open leaves — comes back on that day (rollDay) */
 export function deferTo(ids: string[], days: number) {
   const nodes = get().nodes;
-  const all = new Set<string>();
-  ids.forEach((id) => leavesOf(nodes, id).forEach((l) => all.add(l.id)));
-  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, [...all], { today: false, later: days });
+  const all = subtreeIds(nodes, ids);
+  const open = (n: Node) => n.status !== 'done' && n.status !== 'dropped';
+  const back = new Set<string>();
+  for (const id of ids) {
+    const ids = subtree(nodes, id);
+    const sub = nodes.filter((n) => ids.has(n.id));
+    const inNext = sub.filter((n) => n.today && open(n));
+    (inNext.length ? inNext : leavesOf(nodes, id).filter(open)).forEach((n) => back.add(n.id));
+  }
+  patchNodes(days === 1 ? 'Move to tomorrow' : `Reschedule +${days}d`, [...all], (n) => (back.has(n.id) ? { today: false, later: days } : { today: false }));
   toast(days === 1 ? 'Moved to tomorrow' : `Rescheduled to ${days} days from now`, 'good');
 }
 export const abandon = (ids: string[]) => {
@@ -421,13 +577,23 @@ export function indentItems(ids: string[], rowsOnly = false) {
             break;
           }
         }
+        // a card's top row: the neighbour above is the top row of the item card above (never something inside itself)
+        if (!parent && rows[ri].depth === 0 && card.kind === 'task') {
+          for (let k = cards.indexOf(card) - 1; k >= 0 && cards[k].kind === 'task'; k--) {
+            const above = cards[k].rows[0];
+            if (above?.node && !sel.has(above.id) && !isUnder(nodes, above.id, x.id)) {
+              parent = above.node;
+              break;
+            }
+          }
+        }
       } else {
         const sibs = nodes.filter((n) => n.parentId === x.parentId);
         let i = sibs.findIndex((n) => n.id === x.id) - 1;
         while (i >= 0 && (sel.has(sibs[i].id) || (rowsOnly && !sibs[i].today))) i--;
         parent = sibs[i];
       }
-      if (!parent) continue;
+      if (!parent || isUnder(nodes, parent.id, x.id)) continue;
       nodes = openIt(relocate(nodes, x.id, parent.id, { end: true }), parent.id);
       moved++;
     }
@@ -631,19 +797,31 @@ const ownerOfNode = (n: Node) => n.parentId ?? ROOT;
 /** is this item a sub-item of a Next row (it nests under it unless pulled out)? */
 const nestsInNext = (nodes: Node[], n: Node) => !!n.parentId && !!nodes.find((p) => p.id === n.parentId)?.today;
 
-/** drop a row next to a top-level row of a card of the same group (a sub-item lands in its parent's pulled card) */
-export function dropRowInSeg(id: string, targetRowId: string, pos: 'before' | 'after') {
-  commit('Move action', (s) => {
-    if (id === targetRowId || id.startsWith(FX)) return null;
+/**
+ * drop a row onto another row in Next: before / after it (as its sibling) or into it (as its last child).
+ * Any item can go anywhere but into itself, the same as in the Organizer; it stays in Next where it lands.
+ */
+export function dropOnRow(id: string, targetId: string, pos: 'before' | 'after' | 'into', segKey: string | null) {
+  commit('Move', (s) => {
     const n = s.nodes.find((x) => x.id === id);
-    const plan = planOf(s);
-    const ti = segOf(plan, targetRowId);
-    if (!n || ti < 0 || plan[ti].owner !== ownerOfNode(n)) return null;
-    const out = plan.map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
-    const items = out[ti].items;
-    items.splice(items.indexOf(targetRowId) + (pos === 'after' ? 1 : 0), 0, id);
-    if (nestsInNext(s.nodes, n)) out[ti] = { ...out[ti], pulled: true };
-    return { plan: out, nsel: { card: out[ti].id, row: id } };
+    const t = s.nodes.find((x) => x.id === targetId);
+    if (!n || !t || isUnder(s.nodes, targetId, id)) return null;
+    const parentId = pos === 'into' ? t.id : t.parentId;
+    let nodes = relocate(s.nodes, id, parentId, pos === 'into' ? { end: true } : pos === 'before' ? { before: t.id } : { after: t.id });
+    nodes = openIt(nodes, parentId).map((x) => (x.id === id && !x.today ? { ...x, today: true, later: undefined } : x));
+    let plan = planOf(s).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
+    // a row directly under its card's item (not nested under another Next row): put it where it was dropped
+    const owner = parentId ?? ROOT;
+    if (!(parentId && nodes.find((x) => x.id === parentId)?.today)) {
+      const ti = pos === 'into' ? plan.findIndex((sg) => sg.id === segKey && sg.owner === owner) : plan.findIndex((sg) => sg.owner === owner && sg.items.includes(t.id));
+      if (ti >= 0) {
+        const items = [...plan[ti].items];
+        items.splice(pos === 'into' ? items.length : items.indexOf(t.id) + (pos === 'after' ? 1 : 0), 0, id);
+        plan = withItems(plan, ti, items);
+      }
+    }
+    plan = reconcilePlan(plan, nodes, s.meetings);
+    return { nodes, plan, nsel: { card: null, row: id }, multi: [] };
   });
 }
 
@@ -665,24 +843,6 @@ export function dropRowSplit(id: string, targetSegId: string, pos: 'before' | 'a
     out.splice(pos === 'before' ? ti : ti + 1, 0, ns);
     return { plan: out, nsel: { card: ns.id, row: id } };
   });
-}
-
-/**
- * a sub-item dropped back into its group: onto its parent ('into') or beside a sibling nested under it.
- * It leaves any pulled card (the split closes) and, beside a sibling, takes that place in the tree.
- */
-export function dropSubItem(id: string, targetId: string, pos: 'before' | 'after' | 'into') {
-  const was = segOf(planOf(get()), id) >= 0;
-  const done = commit(was ? 'Consolidate' : 'Reorder', (s) => {
-    const n = s.nodes.find((x) => x.id === id);
-    const t = s.nodes.find((x) => x.id === targetId);
-    if (!n || !t || id === targetId) return null;
-    if ((pos === 'into' ? t.id : t.parentId) !== n.parentId) return null; // only within its own group
-    const plan = planOf(s).map((sg) => ({ ...sg, items: sg.items.filter((x) => x !== id) }));
-    const nodes = pos === 'into' ? openIt(s.nodes, t.id) : relocate(s.nodes, id, n.parentId, pos === 'before' ? { before: t.id } : { after: t.id });
-    return { nodes, plan, nsel: { card: s.nsel.card, row: id } };
-  });
-  if (done && was) toast('Back in its group', 'good');
 }
 
 export function dropCard(key: string, targetKey: string | null, pos: 'before' | 'after') {
@@ -737,6 +897,33 @@ export function openAllNext(open: boolean) {
     meetings: st.meetings.map((m) => ((m.open !== false) !== open ? { ...m, open } : m)),
     expanded: open ? st.expanded : {},
   }));
+}
+/**
+ * One level of folding under the given items (+ expands the shallowest closed level that shows, − closes the deepest open one).
+ * Returns the ids to flip, so an unbalanced set of items moves its longest branch first.
+ */
+export function foldStep(nodes: Node[], isOpen: (n: Node) => boolean, roots: string[], open: boolean): string[] {
+  const hasKids = new Set(nodes.map((n) => n.parentId).filter((p): p is string => !!p));
+  const found: { id: string; d: number }[] = [];
+  const walk = (n: Node, d: number) => {
+    if (!hasKids.has(n.id)) return;
+    const o = isOpen(n);
+    if (o !== open) found.push({ id: n.id, d });
+    if (o) for (const c of nodes) if (c.parentId === n.id) walk(c, d + 1);
+  };
+  for (const r of roots) {
+    const n = nodes.find((x) => x.id === r);
+    if (n) walk(n, 0);
+  }
+  if (!found.length) return [];
+  const at = open ? Math.min(...found.map((f) => f.d)) : Math.max(...found.map((f) => f.d));
+  return found.filter((f) => f.d === at).map((f) => f.id);
+}
+/** Organizer: one fold level under the given items */
+export function openStepTree(roots: string[], open: boolean) {
+  const s = get();
+  const ids = new Set(foldStep(s.nodes, (n) => !!n.open, roots, open));
+  if (ids.size) set((st) => ({ nodes: st.nodes.map((n) => (ids.has(n.id) ? { ...n, open } : n)) }));
 }
 /** Organizer: every item with children */
 export function openAllTree(open: boolean) {
@@ -1143,6 +1330,39 @@ export const closeSettings = () => {
   focusArea();
 };
 /** a plain UI-state change, for the views that edit settings directly (also callable from a popup window) */
+/* ---------- edit as markdown (⌘E, see mdedit.ts) ---------- */
+/** open the editor on the items picked together (several selected: those with their sub-items), or, with one or none selected or `all`, on everything the view shows (Next: its rows; Organizer: the tree) */
+export function openMdEdit(all = false) {
+  const s = get();
+  if (s.tab === 'inbox') return;
+  const picked = s.multi.filter((id) => s.nodes.some((n) => n.id === id));
+  const selection = !all && picked.length > 1;
+  const ids = scopeFor(s.nodes, selection ? 'selection' : s.tab === 'next' ? 'next' : 'tree', picked);
+  set(() => ({ mdEdit: { ids, today: s.tab === 'next' }, hidden: false, menu: null }));
+}
+export const closeMdEdit = () => {
+  set(() => ({ mdEdit: null }));
+  focusArea();
+};
+/** replace the text of these items by `text`: only what differs is touched, as one undo step */
+export function applyMarkdown(scope: string[], text: string, today = false) {
+  const s = get();
+  const plan = planEdit(s.nodes, scope, text, (id) => isDone(s.nodes, id), today);
+  if (plan.same) {
+    toast('No changes');
+    return closeMdEdit();
+  }
+  commit('Edit as markdown', (st) => {
+    let nodes = plan.nodes;
+    let current = st.current;
+    if (current && plan.removedIds.includes(current.id)) current = null;
+    else if (current && plan.restated.includes(current.id)) (nodes = stopCurrent(nodes, current, Date.now()), (current = null));
+    return { nodes, current, mdEdit: null, multi: [], anchor: null };
+  });
+  const { added, removed, changed, moved } = plan.stats;
+  toast(['Applied', [added && `${added} added`, changed && `${changed} changed`, moved && `${moved} moved`, removed && `${removed} removed`].filter(Boolean).join(', ')].filter(Boolean).join(': '), 'good');
+  focusArea();
+}
 export const patchUi = (p: Partial<State>) => set(() => p);
 export const refreshAi = () => refreshAiKey();
 /** Settings → Accounts: keep the token in the keychain, check it, start tracking */
@@ -1163,6 +1383,41 @@ export async function disconnectPlugin(id: string) {
     toast(`Keychain: ${String(e)}`, 'bad');
   }
 }
+/** Settings → Microsoft: sign in (the browser opens) for the sources set to use the Microsoft app registration; `sources` is what Settings has now */
+export async function microsoftSignIn(client: string, tenant: string, sources: Source[]): Promise<boolean> {
+  try {
+    await grant(client, tenant, sources);
+    toast('Signed in to Microsoft', 'good');
+  } catch (e) {
+    toast(`Microsoft: ${e instanceof Error ? e.message : String(e)}`, 'bad');
+    return false;
+  }
+  sourcesChanged();
+  return true;
+}
+/** Settings → Sources was saved (a source switched on or off, another way to sign in): look at the accounts again and fetch */
+export function sourcesChanged() {
+  void refreshAccounts().then(() => void refreshNow());
+}
+export async function microsoftSignOut() {
+  try {
+    await signOut();
+    toast('Signed out of Microsoft: the sign-in is removed from the keychain', 'info');
+  } catch (e) {
+    toast(`Keychain: ${String(e)}`, 'bad');
+  }
+  await refreshAccounts();
+  for (const p of ['outlook', 'devops']) void refreshNow(p);
+  refreshMail();
+}
+/** Emails: forget how every mail was sorted and sort them again (another model) */
+export function resortMail() {
+  set((s) => ({ mail: resort(s.mail) }));
+  toast('Emails: sorting them all again', 'info');
+  void refreshNow('mail');
+}
+/** Emails: read Outlook again now (the window of days changed) */
+export const refreshMail = () => void refreshNow('mail');
 export const toggleDev = () => set((s) => ({ dev: !s.dev, hidden: false }));
 export const setDemo = (demo: boolean) => set(() => ({ demo }));
 export function loadDemo() {
@@ -1203,7 +1458,7 @@ export function pasteItems(tree: ClipItem[], at: { parentId: string | null; afte
   const tops: Node[] = [];
   const build = (items: ClipItem[], parentId: string | null, top: boolean) =>
     items.forEach((it) => {
-      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo' });
+      const n = mk(parentId, it.title, { today, status: it.done ? 'done' : it.dropped ? 'dropped' : 'todo', ...(it.est ? { est: it.est } : {}), ...(it.due ? { due: it.due } : {}), ...(it.prio ? { prio: it.prio } : {}) });
       made.push(n);
       if (top) tops.push(n);
       build(it.kids, n.id, false);

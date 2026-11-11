@@ -3,16 +3,20 @@
  * stores the snapshots, and turns what changed into highlights and toasts. Only the main window runs it.
  * It never imports the actions: the main window hands it a sink.
  */
-import { get, set, subscribe, today } from '../store';
-import type { State } from '../store';
+import { get, set, subscribe, today, uid } from '../store';
+import type { Node, State } from '../store';
 import { fmt, prLinks, refsOf, setPrHost } from '../model';
 import { PLUGINS, implFor, pluginById } from './registry';
 import { AuthError, pluginOf } from './types';
-import type { AgendaEvent, Alert, Plugin, Snapshot, Tone } from './types';
+import type { AgendaEvent, Alert, Entry, Impl, Plugin, Snapshot, Tone } from './types';
+import { requests } from '../platform';
+import { countRequest } from './requests';
 
 export interface Sink {
   toast(text: string, tone: Tone): void;
   highlight(ids: string[]): void;
+  /** a system notification, for items that asked to be told (`notify`) */
+  notify?(title: string, body: string): void;
 }
 let sink: Sink = { toast() {}, highlight() {} };
 
@@ -31,12 +35,21 @@ export function trackedRefs(s: Pick<State, 'nodes'>): Map<string, string[]> {
 const nodesWith = (s: State, ref: string) => s.nodes.filter((n) => refsOf(n).includes(ref)).map((n) => n.id);
 
 /* ---------- snapshots → changes ---------- */
-/** what is new in `next` compared with `prev`: alerts that were not there, or a different state glyph */
-export function changes(prev: Snapshot, next: Snapshot): { text: string; tone: Tone }[] {
+/**
+ * what is new in `next` compared with `prev`: alerts that were not there, or a different state glyph.
+ * Normally only what wants attention counts (not info alerts, not a move into a passing state such as "building");
+ * with `all` (the item asked to be notified) every change of state does.
+ */
+export function changes(prev: Snapshot, next: Snapshot, all = false): { text: string; tone: Tone }[] {
   if (prev.rev === next.rev) return [];
   const fresh = next.alerts.filter((a: Alert) => a.tone !== 'info' && !prev.alerts.some((p) => p.key === a.key));
   if (fresh.length) return fresh.map((a) => ({ text: a.toast ?? `${next.name}: ${a.text}`, tone: a.tone }));
-  if (prev.view.glyph !== next.view.glyph) return [{ text: `${next.name}: ${next.view.label}`, tone: next.view.tone }];
+  if (prev.view.glyph !== next.view.glyph && (all || !next.view.quiet)) return [{ text: `${next.name}: ${next.view.label}`, tone: next.view.tone }];
+  if (prev.view.turn !== 'me' && next.view.turn === 'me' && !next.view.quiet) return [{ text: `${next.name}: your move`, tone: 'info' }];
+  if (all) {
+    const info = next.alerts.filter((a) => !prev.alerts.some((p) => p.key === a.key));
+    if (info.length) return info.map((a) => ({ text: `${next.name}: ${a.text}`, tone: a.tone }));
+  }
   return [];
 }
 
@@ -60,8 +73,46 @@ function describeBareLinks(snaps: Snapshot[]) {
   if (ids.size) set(() => ({ nodes }));
 }
 
+/**
+ * What a source reports as outstanding inside a tracked item (a failing check, an unresolved review thread) is kept
+ * as sub-items of that item, one per detail, marked with `origin`. A new one is added (and highlighted); one that is
+ * no longer reported is checked off (and highlighted). Sub-items the user deleted come back only if reported anew.
+ */
+export function syncDetails(snaps: Snapshot[]) {
+  let nodes = get().nodes;
+  const touched: string[] = [];
+  const now = Date.now();
+  for (const sn of snaps) {
+    if (!sn.details || sn.gone) continue;
+    const parents = nodes.filter((n) => !n.origin && n.status !== 'done' && n.status !== 'dropped' && refsOf(n).includes(sn.ref));
+    for (const p of parents) {
+      const kids = nodes.filter((n) => n.parentId === p.id && n.origin?.startsWith(sn.ref + '|'));
+      const want = new Set(sn.details.map((d) => `${sn.ref}|${d.key}`));
+      const add: Node[] = sn.details
+        .filter((d) => !kids.some((k) => k.origin === `${sn.ref}|${d.key}`))
+        .map((d) => ({ id: uid(), parentId: p.id, title: d.url ? `${d.text}\n${d.url}` : d.text, status: 'todo', today: p.today, open: true, created: now, modified: now, origin: `${sn.ref}|${d.key}` }));
+      const close = new Set(kids.filter((k) => !want.has(k.origin!) && k.status !== 'done' && k.status !== 'dropped').map((k) => k.id));
+      if (close.size) nodes = nodes.map((n) => (close.has(n.id) ? { ...n, status: 'done', modified: now } : n));
+      if (add.length) {
+        // after the item's last descendant, so they read in the order reported
+        const sub = new Set([p.id]);
+        let at = nodes.findIndex((n) => n.id === p.id);
+        nodes.forEach((n, i) => {
+          if (n.parentId && sub.has(n.parentId)) (sub.add(n.id), (at = i));
+        });
+        nodes = [...nodes.slice(0, at + 1), ...add, ...nodes.slice(at + 1)];
+      }
+      touched.push(...add.map((n) => n.id), ...close);
+    }
+  }
+  if (!touched.length) return;
+  set(() => ({ nodes }));
+  sink.highlight(touched);
+}
+
 export function applySnapshots(snaps: Snapshot[]) {
   describeBareLinks(snaps);
+  syncDetails(snaps);
   const s = get();
   const next = { ...s.snaps };
   const hl: string[] = [];
@@ -73,9 +124,13 @@ export function applySnapshots(snaps: Snapshot[]) {
     changed = true;
     if (sn.gone && !prev?.gone) sink.toast(sn.alerts[0]?.toast ?? sn.alerts[0]?.text ?? `${sn.name}: not found`, 'warn');
     if (!prev) continue; // the first time we hear of it is not a change
-    const ch = changes(prev, sn);
-    if (ch.length) hl.push(...nodesWith(s, sn.ref));
+    const ids = nodesWith(s, sn.ref);
+    const watched = s.nodes.some((n) => n.notify && ids.includes(n.id));
+    const ch = changes(prev, sn, watched);
+    if (ch.length) hl.push(...ids);
     ch.forEach((c) => sink.toast(c.text, c.tone));
+    // asked to be told: also a system notification, unless yatai is in front of you
+    if (watched && ch.length && (s.hidden || typeof document === 'undefined' || document.hidden || !document.hasFocus())) sink.notify?.(sn.name, ch.map((c) => c.text).join('\n'));
   }
   if (changed) set(() => ({ snaps: next }));
   if (hl.length) sink.highlight(hl);
@@ -114,7 +169,27 @@ export function applyAgenda(plugin: string, events: AgendaEvent[], first: boolea
   if (hl.length) sink.highlight(hl);
 }
 
+/**
+ * New things to act on: an entry of a list whose move is mine (a PR to review, an answer owed) or a meeting today, that
+ * the list did not have last time. The first look at a list only learns what is there. What is new is toasted once and
+ * kept in `fresh` (a dot on the source's button and on the row) until that source's drawer has been opened and closed.
+ */
+export function noteNew(p: Plugin, listId: string, entries: Entry[]) {
+  const s = get();
+  const key = `${p.id}/${listId}`;
+  const now = entries.map((e) => e.ref);
+  const before = s.seen[key];
+  const mine = (e: Entry) => e.snap?.view.turn === 'me' || (!!e.meeting && e.meeting.day === today());
+  const fresh = before ? entries.filter((e) => mine(e) && !before.includes(e.ref) && !s.fresh[e.ref]) : [];
+  if (before && before.length === now.length && before.every((r, i) => r === now[i]) && !fresh.length) return;
+  set(() => ({ seen: { ...get().seen, [key]: now }, ...(fresh.length ? { fresh: { ...get().fresh, ...Object.fromEntries(fresh.map((e) => [e.ref, true as const])) } } : {}) }));
+  if (!fresh.length) return;
+  const name = (e: Entry) => e.label ?? e.snap?.name ?? e.title;
+  sink.toast(fresh.length === 1 ? `${p.name}: new for you — ${name(fresh[0])} ${fresh[0].meeting ? '' : fresh[0].title}`.trim() : `${p.name}: ${fresh.length} new for you — ${fresh.slice(0, 3).map(name).join(' · ')}${fresh.length > 3 ? ' …' : ''}`, 'info');
+}
+
 /* ---------- the loop ---------- */
+const watchedAt = new Map<string, number>();
 const nextAt = new Map<string, number>();
 const running = new Map<string, Promise<void>>();
 const lastError = new Map<string, string>();
@@ -129,11 +204,13 @@ const oneError = (id: string, e: unknown) => {
 
 async function runPlugin(p: Plugin) {
   const s = get();
-  const impl = implFor(p, s);
-  if (!impl) return;
+  const base = implFor(p, s);
+  if (!base) return;
+  const impl = counted(p, base);
   const refs = trackedRefs(s).get(p.id) ?? [];
   const drawer = s.drawer?.kind === p.id ? s.drawer : null;
   try {
+    if (impl.poll) for (const n of await impl.poll()) sink.toast(n.text, n.tone);
     if (impl.fetch && refs.length) applySnapshots(await impl.fetch(refs));
     if (impl.agenda) {
       // today's, and the days of meetings brought in ahead (to prepare), so a move there is noticed too
@@ -148,12 +225,25 @@ async function runPlugin(p: Plugin) {
       try {
         const entries = await impl.list(drawer.tab);
         set((st) => ({ lists: { ...st.lists, [key]: { entries, at: Date.now() } } }));
+        noteNew(p, drawer.tab, entries);
       } catch (e) {
         if (e instanceof AuthError) {
           set((st) => ({ lists: { ...st.lists, [key]: { ...st.lists[key], entries: st.lists[key]?.entries ?? [], at: st.lists[key]?.at ?? 0, loading: false } } }));
           throw e;
         }
         set((st) => ({ lists: { ...st.lists, [key]: { entries: st.lists[key]?.entries ?? [], at: Date.now(), error: e instanceof Error ? e.message : String(e) } } }));
+      }
+    }
+    // lists watched in the background: new things to act on are noticed with the drawer closed (not more than every 5 min, except the calendar)
+    if (impl.list) {
+      for (const id of p.watch ?? []) {
+        if (drawer?.tab === id) continue;
+        const k = `${p.id}/${id}`;
+        if (Date.now() - (watchedAt.get(k) ?? 0) < (p.id === 'github' ? 5 * 60_000 : 0)) continue;
+        watchedAt.set(k, Date.now());
+        const entries = await impl.list(id);
+        set((st) => ({ lists: { ...st.lists, [k]: { entries, at: Date.now() } } }));
+        noteNew(p, id, entries);
       }
     }
     lastError.delete(p.id);
@@ -165,6 +255,43 @@ async function runPlugin(p: Plugin) {
       oneError(p.id, e);
     }
   }
+}
+
+/** the mocks make no requests: count each of their calls as one, so the numbers mean something in the demo too */
+const counted = (p: Plugin, impl: Impl): Impl =>
+  impl !== p.mock
+    ? impl
+    : {
+        ...impl,
+        fetch: impl.fetch && ((refs, o) => (countRequest(p.id), impl.fetch!(refs, o))),
+        list: impl.list && ((id) => (countRequest(p.id), impl.list!(id))),
+        agenda: impl.agenda && ((d) => (countRequest(p.id), impl.agenda!(d))),
+        poll: impl.poll && (() => (countRequest(p.id), impl.poll!())),
+      };
+
+/** look at these refs right now, whether or not their items are in Next (the item menu's Refresh) */
+export async function refreshRefs(refs: string[]): Promise<Snapshot[]> {
+  const by = new Map<string, string[]>();
+  for (const r of refs) by.set(pluginOf(r), [...(by.get(pluginOf(r)) ?? []), r]);
+  const out: Snapshot[] = [];
+  await Promise.all(
+    [...by].map(async ([id, rs]) => {
+      const p = pluginById(id);
+      const base = p && implFor(p, get());
+      if (!p || !base?.fetch) return;
+      const impl = counted(p, base);
+      try {
+        const snaps = await impl.fetch!(rs, { force: true });
+        applySnapshots(snaps);
+        out.push(...snaps);
+      } catch (e) {
+        if (e instanceof AuthError) set((st) => ({ accounts: { ...st.accounts, [id]: { ...st.accounts[id], state: 'expired' } } }));
+        lastError.delete(id); // asked for: always say why
+        oneError(id, e);
+      }
+    }),
+  );
+  return out;
 }
 
 /** run one cycle for a plugin (or all), now or when it is due */
@@ -229,12 +356,13 @@ export function followHost() {
 /** start the loop in the main window */
 export function startTracker(s: Sink) {
   sink = s;
+  requests.count = countRequest;
   followHost();
   void refreshAccounts().then(() => cycle());
   setInterval(() => void cycle(undefined, false), 10_000);
   // something the plugins depend on changed: look again now
   let key = '';
-  let host = get().settings.githubHost;
+  let host = get().settings.githubHost + '|' + get().settings.devopsOrg;
   let nodes: State['nodes'] | null = null;
   let refs = '';
   const watch = () => {
@@ -245,8 +373,8 @@ export function startTracker(s: Sink) {
     }
     const need = PLUGINS.filter((p) => implFor(p, st)?.agenda && !st.agenda[p.id]).map((p) => p.id).join(',');
     const k = [refs, st.drawer ? `${st.drawer.kind}/${st.drawer.tab}` : '', st.demo, JSON.stringify(st.accounts), need].join('|');
-    if (st.settings.githubHost !== host) {
-      host = st.settings.githubHost;
+    if (st.settings.githubHost + '|' + st.settings.devopsOrg !== host) {
+      host = st.settings.githubHost + '|' + st.settings.devopsOrg;
       void refreshAccounts().then(() => cycle());
     }
     if (k === key) return;

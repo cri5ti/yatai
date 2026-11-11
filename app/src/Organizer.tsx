@@ -4,32 +4,35 @@ import { useView } from './proposal';
 import type { Node } from './store';
 import {
   addNode, breakDown, dismissHl, cycleEst, editText, estimate, focusItem, indentItems, isDone, moveNode, outdentItems, removeNodes, reorderItems, startFirst,
-  fileInboxTo, openAllTree, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleStartItem, toggleToday,
+  fileInboxTo, openAllTree, openStepTree, foldStep, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
-import { childrenOf, depthOf, fmtEst, hlSubtree, laterLabel, plain, relTime } from './model';
+import { childrenOf, depthOf, fmtEst, prioShown, viewKeep, insideOf, laterLabel, plain, relTime } from './model';
 import { InlineEdit } from './Inline';
 import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
-import { Chips, DueChip } from './Chips';
+import { Chips, Dots, DueChip, Prio, RemindChip } from './Chips';
 import { useFlip } from './flip';
-import { cx, focusArea, isEditable, mod } from './kbd';
+import { useDragEnd } from './drag';
+import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
 
 interface RowItem {
   n: Node;
   depth: number;
   kids: boolean;
 }
-function visibleRows(nodes: Node[]): RowItem[] {
+/** keep: the priority filter (only these, everything unfolded) */
+function visibleRows(nodes: Node[], isOpen: (n: Node) => boolean, keep?: Set<string>, root: string | null = null): RowItem[] {
   const out: RowItem[] = [];
   const walk = (pid: string | null, d: number) => {
     for (const n of childrenOf(nodes, pid)) {
-      const kids = nodes.some((c) => c.parentId === n.id);
+      if (keep && !keep.has(n.id)) continue;
+      const kids = nodes.some((c) => c.parentId === n.id && (!keep || keep.has(c.id)));
       out.push({ n, depth: d, kids });
-      if (n.open && kids) walk(n.id, d + 1);
+      if ((isOpen(n) || keep) && kids) walk(n.id, d + 1);
     }
   };
-  walk(null, 0);
+  walk(root, 0);
   return out;
 }
 
@@ -37,15 +40,30 @@ type Hint = { id: string; zone: 'before' | 'inside' | 'after' };
 export const INBOX_MIME = 'application/x-yatai-inbox';
 const TABLE_AT = 880; // px: below this the organizer is a list, above it the same rows grow columns
 
-/** Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room). */
-export function Organizer({ embedded = false }: { embedded?: boolean }) {
+/**
+ * Everything, as one tree of items — the same rows as Next, but all of them (and a table when there is room).
+ * `root`: only what is under that item (a sub-view, e.g. in the list opened from a row of Next).
+ * `checks`: a tick box on every row for being in Next — ticking brings the item in with what is under it, unticking takes it out.
+ */
+export function Organizer({ embedded = false, root: top = null, checks = false }: { embedded?: boolean; root?: string | null; checks?: boolean }) {
   const { s, marks } = useView();
-  const rows = useMemo(() => visibleRows(s.nodes), [s.nodes]);
+  // a sub-view keeps its own folds (it starts folded to the first level), so the lists around it stay as they are
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const isOpen = (n: Node) => (top ? opened.has(n.id) : !!n.open);
+  const setOpen = (id: string, open: boolean) => (top ? setOpened((o) => (open ? new Set(o).add(id) : new Set([...o].filter((x) => x !== id)))) : toggleOpen(id, open));
+  const openAll = (open: boolean) => {
+    if (!top) return openAllTree(open);
+    const sub = subtree(s.nodes, top);
+    setOpened(new Set(open ? s.nodes.filter((n) => sub.has(n.id) && s.nodes.some((c) => c.parentId === n.id)).map((n) => n.id) : []));
+  };
+  const inside = useMemo(() => insideOf(s.nodes, s.snaps, s.hl), [s.nodes, s.snaps, s.hl]);
+  const rows = useMemo(() => visibleRows(s.nodes, isOpen, viewKeep(s), top), [s.nodes, s.snaps, s.prioFilter, s.turnFilter, top, opened]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  useDragEnd(!!dragId, () => ((dnd.current = null), setDragId(null), setHint(null)));
   const [width, setWidth] = useState(0);
   const wide = width >= TABLE_AT;
   useFlip(area, 'data-fr');
@@ -75,13 +93,18 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [selId, rows.length]);
+  // the priority filter changes the rows around the selection: bring it back into view (after the rows settle)
+  useEffect(() => {
+    const f = requestAnimationFrame(() => area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'center' }));
+    return () => cancelAnimationFrame(f);
+  }, [s.prioFilter, s.turnFilter]);
   // moving the keyboard cursor onto a yellow highlight counts as having seen it
   const lastSel = useRef<string | null>(null);
   useEffect(() => {
     if (lastSel.current !== null && lastSel.current !== selId && selId) {
       const n = s.nodes.find((x) => x.id === selId);
       const kids = s.nodes.some((c) => c.parentId === selId);
-      dismissHl(s.hl[selId] ? [selId] : n && kids && !n.open ? hlSubtree(s.nodes, s.hl, selId) : []);
+      dismissHl(s.hl[selId] ? [selId] : []); // a parent's circles stay until you open it and see which item it was
     }
     lastSel.current = selId;
   }, [selId]);
@@ -111,7 +134,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const insertAbove = (n: Node) => set(() => ({ ins: { kind: 'node', parentId: n.parentId, afterId: null, beforeId: n.id } }));
   const insertChild = (n: Node) => {
     set(() => ({ ins: { kind: 'node', parentId: n.id, afterId: [...s.nodes].reverse().find((c) => c.parentId === n.id)?.id ?? n.id } }));
-    toggleOpen(n.id, true);
+    setOpen(n.id, true);
   };
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -140,9 +163,11 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       // Enter adds below, ⇧Enter adds above, ⌘⇧Enter starts focus mode
       stop();
       if (M && e.shiftKey) return cur && focusItem(cur.id);
-      if (!cur) return set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } }));
+      if (!cur) return set(() => ({ ins: { kind: 'node', parentId: top, afterId: null } }));
       return e.shiftKey ? insertAbove(cur) : insertSibling(cur);
     }
+    // Ctrl+1–5: quick priority · 1–5 (below): show only priorities up to it
+    if (prioKey(e) >= 0) return ids.length ? (stop(), setPrio(ids, prioKey(e))) : undefined;
     if (M && k === ']') return (stop(), indentItems(ids));
     if (M && k === '[') return (stop(), outdentItems(ids));
     if (M && (k === 'ArrowUp' || k === 'ArrowDown')) return (stop(), reorderItems(ids, k === 'ArrowUp' ? -1 : 1));
@@ -163,9 +188,25 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
       stop();
       return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
     }
-    // − / + : collapse / expand everything
-    if (!M && (k === '-' || k === '_')) return (stop(), openAllTree(false));
-    if (!M && (k === '+' || k === '=')) return (stop(), openAllTree(true));
+    // ⌘− / ⌘+ : collapse / expand everything · − / + : one level at a time under the current item(s)
+    if (M && (k === '-' || k === '_')) return (stop(), openAll(false));
+    if (M && (k === '+' || k === '=')) return (stop(), openAll(true));
+    if (!M && (k === '-' || k === '_' || k === '+' || k === '=')) {
+      stop();
+      const open = k === '+' || k === '=';
+      const roots = ids.length ? ids : childrenOf(s.nodes, top).map((n) => n.id);
+      const step = (rs: string[]) => {
+        const flip = foldStep(s.nodes, isOpen, rs, open);
+        if (!top) return openStepTree(rs, open);
+        if (flip.length) setOpened((o) => new Set(open ? [...o, ...flip] : [...o].filter((x) => !flip.includes(x))));
+      };
+      // nothing left to close under a single item: step out to its parent and close that
+      if (!open && !bulk && cur && !foldStep(s.nodes, isOpen, roots, false).length && cur.parentId && cur.parentId !== top && s.nodes.some((n) => n.id === cur.parentId)) {
+        select(cur.parentId);
+        return step([cur.parentId]);
+      }
+      return step(roots);
+    }
     if (M || (e.shiftKey && k !== 'N')) return;
 
     if (k === 'ArrowDown' || k === 'ArrowUp') {
@@ -174,17 +215,18 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
     } else if (k === 'ArrowRight' && cur) {
       stop();
       const kids = childrenOf(s.nodes, cur.id);
-      if (kids.length && !cur.open) toggleOpen(cur.id, true);
+      if (kids.length && !isOpen(cur)) setOpen(cur.id, true);
       else if (kids.length) select(kids[0].id);
     } else if (k === 'ArrowLeft' && cur) {
       stop();
       const kids = childrenOf(s.nodes, cur.id);
-      if (kids.length && cur.open) toggleOpen(cur.id, false);
+      if (kids.length && isOpen(cur)) setOpen(cur.id, false);
       else if (cur.parentId && s.nodes.some((n) => n.id === cur.parentId)) select(cur.parentId);
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
     else if (k === 'Escape' && bulk) (stop(), set(() => ({ multi: [], anchor: null })));
-    else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: null, afterId: null } })));
+    else if (/^[0-5]$/.test(k)) (stop(), setPrioFilter(+k));
+    else if (k === 'N') (stop(), set(() => ({ ins: { kind: 'node', parentId: top, afterId: null } })));
     else if (k === '/') {
       stop();
       openMenu(bulk ? { t: 'multi', ids: live } : cur ? { t: 'node', id: cur.id } : null, undefined, undefined, { slash: true });
@@ -233,7 +275,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
   const ins = s.ins?.kind === 'node' ? s.ins : null;
   const list: ({ row: RowItem } | { draft: true; depth: number })[] = rows.map((row) => ({ row }));
   if (ins) {
-    const depth = ins.parentId ? depthOf(s.nodes, ins.parentId) + 1 : 0;
+    const depth = (ins.parentId ? depthOf(s.nodes, ins.parentId) + 1 : 0) - (top ? depthOf(s.nodes, top) + 1 : 0);
     const bi = ins.beforeId ? rows.findIndex((r) => r.n.id === ins.beforeId) : -1;
     const ai = ins.afterId ? rows.findIndex((r) => r.n.id === ins.afterId) : -1;
     let at = rows.length;
@@ -276,6 +318,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           <span className="c-m">Modified</span>
           <span className="c-m">Last run</span>
           <span className="c-m">Next</span>
+          <span className="c-p" />
         </div>
       )}
 
@@ -309,14 +352,14 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           if (isExt(e) && !e.defaultPrevented) {
             e.preventDefault();
             setHint(null);
-            return fileInboxTo(extIds(e), null, null); // empty space: top level
+            return fileInboxTo(extIds(e), top, null); // empty space: top level
           }
           if (!dnd.current || e.defaultPrevented) return;
           e.preventDefault();
           const src = dnd.current;
           dnd.current = null;
           setHint(null);
-          moveNode(src, null, null); // dropped on empty space: becomes a top-level item
+          moveNode(src, top, null); // dropped on empty space: becomes a top-level item (a child of the root, in a sub-view)
         }}
       >
         {list.map((it) => {
@@ -326,13 +369,14 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
           const picked = multi.has(n.id);
           const editing = s.edit === n.id;
           const isRun = running === n.id;
-          const hlIds = s.hl[n.id] ? [n.id] : kids && !n.open ? hlSubtree(s.nodes, s.hl, n.id) : [];
+          const hlIds = s.hl[n.id] ? [n.id] : [];
+          const inner = kids && !isOpen(n) ? inside.get(n.id) : undefined;
           const done = isDone(s.nodes, n.id);
           const h = hint?.id === n.id ? hint.zone : null;
           const pm = marks?.[n.id];
           const pk = (k: string) => pm?.kind === 'change' && k in pm.prev;
           // a proposed change hidden under a collapsed parent shows on the parent
-          const propHidden = !!marks && kids && !n.open && [...subtree(s.nodes, n.id)].some((id) => id !== n.id && marks[id]);
+          const propHidden = !!marks && kids && !isOpen(n) && [...subtree(s.nodes, n.id)].some((id) => id !== n.id && marks[id]);
           return (
             <div
               key={n.id}
@@ -389,8 +433,8 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
               }}
             >
               {kids ? (
-                <button className="rchev" tabIndex={-1} aria-label={n.open ? 'Collapse' : 'Expand'} onClick={(e) => (e.stopPropagation(), toggleOpen(n.id, !n.open))}>
-                  {n.open ? '▾' : '▸'}
+                <button className="rchev" tabIndex={-1} aria-label={isOpen(n) ? 'Collapse' : 'Expand'} onClick={(e) => (e.stopPropagation(), setOpen(n.id, !isOpen(n)))}>
+                  {isOpen(n) ? '▾' : '▸'}
                 </button>
               ) : null}
               <button className={cx('check', kids && 'sq', done && 'on')} tabIndex={-1} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={(e) => (e.stopPropagation(), toggleDoneNodes([n.id]))}>
@@ -410,6 +454,7 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                     {n.title.includes('\n') && <span className="mini">⋯</span>}
                     <Chips node={n} />
                     {!wide && <DueChip node={n} />}
+                    <RemindChip node={n} />
                   </span>
                   {isRun && <span className="pulse-dot" title="Running" />}
                   {wide ? (
@@ -422,9 +467,31 @@ export function Organizer({ embedded = false }: { embedded?: boolean }) {
                     </>
                   ) : (
                     <>
-                      {n.today && <span className="todaydot" title="In Next">★</span>}
+                      {n.today && !checks && <span className="todaydot" title="In Next">★</span>}
                       {n.est && <span className={cx('est', pk('est') && 'pk')}>{fmtEst(n.est)}</span>}
                     </>
+                  )}
+                  {wide ? (
+                    <span className="c-p">
+                      <Dots m={inner} />
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                    </span>
+                  ) : (
+                    <>
+                      <Dots m={inner} />
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                    </>
+                  )}
+                  {checks && (
+                    <input
+                      type="checkbox"
+                      className="innext"
+                      tabIndex={-1}
+                      checked={n.today}
+                      title={n.today ? 'In Next — untick to take it out (with what is under it)' : 'Tick to bring it into Next (with what is under it)'}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleScope(n.id)}
+                    />
                   )}
                 </>
               )}

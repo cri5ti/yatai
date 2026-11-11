@@ -59,9 +59,10 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 
 | Drawer | Tabs | Brings in |
 |---|---|---|
-| **Outlook** | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row) |
+| **Calendar** (Outlook) | Today · Tomorrow · Next 5 days | A meeting card (with its fixed calendar row). One line per meeting with its time range. Today has a red now-line: through the meeting in progress, as far as it has got, or between meetings (gaps are not drawn to scale). Past meetings are faded; double bookings get an accent bar and time |
 | **GitHub** | Assigned to me · My PRs · Mentions | An item whose text is the PR link (rendered per §2) |
-| **DevOps** | Mentions · My work items · Created by me | A work-item (smart) item |
+| **Emails** (POC) | Urgent · Today · Eventually · Dismiss (unread counts), Sorting… while the local model works | An item `Subject — ✉ Sender`. Each row: when it came, the subject, the sender and the model's reason; read mail is faded. A new urgent mail toasts and the Emails button shows the urgent count |
+| **DevOps** | two rows. **Builds**: Pending · Running · Recent (today). **Work items**: Assigned to me · Created by me · Following · Mentions | A run link (tracked like a PR), or a work-item (smart) item |
 
 - **Add to Next** (⏎) or, for GitHub and DevOps, **to the Inbox** (I) to triage later. Things already in yatai show "✓ in yatai" and can't be added twice.
 - Keyboard-first like everything else: ↑↓ choose, ←→ switch tab, Esc closes and returns focus to the list.
@@ -70,6 +71,7 @@ External systems are not mirrored wholesale into yatai. Each has a **drawer** �
 
 ## 4. Window: resizable, and views that grow with it
 
+- **Snapping:** let go of a move or resize within 20 px of a screen edge (the free area: no menu bar, taskbar or Dock) and the window goes flush with it. A move shifts the window there; a resize stretches only the edge you dragged. It is worked out in physical pixels on the screen holding the window's centre, so a second monitor with a different display scale lines up too. On Windows the edge that snaps is the visible frame (DWM's extended frame bounds, `visible_frame` in Rust), which can be a pixel off the window rect of a frameless window with a shadow. The remembered place is kept in physical pixels as well, and restored exactly while that screen is connected.
 - **Resize** by dragging any edge or corner (the dock only has its left edge); **move** a floating / maximised window by its title bar. Double-click an edge or the title bar to reset. Each layout remembers its own size.
 - **Views respond to width, not to a mode.** Cards flow into columns, the Organizer grows table columns, and the **Inbox shows the Organizer beside it** once there is room: drag inbox items (several at once) onto a row to file them under it, between rows to file them as siblings, or onto empty space for top level.
 
@@ -81,17 +83,33 @@ Enter adds below, ⇧Enter above (inline editor, chaining), F2 edits, multi-line
 
 ⌘C copies the selected items (or the one under the cursor) as a nested markdown list with their sub-items; ⌘V pastes that format back into the structure, in any view.
 
-    - [ ] Write the spec
+    [ ] Write the spec
       extra title lines are indented
       - [x] A finished sub-item      ([-] = dropped)
+
+    [ ] Estimated and dated @est:1h30m @due:2026-11-12
+
+Top-level items are plain lines with a blank line between them; only sub-items are bullets.
 
 - **Next / Organizer:** pasted below the selected item as siblings (on a card header: into that card). In Next they are also put in Next. One undo removes the whole paste.
 - **Inbox:** one entry per top-level item; its sub-items travel as a bullet list inside the entry.
 - Plain lines and `*` / `+` / `1.` bullets paste too (one item per line).
+- **Metadata** rides at the end of the first line: `@est:` (45m, 1h, 1h30m, 1.5h) and `@due:` (yyyy-mm-dd). #tags are plain text in the title.
 
-## 7. Top-level items have no group
+## 6b. Edit as markdown (⌘E)
 
-Anything can sit at the top level. In Next, top-level items are just rows with no card header (there is no "Items" group), aligned to the left edge. There are no empty "new card" shells either: Enter / ⇧Enter on a card header add the first item *inside* that card, and a new item with nothing to anchor to is a plain top-level row. Indent / outdent therefore always have a neighbour to work with.
+⌘E opens everything the view shows as that same markdown in a real editor (CodeMirror) in its own window; with several items multi-selected it takes only those (with their sub-items), and ⌘⇧E always takes everything: in Next its items with the tasks above them for context, in the Organizer the whole tree. New lines made from Next are put in Next. ⌘⏎ applies, Esc cancels (twice if there are unsaved edits).
+
+Applying is a **diff, not a re-creation**: the text has no ids, so lines are matched to items (identical lines first, then the most similar line in each gap, then identical titles anywhere, so a moved item keeps its identity). Untouched items stay exactly as they were; a changed one gets only the changed fields; only new lines create items and only vanished lines delete them (with whatever hangs below them, seen or not). Items outside the text keep their place among their siblings. Whatever the text does not carry (in Next, timers, links, collapsed state…) is kept. The footer shows what will change (changed / added / moved / removed) before you apply, and it is one undo step.
+
+## 7. Item cards have no header: everything is a row
+
+Anything can sit at the top level, and in Next every line of an item card is a row, the same row everywhere. A card is one item with what of it is in Next nested below it. When that item is in Next itself, it is simply the top row. When only some of its children are (picked from the Organizer, or added inside it), it is still the top row: the same check, chevron, editing, keys and dragging. Its path, if it has one, is shown muted in front of its title (`Project › Task`). Only meetings and alert cards carry a header. So there is one kind of top-level line, not two depending on how the item got into Next.
+
+- Each top-level item is its own card (a separator line between them, drag / ⌘↑↓ move it like any card); they are never grouped into one shared card. There are no empty "new card" shells either.
+- **Enter** adds a sibling below the row. On an open item with children (and on a card's top item) it adds the first child instead, like an outliner. A new item with nothing to anchor to is a plain top-level row.
+- Indent / outdent always have a neighbour to work with. ⌘] on a card's top row nests it under the top row of the card above.
+- Implementation: a plan segment's owner that is not itself in Next becomes the card's first row (`Row.head`); its rows are one level deeper. The plan model (segments, splits) is unchanged.
 
 ## 8. Removing things
 
@@ -99,11 +117,12 @@ Anything can sit at the top level. In Next, top-level items are just rows with n
 - **Toggling a parent into / out of Next acts on the whole hierarchy**, parent included.
 - **Indent follows what you see.** ⌘] in Next nests under the row displayed directly above, even after rows were moved around; outdenting keeps the item where it was on screen.
 
-## 9. Splitting sub-items out of their parent
+## 9. Dragging in Next, and splitting sub-items out of their parent
 
-- **Any row can be dragged in Next**, sub-items included. Dropping a sub-item outside its card (before / after another card, or beside its own) gives it a card of its own whose header is its parent — **the parent repeats** there, with the split marker (⑂ 2/2); the parent row stays where it was and simply no longer shows that sub-item.
+- **Any row can be dropped on any row**, as in the Organizer. On its top or bottom edge it goes before / after that row (its sibling); in the middle it goes into it (its last child). Just below an open item it becomes the first child. Never into itself. What is dropped stays in Next.
+- **Between cards** (the gap above / below a card, the empty space at the end): a card's top row moves the whole card. Any other row splits out into a card of its own, whose top row is its parent: **the parent repeats** there, with the split marker (⑂ 2/2). The parent row stays where it was and simply no longer shows that sub-item. On a card's top row that is not in Next itself, the top / bottom edge means before / after that card.
 - **Moving it back consolidates.** Dropping it onto its parent row, or between its siblings nested there, puts it back in the group (and closes the split). `/consolidate` on the pulled card does the same; on the parent's card it also brings back every sub-item pulled out of its rows.
-- Dropping a sub-item between its siblings (nested, same parent) reorders them in the tree.
+- A drag always ends cleanly, even when the drop moved the dragged element to another card (it never gets its own `dragend`): see `drag.ts`.
 - Implementation: a plan segment with `pulled: true` may list sub-items of a Next row; they are then left out when their parent row expands.
 
 ## 10. Collapse / expand all
@@ -127,3 +146,35 @@ Anything can sit at the top level. In Next, top-level items are just rows with n
 ## 12. Picking a date
 
 `/due` → **Pick a date…** (`5`) turns the menu into a calendar in place, no separate dialog. ←→ day, ↑↓ week, PgUp/PgDn (or ⇧↑↓) month, Home today, ⏎ picks, Esc / ⌫ goes back to the list; clicking a day picks it. Typing jumps straight to a date: `fri` (the next one), `+3`, `+2w`, `+1m`, `tom`, `20` (the next 20th), `nov 20`, `20/11` (in the locale's day/month order), `2026-12-01`. It opens on the current due date (marked with a dot); today is outlined.
+
+`/remind` → **Custom…** (`9`) turns the menu's input into a typed time, previewed under it: `20m`, `1h30`, `14:30` or `3pm` (today, or tomorrow once past), any day the date picker knows (`fri`, `next monday`, `nov 20`, `+2d`: at the start of the working day), or a day and a time (`fri 10:00`, `tomorrow 3pm`). ⏎ sets it, Esc / ⌫ goes back.
+
+A yellow highlight on something hidden (its parent row collapsed, its card collapsed, or not in Next itself) shows on the first visible thing above it; hovering that clears it.
+
+## Tray icon
+
+The tray icon says what is going on without opening yatai. It shows the app's purple diamond. On a bright yellow tile when there are changes to look at (any highlight, §1). On an Outlook-blue tile with a white diamond while you are in a meeting (one in Next, or anything on today's calendar); changes win over the meeting. In Next, the meeting in progress has the same blue, muted (and the Outlook drawer's row for it). Drawn in Rust (`tray_image`), coloured, not a template image.
+
+## No guessed states
+
+A link or smart item shows a state only when its source has reported one. Until then nothing is shown, never a default such as "to review" or "queued". When the source is not connected, it shows the "not connected" mark: a muted unplugged plug. When the source cannot see it, the same mark turns amber. The tooltip says which, and where to fix it.
+
+## Scrollbars
+
+The lists (Next, Inbox, Organizer, the drawers) always keep their vertical scrollbar, even when everything fits. A scrollbar that comes and goes changes the width, and every row would re-wrap.
+
+## Display controls
+
+UI scale and row density are behind the **Aa** button at the right of the footer: a small pop-over that Esc or a click elsewhere closes. They are also in Settings → Display. They apply at once (no Save), from either place.
+
+## Popup windows keep their place
+
+Settings, help, the AI chat, the developer panel and the drawers open where you last put them (moved or resized), kept per drawer source: the GitHub, Outlook and DevOps drawers each have their own place. A place that is no longer on any screen is dropped, and the popup goes back beside the main window. Popups you never moved still follow the main window. The drawers carry no title: the tabs (and, for DevOps, the Builds · Work items row) are the header, and dragging it moves the window.
+
+## Outlook: list or schedule
+
+On the Today and Tomorrow tabs a small button in the drawer's header (or V) switches between the list and the day **plotted by the hour**. Working hours (Settings → Outlook, 9:00–18:00 unless set: a published calendar does not carry them) fill 80% of the drawer's height. Earlier or later meetings widen the range by whole hours, and it opens at the start of the working day (today: just before now). Overlapping meetings sit side by side; a double booking has the accent colour; past meetings are faded; today has the red now-line. ↑↓, ⏎ and double-click work as in the list. The choice is remembered. Next 5 days stays a list.
+
+## Whose move it is
+
+Every source reports the same thing about what it tracks: **mine** (I can act on it now: approve, answer, fix, look) or **theirs** (I am waiting for someone or something), or neither. Blue = mine, purple = theirs. A title-bar button filters Next and the Organizer to one of them (with their parents). A collapsed parent shows a tiny blue / purple circle when something inside is so, and a yellow one when something inside changed: the parent is never auto-cleared, you open it and the item itself is yellow until you hover it. New things to act on (a PR that asks for my review, a meeting newly on today's calendar) are noticed in the background (plugins list `watch` lists), toasted once, and shown as a blue dot on the source's button and its drawer row until the drawer has been seen. Details: `view.turn` in the plugin snapshot, `noteNew` in the tracker.

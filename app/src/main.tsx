@@ -4,13 +4,13 @@ import './tokens.css';
 import './styles.css';
 import { Shell } from './Window';
 import { DENSITIES, SCALES, get, set, useS } from './store';
-import { acceptAi, capture, highlight, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
-import { isEditable, mod } from './kbd';
+import { acceptAi, installUpdate, capture, openMdEdit, highlight, fireReminders, closeCapture, openAi, closeAi, openCapture, openSettings, rejectAi, redo, rollDay, setClock, setTab, tickClock, toast, toggleDev, toggleHelp, toggleHidden, undo } from './actions';
+import { isEditable, mod, tabKey } from './kbd';
 import { flush, loadState } from './persist';
 import { refreshAiKey } from './ai';
 import { startPopups } from './popups';
 import { startTracker } from './plugins/tracker';
-import { invoke, isFrontmost, isTauri, listen, openLinksWithModifier, setVisible } from './platform';
+import { invoke, isFrontmost, isTauri, listen, openLinksWithModifier, osNotify, setVisible } from './platform';
 
 function App() {
   const s = useS();
@@ -45,6 +45,9 @@ function App() {
       listen('yatai://hide', () => (set(() => ({ hidden: true })), void flush())),
       listen('yatai://settings', openSettings),
       listen('yatai://dev', toggleDev),
+      listen<string>('yatai://update-ready', (v) => toast(`yatai v${v} is downloaded: Settings → Updates, or the tray menu, to restart into it`, 'good')),
+      listen('yatai://update-install', () => void installUpdate()),
+      listen<string>('yatai://update-msg', (m) => toast(m, 'info')),
       listen<string>('yatai://captured', (text) => {
         if (!text.trim()) return;
         capture(text);
@@ -90,10 +93,9 @@ function App() {
       if (e.altKey && !M && !isTauri) {
         if (k === ' ') return (e.preventDefault(), get().capture ? closeCapture() : openCapture());
         if (k.toLowerCase() === 'y' || k === '¥') return (e.preventDefault(), toggleHidden());
-        const code = e.code.replace('Digit', '');
-        if (['1', '2', '3'].includes(code)) return (e.preventDefault(), setTab(tabs[+code - 1]));
-        return;
+        if (tabKey(e) < 0) return;
       }
+      if (tabKey(e) >= 0) return (e.preventDefault(), setTab(tabs[tabKey(e)]));
       if (M && !e.altKey && get().proposal) {
         // a pending AI proposal: ⌘⏎ accepts, ⌘⌫ rejects (but ⌘⌫ still edits a text field that has text)
         const t = e.target as HTMLInputElement | null;
@@ -101,10 +103,11 @@ function App() {
         if (k === 'Backspace' && !(isEditable(t) && t?.value)) return (e.preventDefault(), e.stopPropagation(), rejectAi());
       }
       if (M && !e.altKey) {
-        if (['1', '2', '3'].includes(k)) return (e.preventDefault(), setTab(tabs[+k - 1]));
         if (k === ',') return (e.preventDefault(), openSettings());
         if (e.shiftKey && k.toLowerCase() === 'd') return (e.preventDefault(), toggleDev());
         if (k === '/') return (e.preventDefault(), get().ai ? closeAi() : openAi(contextId()));
+        if (k.toLowerCase() === 'e' && !e.shiftKey && !isEditable(e.target)) return (e.preventDefault(), openMdEdit());
+        if (k.toLowerCase() === 'e' && e.shiftKey && !isEditable(e.target)) return (e.preventDefault(), openMdEdit(true));
         if (isEditable(e.target)) return; // let text fields keep their own undo
         if (k.toLowerCase() === 'z') return (e.preventDefault(), e.shiftKey ? redo() : undo());
         if (k.toLowerCase() === 'y') return (e.preventDefault(), redo());
@@ -144,7 +147,11 @@ async function boot() {
   void refreshAiKey();
   startPopups();
   openLinksWithModifier();
-  startTracker({ toast, highlight });
+  startTracker({ toast, highlight, notify: (t, b) => void osNotify(t, b) });
+  // reminders: now (one may have come while yatai was closed), then every 10 s
+  const remind = () => fireReminders(Date.now(), (t, b) => void osNotify(t, b));
+  remind();
+  setInterval(remind, 10_000);
   if (isTauri)
     void invoke<string[]>('shortcuts_taken').then((t) => t.length && toast(`${t.join(' and ')} ${t.length > 1 ? 'are' : 'is'} used by another app — use the tray icon instead`, 'warn'));
   createRoot(document.getElementById('root')!).render(

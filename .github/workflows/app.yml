@@ -1,0 +1,72 @@
+name: app
+
+# Pull requests: type-check, build, test. Pushes to main (that touch the app): the same, then a signed
+# Windows installer is published as a GitHub Release, which installed copies pick up (src-tauri/src/updater.rs).
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/app.yml']
+  pull_request:
+    paths: ['app/**', '.github/workflows/app.yml']
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+
+      # the toolchain is pinned in src-tauri/rust-toolchain.toml; rustup installs it on first use
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Type-check and build the UI
+        run: bun run build
+
+      - name: Check and test the Rust side
+        working-directory: app/src-tauri
+        run: |
+          cargo check --locked
+          cargo test --locked
+
+      # every push to main is a new version: <major>.<minor> from tauri.conf.json, patch = the run number
+      - name: Version
+        id: ver
+        if: github.event_name == 'push'
+        run: |
+          base=$(jq -r .version src-tauri/tauri.conf.json | cut -d. -f1-2)
+          v="$base.${{ github.run_number }}"
+          jq --arg v "$v" '.version = $v' src-tauri/tauri.conf.json > tauri.conf.tmp
+          mv tauri.conf.tmp src-tauri/tauri.conf.json
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build the installer and publish the release
+        if: github.event_name == 'push'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: app
+          args: --bundles nsis
+          tagName: v${{ steps.ver.outputs.v }}
+          releaseName: yatai v${{ steps.ver.outputs.v }}
+          releaseBody: ${{ github.event.head_commit.message }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true

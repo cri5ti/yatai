@@ -3,6 +3,8 @@
  * The rest of the UI only talks to this module, so it runs in both.
  */
 import type { Layout } from './store';
+import type { Session as ClaudeSession } from './plugins/claude/map';
+import type { Session as CopilotSession } from './plugins/copilot/map';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** macOS resizes frameless windows natively (and has no resize-drag API); elsewhere the edges are ours */
@@ -32,10 +34,12 @@ export async function emitTo(target: string, event: string, payload?: unknown) {
 
 /* ---------- the main window ---------- */
 export type Rect = { x: number; y: number; w: number; h: number };
+/** a remembered window rect: logical, and (newer) the physical position + inner size it was taken from */
+export type SavedRect = Rect & { p?: Rect };
 const PILL = { w: 360, h: 84, ended: 330 };
 const DEFAULT = { dock: 372, float: { w: 560, h: 660 } };
 /** physical → logical, and the area the OS leaves free for windows (no menu bar / taskbar / dock) */
-async function workArea() {
+export async function workArea() {
   const { currentMonitor, primaryMonitor } = await import('@tauri-apps/api/window');
   const m = (await currentMonitor()) ?? (await primaryMonitor());
   if (!m) return { x: 0, y: 0, w: 1440, h: 900 };
@@ -52,15 +56,17 @@ export const isApplying = () => applying > 0;
  * Put the OS window where a layout says: dock = right edge, full height · float = medium, top right ·
  * max = large · pill = small, always on top. A saved rect (the user moved / resized it) wins.
  */
-export async function applyLayout(layout: Layout, saved: Partial<Record<string, Rect>>, ended: boolean) {
+export async function applyLayout(layout: Layout, saved: Partial<Record<string, SavedRect>>, ended: boolean, onTop = false) {
   if (!isTauri) return;
   const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window');
   const w = getCurrentWindow();
   const wa = await workArea();
   let r: Rect;
+  // (older versions saved only the dock's width, with x = y = 0)
+  const d = saved.dock && (saved.dock.x !== 0 || saved.dock.y !== 0) ? saved.dock : null;
   if (layout === 'dock') {
     const width = Math.min(saved.dock?.w ?? DEFAULT.dock, wa.w);
-    r = { x: wa.x + wa.w - width, y: wa.y, w: width, h: wa.h };
+    r = d ? fit(d, wa) : { x: wa.x + wa.w - width, y: wa.y, w: width, h: wa.h };
   } else if (layout === 'pill') {
     const h = ended ? PILL.ended : PILL.h;
     r = { x: wa.x + wa.w - PILL.w - 24, y: wa.y + 24, w: PILL.w, h };
@@ -72,17 +78,126 @@ export async function applyLayout(layout: Layout, saved: Partial<Record<string, 
   } else {
     r = { x: wa.x + 28, y: wa.y + 24, w: wa.w - 56, h: wa.h - 48 };
   }
+  // a rect remembered in physical px goes back exactly, as long as it is still on a connected screen (logical px of a
+  // second monitor with another scale factor do not convert back to the same place)
+  const keep = layout !== 'pill' ? saved[layout === 'dock' ? 'dock' : layout] : undefined;
+  const phys = keep?.p && (layout !== 'dock' || d) && (await onSomeScreen(keep.p)) ? keep.p : null;
   applying++;
   try {
-    await w.setAlwaysOnTop(layout === 'pill');
+    await w.setAlwaysOnTop(layout === 'pill' || onTop);
     await w.setResizable(layout !== 'pill');
-    await w.setSize(new LogicalSize(r.w, r.h));
-    await w.setPosition(new LogicalPosition(r.x, r.y));
+    if (phys) {
+      const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
+      await w.setSize(new PhysicalSize(phys.w, phys.h));
+      await w.setPosition(new PhysicalPosition(phys.x, phys.y));
+    } else {
+      await w.setSize(new LogicalSize(r.w, r.h));
+      await w.setPosition(new LogicalPosition(r.x, r.y));
+    }
   } finally {
     // the OS reports the resulting moves / resizes a little later
     setTimeout(() => applying--, 400);
   }
 }
+/**
+ * Snap to the screen's edges: within `gap` px of an edge, the window goes flush with it. After a move the window
+ * shifts (left or right, top or bottom); after a resize only the edges that moved stretch to the screen's edge.
+ * `prev` is the rect before the change (null: treat it as a move). Null when nothing needs to change. Pure.
+ */
+export function snapRect(r: Rect, prev: Rect | null, wa: Rect, gap = 20): Rect | null {
+  const L = wa.x, R = wa.x + wa.w, T = wa.y, B = wa.y + wa.h;
+  const near = (a: number, b: number) => Math.abs(a - b) <= gap;
+  const moved = (a: number, b: number) => Math.abs(a - b) > 1;
+  let { x, y, w, h } = r;
+  const resized = !!prev && (moved(prev.w, r.w) || moved(prev.h, r.h));
+  if (!resized) {
+    if (near(x, L)) x = L;
+    else if (near(x + w, R)) x = R - w;
+    if (near(y, T)) y = T;
+    else if (near(y + h, B)) y = B - h;
+  } else {
+    if (moved(r.x, prev!.x) && near(x, L)) (w += x - L), (x = L);
+    if (moved(r.x + r.w, prev!.x + prev!.w) && near(x + w, R)) w = R - x;
+    if (moved(r.y, prev!.y) && near(y, T)) (h += y - T), (y = T);
+    if (moved(r.y + r.h, prev!.y + prev!.h) && near(y + h, B)) h = B - y;
+  }
+  const same = Math.abs(x - r.x) < 0.5 && Math.abs(y - r.y) < 0.5 && Math.abs(w - r.w) < 0.5 && Math.abs(h - r.h) < 0.5;
+  return same ? null : { x, y, w, h };
+}
+/**
+ * Snap the window to the edges of the screen it is on, after a move / resize settled. Everything is in physical
+ * pixels: monitors can have different scale factors, and logical coordinates of a second monitor do not line up with
+ * the window's (that left an edge sticking out). The screen is the one holding the window's centre; the rect is the
+ * outer one (what you see), and the 20 px are that screen's logical pixels.
+ * `prev`: the physical outer rect after the last settled change (tells a move from a resize).
+ * Returns the physical outer rect now, and the logical rect to remember (position + inner size, as windowRect).
+ */
+export async function snapWindow(prev: Rect | null, gap = 20): Promise<{ phys: Rect; logical: SavedRect } | null> {
+  if (!isTauri) return null;
+  const { getCurrentWindow, availableMonitors, currentMonitor } = await import('@tauri-apps/api/window');
+  const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
+  const w = getCurrentWindow();
+  const [p, o, i, f, vis] = await Promise.all([w.outerPosition(), w.outerSize(), w.innerSize(), w.scaleFactor(), invoke<[number, number, number, number] | null>('visible_frame').catch(() => null)]);
+  const outer = { x: p.x, y: p.y, w: o.width, h: o.height };
+  const frame = { w: o.width - i.width, h: o.height - i.height };
+  // snap what you see: on Windows the visible frame can be a pixel off the outer rect (it stuck out by 1 px)
+  const r = vis ? { x: vis[0], y: vis[1], w: vis[2] - vis[0], h: vis[3] - vis[1] } : outer;
+  const inset = { l: r.x - outer.x, t: r.y - outer.y, w: outer.w - r.w, h: outer.h - r.h };
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const area = (m: { position: { x: number; y: number }; size: { width: number; height: number }; workArea?: { position: { x: number; y: number }; size: { width: number; height: number } } }) => m.workArea ?? { position: m.position, size: m.size };
+  const ms = await availableMonitors();
+  const m =
+    ms.find((x) => {
+      const a = area(x);
+      return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+    }) ?? (await currentMonitor());
+  /** a visible rect back to the window's own terms: its outer position, its inner size */
+  const toOuter = (q: Rect): Rect => ({ x: q.x - inset.l, y: q.y - inset.t, w: q.w + inset.w, h: q.h + inset.h });
+  const logical = (q: Rect): SavedRect => {
+    const o2 = toOuter(q);
+    const inner = { w: o2.w - frame.w, h: o2.h - frame.h };
+    return { x: o2.x / f, y: o2.y / f, w: inner.w / f, h: inner.h / f, p: { x: o2.x, y: o2.y, ...inner } };
+  };
+  if (!m) return { phys: r, logical: logical(r) };
+  const a = area(m);
+  const snapped = snapRect(r, prev, { x: a.position.x, y: a.position.y, w: a.size.width, h: a.size.height }, Math.round(gap * m.scaleFactor));
+  if (!snapped) return { phys: r, logical: logical(r) };
+  const to = { x: Math.round(snapped.x), y: Math.round(snapped.y), w: Math.round(snapped.w), h: Math.round(snapped.h) };
+  const out = toOuter(to);
+  applying++;
+  try {
+    if (to.w !== r.w || to.h !== r.h) await w.setSize(new PhysicalSize(out.w - frame.w, out.h - frame.h));
+    await w.setPosition(new PhysicalPosition(out.x, out.y));
+  } finally {
+    setTimeout(() => applying--, 400);
+  }
+  return { phys: to, logical: logical(to) };
+}
+
+/** is the centre of this logical rect on some screen? (each screen judged at its own scale) */
+export async function logicalOnScreen(r: Rect): Promise<boolean> {
+  if (!isTauri) return false;
+  const { availableMonitors } = await import('@tauri-apps/api/window');
+  return (await availableMonitors()).some((m) => {
+    const a = m.workArea ?? { position: m.position, size: m.size };
+    const cx = (r.x + r.w / 2) * m.scaleFactor;
+    const cy = (r.y + r.h / 2) * m.scaleFactor;
+    return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+  });
+}
+
+/** is the centre of this physical rect inside some screen's work area? */
+async function onSomeScreen(p: Rect): Promise<boolean> {
+  const { availableMonitors } = await import('@tauri-apps/api/window');
+  const cx = p.x + p.w / 2;
+  const cy = p.y + p.h / 2;
+  return (await availableMonitors()).some((m) => {
+    const a = m.workArea ?? { position: m.position, size: m.size };
+    return cx >= a.position.x && cx < a.position.x + a.size.width && cy >= a.position.y && cy < a.position.y + a.size.height;
+  });
+}
+
 /** keep a remembered rect on screen (the monitor may have changed since) */
 function fit(r: Rect, wa: Rect): Rect {
   const w = Math.min(r.w, wa.w);
@@ -130,6 +245,12 @@ export async function onWindowChange(fn: () => void): Promise<() => void> {
   const a = await w.onMoved(fn);
   const b = await w.onResized(fn);
   return () => (a(), b());
+}
+
+export async function setOnTop(on: boolean) {
+  if (!isTauri) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().setAlwaysOnTop(on);
 }
 
 export async function setVisible(show: boolean) {
@@ -253,17 +374,53 @@ export const pluginSecretStatus = (plugin: string): Promise<SecretStatus> =>
 export const pluginSecretSet = (plugin: string, host: string, token: string) => invoke<SecretStatus>('plugin_secret_set', { plugin, host, token });
 
 /** GET the url stored as the plugin's secret (never readable from the page) */
-export const pluginGetSecretUrl = (plugin: string) => invoke<HttpRes>('plugin_get_secret_url', { plugin });
+export const pluginGetSecretUrl = (plugin: string) => (requests.count(plugin), invoke<HttpRes>('plugin_get_secret_url', { plugin }));
+/** the tray icon: 'normal', 'attention' (changes to look at) or 'meeting' (in one now) */
+/** the classic Outlook's Inbox through COM (src-tauri/src/mail.rs); input and output as in mail.ps1 */
+export const mailFetch = (plugin: string, input: unknown) => (requests.count(plugin), invoke<string>('mail_fetch', { input: JSON.stringify(input) }));
+/** the Claude Code sessions running on this PC (src-tauri/src/claude.rs: read from ~/.claude/sessions, nothing else) */
+export const claudeSessions = async (): Promise<ClaudeSession[]> => JSON.parse(await invoke<string>('claude_sessions'));
+/** the GitHub Copilot sessions on this PC (src-tauri/src/copilot.rs: the kind of the last events in ~/.copilot/session-state, nothing else) */
+export const copilotSessions = async (): Promise<CopilotSession[]> => JSON.parse(await invoke<string>('copilot_sessions'));
+/** the local model server (Ollama) on loopback (src-tauri/src/llm.rs); an empty body is a GET */
+/** the Laya decision-model helper on loopback, started by Rust when needed (src-tauri/src/laya.rs) */
+export const layaPredict = (body: unknown) => invoke<{ status: number; body: string }>('laya_predict', { body: JSON.stringify(body) });
+export const llmLocal = (path: string, body: unknown) => invoke<{ status: number; body: string }>('llm_local', { path, body: body == null ? '' : JSON.stringify(body) });
+
+export const setTrayMode = (mode: 'normal' | 'attention' | 'meeting') => isTauri && invoke('set_tray_mode', { mode }).catch(() => {});
 
 export interface HttpRes {
   status: number;
   headers: Record<string, string>;
   body: string;
 }
+/** every request a plugin makes over the network, counted (the drawers show it); the tracker sets the counter */
+export const requests = { count: (_plugin: string) => {} };
+
 /** an https request made by Rust; `auth` adds the plugin's token (only to the host it was stored for) */
-export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean }): Promise<HttpRes> {
+export async function pluginHttp(plugin: string, req: { method?: string; url: string; headers?: Record<string, string>; body?: string; auth?: boolean; scheme?: 'bearer' | 'basic' }): Promise<HttpRes> {
   if (!isTauri) throw new Error('This source needs the desktop app');
-  return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth } });
+  requests.count(plugin);
+  return invoke<HttpRes>('plugin_http', { req: { plugin, method: req.method, url: req.url, headers: req.headers, body: req.body, auth: !!req.auth, scheme: req.scheme } });
+}
+
+/* ---------- OS notifications ---------- */
+let notifyOk: Promise<boolean> | null = null;
+/** a system notification (asks for permission the first time); the browser build uses the web Notification API */
+export async function osNotify(title: string, body: string) {
+  try {
+    if (isTauri) {
+      const n = await import('@tauri-apps/plugin-notification');
+      notifyOk ??= (async () => (await n.isPermissionGranted()) || (await n.requestPermission()) === 'granted')();
+      if (await notifyOk) n.sendNotification({ title, body });
+      return;
+    }
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission === 'granted') new Notification(title, { body });
+  } catch (e) {
+    console.warn('yatai: notification failed', e);
+  }
 }
 
 /* ---------- links ---------- */

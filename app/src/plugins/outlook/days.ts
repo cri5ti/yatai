@@ -16,24 +16,34 @@ export function addDays(day: string, n: number): string {
 /** the days a tab shows, after today */
 export const daysOf = (tab: string): number[] => (tab === 'tomorrow' ? [1] : tab === 'next5' ? [1, 2, 3, 4, 5] : []);
 
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const weekday = (day: string) => {
   const [y, m, d] = day.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short' });
 };
 
-/** drawer rows for the days after today: a weekday + time on the left; a meeting can be brought in ahead, to prepare */
+/** events that overlap another one of the same list (double bookings) */
+export function clashes(evs: Pick<AgendaEvent, 'id' | 'start' | 'durationMin'>[]): Set<string> {
+  const out = new Set<string>();
+  for (const a of evs) for (const b of evs) if (a !== b && a.start < b.start + b.durationMin && b.start < a.start + a.durationMin) out.add(a.id);
+  return out;
+}
+export const range = (e: Pick<AgendaEvent, 'start' | 'durationMin'>) => `${hhmm(e.start)}–${hhmm(e.start + e.durationMin)}`;
+
+/** drawer rows for the days after today: a weekday + time range on the left; a meeting can be brought in ahead, to prepare */
 export function entriesFor(tab: string, today: string, eventsOn: (day: string) => AgendaEvent[]): Entry[] {
   const days = daysOf(tab);
   return days.flatMap((n) => {
     const day = addDays(today, n);
-    return eventsOn(day)
-      .filter((e) => !e.cancelled)
+    const evs = eventsOn(day).filter((e) => !e.cancelled);
+    const clash = clashes(evs);
+    return evs
       .map((e): Entry => ({
         ref: `outlook:${e.id}`,
         title: e.title,
-        sub: `${days.length > 1 ? `${new Date(day + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ` : ''}${e.durationMin} min${e.where ? ` · ${e.where}` : ''}`,
-        lead: { text: days.length > 1 ? `${weekday(day)} ${hhmm(e.start)}` : hhmm(e.start) },
+        sub: '',
+        clash: clash.has(e.id),
+        lead: { text: days.length > 1 ? `${weekday(day)} ${range(e)}` : range(e) },
         text: e.title,
         meeting: { id: e.id, title: e.title, start: e.start, durationMin: e.durationMin, where: e.where, day },
         canInbox: false,

@@ -19,7 +19,12 @@ export interface View {
   label: string;
   tone: Tone;
   count?: number;
+  /** a passing state (queued, building): moving into it is not announced, unless the item asks to be told everything */
+  quiet?: boolean;
+  /** whose move it is: 'me' (mine to act on) or 'them' (waiting on someone else); unset when it does not apply / is not known */
+  turn?: Turn;
 }
+export type Turn = 'me' | 'them';
 
 /** what a plugin currently knows about one ref */
 export interface Snapshot {
@@ -31,10 +36,21 @@ export interface Snapshot {
   rev: string; // changes when anything shown changes
   gone?: boolean; // deleted, or the token cannot see it
   desc?: string; // the PR's description (live GitHub only), used once to fill in a bare pasted link
+  /** things to act on inside it (a failing check, an unresolved review thread): kept as sub-items of the item, checked off once gone */
+  details?: Detail[];
+  /** what the cheap poll saw when the details were last fetched: while it is the same, the details are not asked for again */
+  basis?: string;
+}
+
+/** one outstanding thing a source reports; `key` is stable while it is outstanding */
+export interface Detail {
+  key: string;
+  text: string; // the sub-item's headline
+  url?: string; // where to look (the run, the comment): goes on the sub-item's second line
 }
 
 /** the left-hand mark of a drawer row */
-export type Lead = { glyph: string; count?: number } | { text: string };
+export type Lead = { glyph: string; count?: number; kind?: 'build' | 'claude' | 'copilot'; turn?: Turn } | { text: string };
 
 /** one row in a drawer */
 export interface Entry {
@@ -48,12 +64,19 @@ export interface Entry {
   smart?: string; // brought in as a smart item of this source ('workitem'); PRs are just links
   dim?: boolean;
   meeting?: { id: string; title: string; start: number; durationMin: number; where: string; day: string }; // a calendar entry: brought in as a meeting card on its day
+  clash?: boolean; // a calendar entry that overlaps another one (double booked)
   canInbox: boolean;
+  /** the bold word before the title (default: the snapshot's name) */
+  label?: string;
+  /** more about it, for the little popup behind the row's arrow: [what, value] */
+  details?: [string, string][];
 }
 
 export interface ListDef {
   id: string;
   label: string;
+  /** lists of one kind under a first row of their own (DevOps: Builds · Work items) */
+  group?: string;
 }
 
 /** a meeting from a calendar-like plugin (minutes of the day) */
@@ -72,11 +95,17 @@ export class AuthError extends Error {}
 
 /** what an implementation (live or mock) provides; any subset */
 export interface Impl {
-  /** live state for the refs tracked in Next: one batched call */
-  fetch?(refs: string[]): Promise<Snapshot[]>;
+  /** live state for the refs tracked in Next: one batched call. `force`: the user asked (Refresh): fetch everything, details too */
+  fetch?(refs: string[], opts?: { force?: boolean }): Promise<Snapshot[]>;
   lists?: ListDef[];
   list?(id: string): Promise<Entry[]>;
   agenda?(day: string): Promise<AgendaEvent[]>;
+  /** a source that pulls a stream of its own (new emails): called every cycle; what it returns is toasted */
+  poll?(): Promise<Notice[]>;
+}
+export interface Notice {
+  text: string;
+  tone: Tone;
 }
 
 export interface Plugin {
@@ -94,6 +123,8 @@ export interface Plugin {
   };
   live?: Impl;
   mock?: Impl;
+  /** lists to look at in the background (not only while their drawer is open) to notice new things to act on */
+  watch?: string[];
   pollMs: { active: number; idle: number };
 }
 

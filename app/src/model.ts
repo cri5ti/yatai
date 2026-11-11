@@ -1,5 +1,5 @@
-import type { Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
-import type { AgendaEvent, Alert, Snapshot } from './plugins/types';
+import type { BuildStatus, Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
+import type { AgendaEvent, Alert, Snapshot, Turn } from './plugins/types';
 
 export const FX = 'fx_'; // fixed calendar row inside a meeting card: fx_<meetingId>
 
@@ -59,13 +59,41 @@ export function prLinks(text: string): PrLink[] {
   const re = new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g');
   const out: PrLink[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) out.push({ key: `${m[1]}/${m[2]}#${m[3]}`, org: m[1], repo: m[2], num: m[3], url: m[0] });
+  while ((m = re.exec(text))) if (!notThePr(m[0])) out.push({ key: `${m[1]}/${m[2]}#${m[3]}`, org: m[1], repo: m[2], num: m[3], url: m[0] });
   return out;
 }
-export const prMatch = (url: string) => new RegExp('^' + prSrc()).exec(url);
+/** a link into a PR's conversation (a review comment, a review) points at a comment, not at the PR */
+const notThePr = (url: string) => /#(discussion_r|issuecomment-|pullrequestreview-)/.test(url);
+export const prMatch = (url: string) => (notThePr(url) ? null : new RegExp('^' + prSrc()).exec(url));
 export const prUrl = (org: string, repo: string, num: string) => `https://${prHost}/${org}/${repo}/pull/${num}`;
 /** text for places that cannot render a link: PR urls become repo#123 */
 export const plain = (text: string) => text.replace(new RegExp(prSrc() + '(?:[/?#][^\\s)]*)?', 'g'), (_, _o, r, n) => `${r}#${n}`);
+
+/* ---------- Azure DevOps pipeline run (build) links ---------- */
+/** …/_build/results?buildId=123 on dev.azure.com/<org>/<project> or <org>.visualstudio.com/<project> */
+const BUILD_SRC = 'https:\\/\\/((?:dev\\.azure\\.com\\/[\\w.-]+|[\\w-]+\\.visualstudio\\.com)\\/([^\\s/?#]+))\\/_build\\/results\\?(?:[^\\s#]*?&)?buildId=(\\d+)';
+export interface BuildLink {
+  key: string; // dev.azure.com/acme/Payroll#4211
+  base: string; // dev.azure.com/acme/Payroll
+  project: string;
+  id: string;
+  url: string;
+}
+export function buildLinks(text: string): BuildLink[] {
+  const re = new RegExp(BUILD_SRC + '[^\\s)]*', 'g');
+  const out: BuildLink[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) out.push({ key: `${m[1]}#${m[3]}`, base: m[1], project: decodeURIComponent(m[2]), id: m[3], url: m[0] });
+  return out;
+}
+export const buildMatch = (url: string) => buildLinks(url).find((l) => l.url === url) ?? null;
+export const buildUrl = (base: string, id: string) => `https://${base}/_build/results?buildId=${id}`;
+const BUILD_STATES: BuildStatus[] = ['queued', 'building', 'failed', 'done', 'cancelled'];
+/** a run's state as the DevOps plugin last reported it; null when it has not (not tracked, not connected, can't see it) */
+export const buildStatusOf = (snaps: Record<string, Snapshot>, ref: string): BuildStatus | null => {
+  const sn = snaps[ref];
+  return sn && !sn.gone && BUILD_STATES.includes(sn.view.glyph as BuildStatus) ? (sn.view.glyph as BuildStatus) : null;
+};
 
 /* ---------- plugin refs and their snapshots ---------- */
 /** the ref an item's `smart` badge tracks; items made before refs existed derive it */
@@ -84,19 +112,84 @@ export function refsOf(n: Node): string[] {
   const out = new Set<string>();
   const r = smartRef(n);
   if (r) out.add(r);
-  for (const l of prLinks(n.title.split('\n')[0])) out.add(`github:${l.key}`);
+  const first = n.title.split('\n')[0];
+  for (const l of prLinks(first)) out.add(`github:${l.key}`);
+  for (const l of buildLinks(first)) out.add(`devops:build/${l.key}`);
   return [...out];
 }
 type Snaps = Record<string, Snapshot>;
 /** a PR's state as the GitHub plugin last reported it ('review' until it has) */
-export const prStatusOf = (snaps: Snaps, key: string): PrStatus => (snaps[`github:${key}`]?.view.glyph as PrStatus | undefined) ?? 'review';
+/** a PR's state as the GitHub plugin last reported it; null when it has not (never guessed: see NoState in Pr.tsx) */
+export const prStatusOf = (snaps: Snaps, key: string): PrStatus | null => {
+  const sn = snaps[`github:${key}`];
+  return sn && !sn.gone ? (sn.view.glyph as PrStatus) : null;
+};
 export const prCountOf = (snaps: Snaps, key: string): number | undefined => snaps[`github:${key}`]?.view.count;
+/** whose move it is on a PR (unset: not known, or it is over) */
+export const prTurnOf = (snaps: Snaps, key: string) => {
+  const sn = snaps[`github:${key}`];
+  return sn && !sn.gone ? sn.view.turn : undefined;
+};
 
 /** PR states that want your attention (like a smart item with a non-neutral alert) */
 export const PR_ATTENTION: PrStatus[] = ['failing', 'feedback', 'ready'];
 export function prAttention(n: Node, snaps: Snaps) {
   if (n.status === 'done') return false;
-  return prLinks(n.title.split('\n')[0]).some((l) => PR_ATTENTION.includes(prStatusOf(snaps, l.key)));
+  return prLinks(n.title.split('\n')[0]).some((l) => {
+    const st = prStatusOf(snaps, l.key);
+    return !!st && PR_ATTENTION.includes(st) && prTurnOf(snaps, l.key) !== 'them'; // waiting on others is not for me
+  });
+}
+
+/**
+ * Whose move it is on an item, the same for every source: 'me' = I can act on it now (approve, answer, fix, look),
+ * 'them' = I am waiting on someone or something; unset = neither. What its plugins report (`view.turn`); mine wins.
+ */
+export function nodeTurn(n: Node, snaps: Snaps): Turn | undefined {
+  if (n.status === 'done' || n.status === 'dropped') return undefined;
+  let turn: Turn | undefined;
+  for (const r of refsOf(n)) {
+    const sn = snaps[r];
+    if (!sn || sn.gone) continue;
+    if (sn.view.turn === 'me') return 'me';
+    if (sn.view.turn === 'them') turn = 'them';
+  }
+  return turn;
+}
+export interface Inside { me: boolean; them: boolean; hl: boolean }
+/** per item: what is hidden below it (a move that is mine / theirs, a yellow highlight): the little circles on a collapsed parent */
+export function insideOf(nodes: Node[], snaps: Snaps, hl: Record<string, true>): Map<string, Inside> {
+  const out = new Map<string, Inside>();
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    const t = nodeTurn(n, snaps);
+    const h = !!hl[n.id];
+    if (!t && !h) continue;
+    for (let cur = n.parentId ? byId.get(n.parentId) : undefined, i = 0; cur && i < 100; cur = cur.parentId ? byId.get(cur.parentId) : undefined, i++) {
+      const o = out.get(cur.id) ?? { me: false, them: false, hl: false };
+      if (t === 'me') o.me = true;
+      if (t === 'them') o.them = true;
+      if (h) o.hl = true;
+      out.set(cur.id, o);
+    }
+  }
+  return out;
+}
+/** the turn filter: items whose move is `turn`, and every parent above them */
+export function turnKeep(nodes: Node[], snaps: Snaps, turn: Turn): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const keep = new Set<string>();
+  for (const n of nodes) {
+    if (nodeTurn(n, snaps) !== turn) continue;
+    for (let cur: Node | undefined = n; cur && !keep.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) keep.add(cur.id);
+  }
+  return keep;
+}
+/** what the view filters (priority, turn) let through; undefined = no filter */
+export function viewKeep(s: Pick<State, 'nodes' | 'snaps' | 'prioFilter' | 'turnFilter'>): Set<string> | undefined {
+  const a = s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined;
+  const b = s.turnFilter ? turnKeep(s.nodes, s.snaps, s.turnFilter) : undefined;
+  return a && b ? new Set([...a].filter((id) => b.has(id))) : a ?? b;
 }
 
 /** does any item in the subtree of `id` carry a highlight? (used so a collapsed parent can show it) */
@@ -114,18 +207,96 @@ export function hlSubtree(nodes: Node[], hl: Record<string, true>, id: string): 
   for (const n of nodes) if (n.parentId && ids.has(n.parentId)) ids.add(n.id);
   return nodes.filter((n) => ids.has(n.id) && hl[n.id]).map((n) => n.id);
 }
-/** what hovering / moving the cursor onto a row clears: the row itself, or what is hidden under it */
-export function hlForRow(nodes: Node[], hl: Record<string, true>, row: Row): string[] {
-  if (!row.node || !Object.keys(hl).length) return [];
-  if (hl[row.node.id]) return [row.node.id];
-  return row.kids && row.node.open === false ? hlSubtree(nodes, hl, row.node.id) : [];
+/**
+ * Where each yellow highlight shows in Next: on its own row when that is visible, else on the first visible thing above
+ * it: a row (its parent collapsed, or not in Next itself), or the card's header when the card is collapsed (or the item
+ * hangs under a meeting / the card's item). Keys: `row:<row id>` and `card:<card key>`; values: the highlighted ids that
+ * show there, which is also what hovering it clears. A highlight with nothing of it in Next shows nowhere here.
+ */
+export function hlTargets(cards: CardM[], nodes: Node[], hl: Record<string, true>): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (!Object.keys(hl).length) return out;
+  const vis = new Map<string, string>(); // node (or meeting) id -> where it is seen
+  const see = (id: string, at: string) => !vis.has(id) && vis.set(id, at);
+  for (const c of cards) {
+    const card = `card:${c.key}`;
+    if (c.collapsed) {
+      see(c.ownerId, card);
+      for (const r of c.rows) if (r.node) see(r.node.id, card);
+      continue;
+    }
+    let hideBelow = Infinity; // rows deeper than a collapsed row are hidden
+    for (const r of c.rows) {
+      if (r.depth > hideBelow) continue;
+      hideBelow = Infinity;
+      if (!r.node) continue;
+      see(r.node.id, `row:${r.id}`);
+      if (r.kids && r.node.open === false) hideBelow = r.depth;
+    }
+    see(c.ownerId, card); // the card's item (when it is not a row of its own) or its meeting
+  }
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const id of Object.keys(hl)) {
+    let cur: string | null | undefined = id;
+    for (let guard = 0; cur && guard < 64; guard++) {
+      const at = vis.get(cur);
+      if (at) {
+        out.set(at, [...(out.get(at) ?? []), id]);
+        break;
+      }
+      cur = byId.get(cur)?.parentId;
+    }
+  }
+  return out;
 }
-/** …and a card: a changed meeting, or anything changed inside a collapsed card */
-export function hlForCard(nodes: Node[], hl: Record<string, true>, card: CardM): string[] {
-  if (!Object.keys(hl).length) return [];
-  if (card.kind === 'meeting' && hl[card.ownerId]) return [card.ownerId];
-  return card.collapsed ? card.rows.flatMap((r) => (r.node ? hlSubtree(nodes, hl, r.node.id) : [])) : [];
+
+/** the priority a row shows: its own, or — when collapsed — the highest (lowest number) in its subtree */
+export function prioShown(nodes: Node[], id: string, collapsed: boolean): { p: number; inside: boolean } | null {
+  const own = nodes.find((n) => n.id === id)?.prio;
+  if (!collapsed) return own ? { p: own, inside: false } : null;
+  const ids = new Set([id]);
+  let best = own ?? 99;
+  for (const n of nodes) if (n.parentId && ids.has(n.parentId)) (ids.add(n.id), n.prio && n.status === 'todo' && n.prio < best && (best = n.prio));
+  return best > 5 ? null : { p: best, inside: best !== own };
 }
+
+/** the priority filter: items of priority 1…`p` and every parent above them */
+export function prioKeep(nodes: Node[], p: number): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const keep = new Set<string>();
+  for (const n of nodes) {
+    if (!n.prio || n.prio > p) continue;
+    for (let cur: Node | undefined = n; cur && !keep.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) keep.add(cur.id);
+  }
+  return keep;
+}
+/** Next under the priority filter: everything unfolded, then only the kept rows (cards left empty go) */
+export function filterNext(s: Parameters<typeof nextModel>[0], keep: Set<string>) {
+  const m = nextModel({ ...s, nodes: s.nodes.map((n) => (n.open === false ? { ...n, open: true } : n)) });
+  const cards = m.cards.flatMap((c) => {
+    const rows = c.rows.filter((r) => r.node && keep.has(r.node.id));
+    if (!rows.length) return [];
+    return [{ ...c, collapsed: false, rows: rows.map((r, i) => ({ ...r, kids: (rows[i + 1]?.depth ?? -1) > r.depth })) }];
+  });
+  return { ...m, cards };
+}
+
+/** can this item be brought into Next from under a row? (open, and not in Next already) */
+export const bringable = (n: Node) => !n.today && n.status !== 'done' && n.status !== 'dropped';
+/** per item: how many items below it are not in Next (the count pill on a row of Next) */
+export function outOfNext(nodes: Node[]): Map<string, number> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out = new Map<string, number>();
+  for (const n of nodes) {
+    if (!bringable(n)) continue;
+    for (let cur = n.parentId ? byId.get(n.parentId) : undefined, i = 0; cur && i < 100; cur = cur.parentId ? byId.get(cur.parentId) : undefined, i++) out.set(cur.id, (out.get(cur.id) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** the highest of several shown priorities (a collapsed card) */
+export const bestPrio = (vs: ({ p: number; inside: boolean } | null)[]) =>
+  vs.reduce<{ p: number; inside: boolean } | null>((b, v) => (v && (!b || v.p < b.p) ? { p: v.p, inside: true } : b), null);
 
 export const childrenOf = (nodes: Node[], id: string | null) => nodes.filter((n) => n.parentId === id);
 
@@ -166,6 +337,15 @@ export const inLabel = (m: Pick<EffMeeting, 'minsAway' | 'dayOffset' | 'day'>) =
   m.dayOffset === 1 ? 'tomorrow' : m.dayOffset > 1 ? `in ${m.dayOffset} days` : `in ${Math.ceil(m.minsAway)} min`;
 
 export const allAgenda = (s: Pick<State, 'agenda'>): AgendaEvent[] => Object.values(s.agenda).flat();
+
+/** am I in a meeting right now? (one in Next, or anything on today's calendar) */
+export const inMeeting = (s: Pick<State, 'agenda' | 'meetings' | 'clock' | 'day'>) =>
+  meetingsFor(s).some((m) => m.state === 'now' && m.dayOffset === 0) ||
+  allAgenda(s).some((e) => !e.cancelled && (e.day ?? s.day) === s.day && e.start <= s.clock && s.clock < e.start + e.durationMin);
+
+/** the tray icon: changes to look at beat being in a meeting */
+export const trayMode = (s: Pick<State, 'agenda' | 'meetings' | 'clock' | 'day' | 'hl'>): 'normal' | 'attention' | 'meeting' =>
+  Object.keys(s.hl).length ? 'attention' : inMeeting(s) ? 'meeting' : 'normal';
 
 /** the meetings in Next; `movedTo` is where the calendar moved one (the tracker sets it when the agenda changes) */
 export function meetingsFor(s: Pick<State, 'meetings' | 'clock' | 'day'>): EffMeeting[] {
@@ -209,11 +389,6 @@ export const depthOf = (nodes: Node[], id: string) => {
   }
   return d;
 };
-/** an item with children is done when all of its leaves are; a leaf is done when marked */
-export function doneOf(nodes: Node[], id: string): boolean {
-  const leaves = leavesOf(nodes, id).filter((n) => n.status !== 'dropped');
-  return leaves.length > 0 && leaves.every((n) => n.status === 'done');
-}
 
 /* ---------- the plan: ordered segments shown as cards in Next ---------- */
 
@@ -256,7 +431,8 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
   };
   const place = (owner: string, id: string) => {
     const sg = lastSegOf(owner);
-    if (sg) sg.items.push(id);
+    // top-level items are never grouped: each one is its own (header-less) card
+    if (sg && owner !== ROOT) sg.items.push(id);
     else segs.push({ id: 's_' + owner, owner, items: [id] });
   };
 
@@ -272,6 +448,13 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
       seen.add(FX + m.id);
       place(m.id, FX + m.id);
     }
+  }
+
+  // top-level rows: one card each (a stored card holding several is split in place, keeping the order)
+  for (let i = 0; i < segs.length; i++) {
+    const sg = segs[i];
+    if (sg.owner !== ROOT || sg.items.length < 2) continue;
+    segs.splice(i, 1, ...sg.items.map((id, k) => (k === 0 ? { ...sg, items: [id] } : { id: 's_' + id, owner: ROOT, items: [id] })));
   }
 
   // prune empties: an owner keeps one empty segment only if it was created on purpose and has nothing else
@@ -292,8 +475,10 @@ export interface Row {
   id: string;
   node?: Node;
   fx?: EffMeeting;
-  depth: number; // 0 = directly under the card header
+  depth: number; // 0 = the card's top row
   kids: boolean; // has Next children nested below it
+  /** the item a card is about when it is not in Next itself (its Next children are): it shows as the card's first row, like any other */
+  head?: true;
 }
 
 export interface CardM {
@@ -333,7 +518,7 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
       est: live.reduce((a, r) => a + (r.node!.status === 'done' ? 0 : r.node!.est ?? 0), 0),
       done,
       total: live.length,
-      allDone: owner?.status === 'done' || (!empty && done === live.length),
+      allDone: owner?.status === 'done', // marked on the item itself: finishing what is inside never completes it
     };
   };
 
@@ -393,6 +578,10 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
       (card.pinned ? pinned : regular).push(card);
     } else if (owner || seg.owner === ROOT) {
       if (!rows.length && promoted) continue;
+      // no card headers for items: the owner is the first row and what is in Next nests under it
+      const shown: Row[] = owner
+        ? [{ id: owner.id, node: owner, depth: 0, kids: rows.length > 0, head: true }, ...(owner.open === false ? [] : rows.map((r) => ({ ...r, depth: r.depth + 1 })))]
+        : rows;
       regular.push({
         key: seg.id,
         kind: 'task',
@@ -400,9 +589,9 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
         ownerId: seg.owner,
         task: owner,
         path: owner ? pathOf(nodes, owner.id) : ['Items'],
-        rows,
+        rows: shown,
         pinned: false,
-        collapsed: owner ? owner.open === false : false,
+        collapsed: false,
         ...stats(rows, owner),
       });
     }
@@ -429,9 +618,17 @@ export function nextModel(s: Pick<State, 'nodes' | 'plan' | 'meetings' | 'clock'
   return { cards, ...all };
 }
 
+/** item cards have no header: every line in them is a row (only meetings and alerts carry a header) */
+export const isLoose = (c: CardM) => c.kind === 'task';
+
+/** is `id` inside the subtree of `anc` (or `anc` itself)? */
+export function isUnder(nodes: Node[], id: string, anc: string) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (let cur: string | null | undefined = id, i = 0; cur && i < 100; cur = byId.get(cur)?.parentId, i++) if (cur === anc) return true;
+  return false;
+}
+
 /** keep the selection valid whatever happens to the cards (undo, delete, collapse…) */
-/** the card of top-level items: it has no header, anything can sit at the top level */
-export const isLoose = (c: CardM) => c.kind === 'task' && c.ownerId === ROOT;
 
 export function effSel(cards: CardM[], sel: Nsel): Nsel {
   let c = cards.find((x) => x.key === sel.card);

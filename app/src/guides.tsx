@@ -1,0 +1,215 @@
+/**
+ * Settings → each account: how to get the token / link it asks for, with commands to copy and pages to open.
+ * Nothing about any particular company is written here: what the user already set (the GitHub host, the DevOps
+ * organization) fills the placeholders, otherwise they stay as <placeholders>.
+ */
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import type { Settings } from './store';
+import { openUrl } from './platform';
+
+const isWindows = typeof navigator !== 'undefined' && /Win/.test(navigator.platform || navigator.userAgent);
+import { normHost } from './model';
+import { orgOf } from './plugins/devops/api';
+
+/** a page to open in the system browser (a plain click: the settings window never navigates) */
+function Link({ href, children }: { href: string; children: ReactNode }) {
+  const real = !/[<>]/.test(href);
+  return real ? (
+    <button type="button" className="set-link" title={href} onClick={() => void openUrl(href).catch(() => {})}>
+      {children} ↗
+    </button>
+  ) : (
+    <code title="Fill in the placeholder first">{href}</code>
+  );
+}
+
+/** a command to run, with a copy button */
+function Cmd({ children }: { children: string }) {
+  const [done, setDone] = useState(false);
+  const copy = () =>
+    void navigator.clipboard?.writeText(children).then(
+      () => (setDone(true), setTimeout(() => setDone(false), 1500)),
+      () => {},
+    );
+  return (
+    <div className="set-cmd">
+      <pre>{children}</pre>
+      <button type="button" className="btn sm" onClick={copy}>
+        {done ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+}
+
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+function github(cfg: Settings) {
+  const host = normHost(cfg.githubHost);
+  const ghe = host !== 'github.com';
+  const flag = ghe ? ` --hostname ${host}` : '';
+  return (
+    <>
+      <h5>Quickest: from the GitHub CLI</h5>
+      <p>
+        If you use <code>gh</code>, it already has a token. Print it and paste it here (it is broad: whatever <code>gh</code> may do, typically the <code>repo</code> and{' '}
+        <code>read:org</code> scopes).
+      </p>
+      <Cmd>{`gh auth status${flag}\ngh auth token${flag}`}</Cmd>
+      <p>
+        Not logged in yet: <code>{`gh auth login${flag}`}</code> first.
+      </p>
+      <h5>Narrower: a fine-grained token</h5>
+      <ol>
+        <li>
+          Open <Link href={`https://${host}/settings/personal-access-tokens/new`}>New fine-grained token</Link>.
+        </li>
+        <li>Resource owner: the organization that owns the repositories (it may have to approve the token).</li>
+        <li>Repository access: the repositories whose pull requests you follow.</li>
+        <li>
+          Permissions, all <b>Read-only</b>: Pull requests, Commit statuses, Checks (where offered), Metadata.
+        </li>
+      </ol>
+      <p>
+        Or a classic token with the <code>repo</code> scope: <Link href={`https://${host}/settings/tokens/new?scopes=repo&description=yatai`}>New classic token</Link>.
+      </p>
+      <p className="set-fine">
+        If the organization uses SAML single sign-on, authorize the token for it (Tokens → Configure SSO → Authorize), or GitHub answers as if its pull requests did not exist.
+      </p>
+    </>
+  );
+}
+
+function devops(cfg: Settings) {
+  const o = orgOf(cfg.devopsOrg);
+  const base = o?.base ?? 'https://dev.azure.com/<your-org>';
+  // the PAT API lives on vssps.dev.azure.com/<org> (for <org>.visualstudio.com too)
+  const name = o ? (o.host === 'dev.azure.com' ? o.base.split('/').pop()! : o.host.split('.')[0]) : '<your-org>';
+  const pats = `https://vssps.dev.azure.com/${name}/_apis/tokens/pats?api-version=7.1-preview.1`;
+  // PowerShell: the request is made by Invoke-RestMethod, because JSON passed to az (a .cmd on Windows) loses its quotes
+  const ps = [
+    'az login',
+    '$t = az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken -o tsv',
+    "$body = @{ displayName = 'yatai'; scope = 'vso.build vso.work'; validTo = (Get-Date).AddDays(90).ToUniversalTime().ToString('o'); allOrgs = $false } | ConvertTo-Json",
+    `(Invoke-RestMethod -Method Post -Uri '${pats}' -Headers @{ Authorization = "Bearer $t" } -ContentType 'application/json' -Body $body).patToken.token`,
+  ].join('\n');
+  const sh = [
+    'az login',
+    `az rest --method post --resource 499b84ac-1321-427f-aa17-267ca6975798 \\`,
+    `  --uri '${pats}' \\`,
+    `  --body '{"displayName":"yatai","scope":"vso.build vso.work","validTo":"${inDays(90)}T00:00:00Z","allOrgs":false}' \\`,
+    '  --query patToken.token -o tsv',
+  ].join('\n');
+  const scripts = [
+    { label: 'PowerShell', code: ps },
+    { label: 'bash / zsh', code: sh },
+  ];
+  if (!isWindows) scripts.reverse();
+  return (
+    <>
+      <h5>In the browser</h5>
+      <ol>
+        <li>
+          Open <Link href={`${base}/_usersSettings/tokens`}>Personal access tokens</Link> → <b>New Token</b>.
+        </li>
+        <li>
+          Organization: yours; expiration: up to your policy; Scopes: <b>Custom defined</b> → <b>Build: Read</b> and <b>Work Items: Read</b>.
+        </li>
+        <li>Create, copy the token, paste it here.</li>
+      </ol>
+      <h5>From the Azure CLI</h5>
+      <p>One script: signs you in, then asks Azure DevOps for a token with only Build (Read) and Work Items (Read), valid for 90 days, and prints it.</p>
+      {scripts.map((x) => (
+        <div key={x.label}>
+          <div className="set-cmd-label">{x.label}</div>
+          <Cmd>{x.code}</Cmd>
+        </div>
+      ))}
+      <p className="set-fine">
+        <code>499b84ac-…</code> is Azure DevOps' fixed application id, not a secret. If your organization only allows tokens through a policy, the browser route is the one that works.
+      </p>
+    </>
+  );
+}
+
+function outlook() {
+  return (
+    <>
+      <h5>Publish your calendar (Outlook on the web)</h5>
+      <ol>
+        <li>
+          Open <Link href="https://outlook.office.com/calendar/options/calendar/SharedCalendars">Calendar → Shared calendars</Link> (an outlook.com account:{' '}
+          <Link href="https://outlook.live.com/calendar/0/options/calendar/SharedCalendars">this one</Link>).
+        </li>
+        <li>
+          Under <b>Publish a calendar</b>: choose the calendar and <b>Can view all details</b> (or titles and locations), then <b>Publish</b>.
+        </li>
+        <li>
+          Copy the <b>ICS</b> link (not the HTML one), paste it here.
+        </li>
+      </ol>
+      <p className="set-fine">
+        Anyone with the link can read the calendar: yatai keeps it in the keychain. To revoke it, choose Unpublish (or Reset links) on the same page. If there is no Publish
+        section, your organization has turned publishing off; there is no command-line route, because reading the calendar through Microsoft Graph needs an administrator's consent.
+      </p>
+    </>
+  );
+}
+
+/** the app registration behind the Microsoft sign-in (once, by whoever may create one in the tenant) */
+function microsoft() {
+  return (
+    <>
+      <h5>Register yatai once in Microsoft Entra</h5>
+      <ol>
+        <li>
+          Open <Link href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/isMSAApp~/false">New app registration</Link>: name <b>yatai</b>, accounts in this organizational directory only.
+        </li>
+        <li>
+          Redirect URI: platform <b>Mobile and desktop applications</b> (a public client), value <code>http://localhost</code>. No secret is needed.
+        </li>
+        <li>
+          API permissions → Add → Microsoft Graph → <b>Delegated</b>: <code>User.Read</code>, <code>Calendars.Read</code>, <code>Mail.Read</code>, <code>offline_access</code>. For Azure DevOps: Add → Azure DevOps → Delegated →{' '}
+          <code>user_impersonation</code>.
+        </li>
+        <li>
+          Copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> from the Overview page into the fields above.
+        </li>
+      </ol>
+      <p className="set-fine">
+        These permissions are read-only and need no admin, unless the organization restricts user consent: Microsoft then says so when you tick a box, and an administrator has to approve it once for the registration. Only what is ticked is used.
+        The sign-in itself stays in the OS keychain and is renewed in the background; a conditional-access policy can ask for a new sign-in now and then.
+      </p>
+    </>
+  );
+}
+
+/** Azure DevOps through the Azure CLI's sign-in */
+function azcli() {
+  return (
+    <>
+      <h5>Sign in with the Azure CLI</h5>
+      <p>
+        Install the Azure CLI (<Link href="https://learn.microsoft.com/cli/azure/install-azure-cli">install guide</Link>), then sign in once, as yourself:
+      </p>
+      <Cmd>az login</Cmd>
+      <p>
+        yatai asks the CLI for an Azure DevOps token whenever it needs one; the CLI keeps you signed in and renews it, and yatai stores nothing. If your tenant asks for a new sign-in now and then, run the command again.
+      </p>
+    </>
+  );
+}
+
+const GUIDES: Record<string, (cfg: Settings) => ReactNode> = { github, devops, outlook, microsoft, azcli };
+
+/** "How to get it", open until the account is connected */
+export function Guide({ id, cfg, connected }: { id: string; cfg: Settings; connected: boolean }) {
+  const g = GUIDES[id];
+  if (!g) return null;
+  return (
+    <details className="set-guide" open={!connected}>
+      <summary>How to get it</summary>
+      {g(cfg)}
+    </details>
+  );
+}

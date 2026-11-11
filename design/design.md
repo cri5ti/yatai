@@ -8,7 +8,7 @@ Start here for context. Related documents:
 |---|---|
 | [interaction.md](interaction.md) | the rules every view follows: keyboard model, items, starting, commands |
 | [ux.md](ux.md) | cross-cutting UX principles: highlights, links as references, drawers, AI proposals |
-| [plugins.md](plugins.md) | external sources (GitHub, Outlook, Azure DevOps, more later): the plugin system |
+| [plugins.md](plugins.md) | external sources (GitHub, Outlook calendar and mail, Azure DevOps, more later): the plugin system |
 | [../app/todo.md](../app/todo.md) | what is built, what is left, what needs checking by hand |
 
 ## 1. Goals and non-goals
@@ -50,7 +50,7 @@ Metadata kept automatically: created, last modified, last run (last started), sc
 
 ## 4. Sources (smart items, meetings)
 
-External systems are not mirrored into yatai. **Plugins** (GitHub, Outlook, Azure DevOps, later Jira / Teams / AI sessions) recognise links, report the live state of what is in Next, list what is browsable in a drawer, and supply calendar agendas. Changes become highlights and toasts. Details, auth and security: [plugins.md](plugins.md).
+External systems are not mirrored into yatai. **Plugins** (GitHub, Outlook, Azure DevOps, later Jira / Teams / AI sessions) recognise links, report the live state of what is in Next, list what is browsable in a drawer, and supply calendar agendas. Changes become highlights and toasts. Outlook (calendar, mail) and Azure DevOps can share one Microsoft sign-in (Entra ID, tokens kept in Rust). Details, auth and security: [plugins.md](plugins.md).
 
 ## 5. AI
 
@@ -74,13 +74,13 @@ AI is always a suggestion, never a silent change: proposals are shown in place a
 │   Next · Inbox · Organizer · Focus · drawers · popups                              │
 ├────────────────────────────────────────────────────────────────────────────────────┤
 │  Core (TS): store + undo, actions, plan model, command menu, AI service            │
-│  Plugins (TS): tracker (poll loop, change detection) · github · outlook · devops   │
+│  Plugins (TS): tracker (poll loop, change detection) · github · outlook · devops · mail  │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Stack:** Tauri 2 + Vite + React + TypeScript, Bun as package manager. Nearly all logic is TypeScript; Rust is for the shell and for anything that holds a secret.
 - **State:** one immutable store; every data change goes through `commit` (undo/redo). The main window owns the state; popup windows get a copy and send actions back by name.
-- **Persistence:** SQLite; only changed rows are written, shortly after a change, and flushed on hide / quit. UI preferences are one JSON value. The browser build (used for development and headless checks) uses localStorage.
+- **Persistence:** SQLite; only changed rows are written, shortly after a change, and flushed on hide / quit. UI preferences are one JSON value. Rust keeps snapshots of the file (`VACUUM INTO`, in `backups/` beside it): one per day and one every N minutes if the document changed, each kind with its own keep-count, set in Settings → Database. The browser build (used for development and headless checks) uses localStorage.
 - **Secrets:** tokens and API keys live in the OS keychain and are attached to requests in Rust; the page never reads them back.
 - **Polling:** a loop in the main window asks each plugin about what is in Next (see [plugins.md](plugins.md)); there is no push channel to a desktop app.
 
@@ -118,11 +118,13 @@ poc/      the React UX prototype: frozen, the UX playground the app was built fr
 
 Built: the desktop app with all views, SQLite, tray, global hotkeys, popup windows, undo, the AI assistant (OpenAI-compatible), and the plugin system with GitHub / GitHub Enterprise (live, token), Outlook (live through the published calendar feed) and Azure DevOps / AI sessions (mocked).
 
-Next, roughly in order: real Azure DevOps; Outlook via Microsoft Graph where a tenant allows it (real-time); AI v2 (plan today, history and similarity, "can I help" handoff); AI-session monitoring; Teams messages; OS notifications while hidden; launch at login; signing and auto-update; Windows and Linux hardening (the app has mostly been run on macOS).
+Releases: every push to `main` that touches `app/` builds on GitHub Actions and publishes a signed Windows installer as a GitHub Release (version `<major>.<minor>.<run number>`). Installed copies check the latest release a few seconds after start and every few hours, download in the background, and offer "Restart to update" (toast, tray menu, Settings → Updates).
+
+Next, roughly in order: real Azure DevOps; Outlook via Microsoft Graph where a tenant allows it (real-time); AI v2 (plan today, history and similarity, "can I help" handoff); AI-session monitoring; Teams messages; OS notifications while hidden; launch at login; Windows and Linux hardening (the app has mostly been run on macOS).
 
 ## 11. Open questions
 
 - Does background polling need to run while the window is hidden or closed (tray-resident), and should the loop move to Rust?
-- How to detect AI-session state (Copilot / Claude): local logs, hooks, or APIs?
+- AI-session state: Claude Code is solved by reading its own per-session files (plugins.md, Claude sessions); Copilot is solved the same way, from its session folders (plugins.md, Copilot sessions).
 - Embedding source for history: local model or API.
 - Next: how much is auto-ordered and how much is pinned by the user?

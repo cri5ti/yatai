@@ -1,10 +1,18 @@
 import { useSyncExternalStore } from 'react';
 import type { AccountState, AgendaEvent, ListState, Snapshot } from './plugins/types';
+import type { MailState } from './plugins/mail/model';
 
 export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
 /** what the (mocked) GitHub connector reports for a pull request */
-export type PrStatus = 'draft' | 'review' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export type PrStatus = 'draft' | 'review' | 'building' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export interface ReqCount {
+  at: number[]; // the last hour's
+  total: number;
+  quota?: { left: number; limit: number; reset: number };
+}
+/** an Azure DevOps pipeline run (build) */
+export type BuildStatus = 'queued' | 'building' | 'failed' | 'done' | 'cancelled';
 /** the id of the plugin whose drawer is open ('outlook', 'github', 'devops', …) */
 export type DrawerKind = string;
 export type Layout = 'dock' | 'float' | 'max' | 'pill';
@@ -23,8 +31,12 @@ export interface Node {
   scheduled?: number;
   est?: number; // minutes
   due?: string; // yyyy-mm-dd
+  prio?: number; // quick priority 1 (highest) … 5, Ctrl+1–5
   later?: number; // deferred by N days (/tomorrow, /reschedule)
   spent?: number; // stopwatch total, ms
+  origin?: string; // made by yatai from what a source reported: '<ref>|<detail key>' (a failing check, a review thread); checked off when it is no longer outstanding
+  remind?: number; // /remind: when to come back to it (ms); then it is brought into Next, highlighted and announced
+  notify?: boolean; // tell me about every change of what it tracks (a PR, a pipeline run): toast + OS notification
   smart?: { source: SmartSource; ref?: string }; // ref: what the plugin tracks ('devops:wi/18233'); older items derive it (model.ts refsOf)
 }
 
@@ -107,6 +119,7 @@ export interface MenuItem {
   disabled?: boolean;
   sub?: MenuItem[];
   date?: { value?: string; pick: (iso: string) => void }; // opens a calendar inside the menu
+  when?: { pick: (at: number) => void }; // turns the menu's input into a typed time ("20m", "fri 10:00"), with a preview
   run?: () => void;
 }
 export interface MenuState {
@@ -182,6 +195,17 @@ export interface Settings {
   effort: string; // reasoning effort for reasoning models; '' = model default
   baseUrl: string; // '' = https://api.openai.com/v1
   githubHost: string; // '' = github.com; else a GitHub Enterprise host (its token is in the keychain)
+  devopsOrg: string; // Azure DevOps organization: 'acme', 'dev.azure.com/acme' or 'acme.visualstudio.com' (its token is in the keychain)
+  workStart: number; // working hours, minutes of the day (the Outlook schedule fits them on 80% of the drawer)
+  workEnd: number;
+  mailSorter: 'laya' | 'ollama'; // what sorts emails: a Laya decision model (no LLM), or an Ollama LLM (kept for comparison)
+  mailLaya: 'english' | 'multilingual' | 'typed-decisions'; // the Laya checkpoint
+  mailModel: string; // the Ollama model
+  mailDays: number; // Emails looks at the unread mail of this many days (0 = any age)
+  entraClient: string; // the app registration (application / client id) of the Microsoft sign-in
+  entraTenant: string; // the tenant (id or domain); blank = any work account
+  sources: Record<string, { on?: boolean; auth?: string }>; // per source: switched off (on by default) and how it signs in (plugins/config.ts)
+  mailFolders: string[]; // …in these folders of the user's own mailbox ('Inbox', 'Inbox\Team'); none = nothing is read (the default)
 }
 
 export interface State extends Doc {
@@ -194,6 +218,8 @@ export interface State extends Doc {
   dev: boolean; // developer panel open
   settings: Settings;
   settingsOpen: boolean;
+  onTop: boolean; // keep the window above other windows
+  mdEdit: { ids: string[]; today: boolean } | null; // the markdown editor (⌘E) is open on these items (today: new lines go to Next)
   aiKey: boolean; // an OpenAI key is configured (asked at startup and after Settings changes it; not saved)
   layout: Layout;
   prevLayout: Layout;
@@ -205,13 +231,20 @@ export interface State extends Doc {
   dark: boolean;
   prs: Record<string, PrStatus>; // the MOCK GitHub's truth ('org/repo#123' -> status), set from the developer panel
   prc: Record<string, number>; // …and its unresolved review comments
+  runs: Record<string, BuildStatus>; // the MOCK DevOps's truth (ref -> status), set from the developer panel
+  /** plugin id -> requests made (times in the last hour, total since start) and, where the source says, its quota */
+  reqs: Record<string, ReqCount>;
+  /** where the user last put each popup window (logical px): 'settings', 'ai', … and one per drawer: 'drawer:github' */
+  popups: Record<string, { x: number; y: number; w: number; h: number }>;
+  outlookView: 'list' | 'day'; // the Outlook drawer: a list, or the day plotted by the hour
   snaps: Record<string, Snapshot>; // plugin ref -> last known state (saved, so a restart does not re-announce changes)
   agenda: Record<string, AgendaEvent[]>; // plugin id -> today's calendar events (saved: a meeting moved while yatai was closed is noticed)
   lists: Record<string, ListState>; // 'plugin/list' -> what the drawer shows
+  mail: MailState; // the Emails source: what it has seen, and how the local model sorted it (saved, so nothing is sorted twice)
   accounts: Record<string, AccountState>; // plugin id -> connected?
   drawer: { kind: DrawerKind; tab: string; sel: number } | null; // a plugin's pop-up
   hl: Record<string, true>; // yellow highlights: changes the user did not make, cleared only by hovering them
-  bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number }>>; // user-resized window rects (dock: only w)
+  bounds: Partial<Record<'dock' | 'float' | 'max', { x: number; y: number; w: number; h: number; p?: { x: number; y: number; w: number; h: number } }>>; // user-resized window rects (p: the same in physical px, position + inner size: exact across monitors with different scales)
   scale: number; // index into SCALES
   density: number; // index into DENSITIES
   showApps: boolean;
@@ -225,6 +258,12 @@ export interface State extends Doc {
   edit: string | null; // id being renamed ('card:<key>' for a card title)
   ins: Ins | null; // inline "create here" draft
   menu: MenuState | null;
+  prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–5 picker (no ids: it picks the view filter)
+  scopePick: { id: string; x: number; y: number } | null; // the "what is under this item" list of Next: tick boxes to bring sub-items in / out
+  turnFilter: 'me' | 'them' | null; // the title bar's second filter: only what I can act on now ('me') / what I wait for ('them'), and their parents
+  seen: Record<string, string[]>; // plugin/list -> refs it listed last time (what is new is what is not here); saved
+  fresh: Record<string, true>; // refs of things to act on that turned up since the drawer was last closed; saved
+  prioFilter: number | null; // keys 1–5: Next and the Organizer show only items of priority 1…this, and their parents
   ai: AiState | null;
   proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
   help: boolean;
@@ -339,7 +378,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '' };
+export const DEFAULT_SETTINGS: Settings = { model: 'gpt-4.1-mini', effort: '', baseUrl: '', githubHost: '', devopsOrg: '', workStart: 9 * 60, workEnd: 18 * 60, mailSorter: 'ollama', mailLaya: 'english', mailModel: 'qwen3:4b-instruct-2507-q4_K_M', mailDays: 14, mailFolders: [], entraClient: '', entraTenant: '', sources: {} };
 
 /** a first run: nothing in it yet */
 export const emptyDoc = (): Doc => ({ nodes: [], inbox: [], meetings: [], plan: [], current: null });
@@ -358,6 +397,8 @@ export function initialState(): State {
     dev: false,
     settings: { ...DEFAULT_SETTINGS },
     settingsOpen: false,
+    onTop: false,
+    mdEdit: null,
     aiKey: false,
     layout: 'dock',
     prevLayout: 'dock',
@@ -369,9 +410,14 @@ export function initialState(): State {
     dark: false,
     prs: {},
     prc: {},
+    runs: {},
+    reqs: {},
+    popups: {},
+    outlookView: 'list',
     snaps: {},
     agenda: {},
     lists: {},
+    mail: { items: [] },
     accounts: {},
     drawer: null,
     hl: {},
@@ -389,6 +435,12 @@ export function initialState(): State {
     edit: null,
     ins: null,
     menu: null,
+    prioPick: null,
+    scopePick: null,
+    prioFilter: null,
+    turnFilter: null,
+    seen: {},
+    fresh: {},
     ai: null,
     proposal: null,
     help: false,
@@ -405,7 +457,7 @@ export const effLayout = (s: State): Layout => (s.focus ? 'pill' : s.tab === 'or
 /** state that is not saved: it starts fresh every launch */
 export const TRANSIENT = {
   drawer: null, toasts: [], aiBusy: null, capture: false, menu: null, ai: null, proposal: null, help: false, edit: null, ins: null,
-  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false, lists: {}, accounts: {},
+  multi: [], anchor: null, past: [], future: [], hidden: false, dev: false, settingsOpen: false, mdEdit: null, lists: {}, accounts: {},
 } satisfies Partial<State>;
 export { minutesNow, today };
 
@@ -464,7 +516,7 @@ export const useS = () => useSyncExternalStore(subscribe, get);
 
 /** developer panel: replace the whole document (empty, or the demo data); UI preferences stay */
 export function resetDoc(doc: Doc, demo: boolean) {
-  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, snaps: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
+  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, runs: {}, snaps: {}, seen: {}, fresh: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
   emit();
 }
 export const resetAll = () => resetDoc(emptyDoc(), false);

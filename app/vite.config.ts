@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2022',
+      chunkSizeWarningLimit: 700, // the markdown editor (CodeMirror) is its own lazy chunk
       rollupOptions: { input: { main: resolve(__dirname, 'index.html'), capture: resolve(__dirname, 'capture.html'), popup: resolve(__dirname, 'popup.html') } },
     },
   };

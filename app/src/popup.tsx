@@ -8,11 +8,12 @@ import { DENSITIES, SCALES, get, replaceState, useS } from './store';
 import { followHost } from './plugins/tracker';
 import type { State } from './store';
 import { act } from './act';
-import { isEditable, mod } from './kbd';
-import { emitTo, listen, openLinksWithModifier, startDrag } from './platform';
-import { VIEWS, isView, viewOfLabel, wanted } from './popups';
+import { isEditable, mod, tabKey } from './kbd';
+import { emitTo, listen, openLinksWithModifier, startDrag, onWindowChange, windowRect } from './platform';
+import { VIEWS, isView, viewOfLabel, wanted, popupKey } from './popups';
 import type { View } from './popups';
 import { Settings } from './Settings';
+import { MdEditor } from './MdEditorLazy';
 import { Help } from './Help';
 import { AiPop } from './AiPop';
 import { Drawer } from './Drawer';
@@ -25,7 +26,7 @@ import { DevPanel } from './Controls';
 const win = getCurrentWindow();
 const view = viewOfLabel(win.label);
 
-const COMPONENTS: Record<View, ComponentType> = { settings: Settings, help: Help, ai: AiPop, drawer: Drawer, dev: DevPanel };
+const COMPONENTS: Record<View, ComponentType> = { settings: Settings, edit: MdEditor, help: Help, ai: AiPop, drawer: Drawer, dev: DevPanel };
 
 const closeMe = () => void emitTo('main', 'yatai://popup-closed', view);
 const focusMain = () => void TauriWindow.getByLabel('main').then((m) => m?.setFocus());
@@ -44,6 +45,7 @@ function Popup({ v }: { v: View }) {
       const M = mod(e);
       const k = e.key;
       const t = e.target as HTMLInputElement | null;
+      if (tabKey(e) >= 0) return (e.preventDefault(), act.setTab((['next', 'inbox', 'organizer'] as const)[tabKey(e)]), focusMain());
       if (M && !e.altKey) {
         const p = get().proposal;
         if (p && k === 'Enter') return (e.preventDefault(), e.stopPropagation(), act.acceptAi());
@@ -52,7 +54,6 @@ function Popup({ v }: { v: View }) {
         if (k === ',') return (e.preventDefault(), act.openSettings());
         if (e.shiftKey && k.toLowerCase() === 'd') return (e.preventDefault(), act.toggleDev());
         if (k === '/') return (e.preventDefault(), get().ai ? act.closeAi() : act.openAi());
-        if (['1', '2', '3'].includes(k)) return (e.preventDefault(), act.setTab((['next', 'inbox', 'organizer'] as const)[+k - 1]), focusMain());
         if (isEditable(t)) return;
         if (k.toLowerCase() === 'z') return (e.preventDefault(), e.shiftKey ? act.redo() : act.undo());
         return;
@@ -106,5 +107,15 @@ async function boot() {
       );
   });
   await emitTo('main', 'yatai://popup-hello', view);
+  // remember where the user puts this window (the main window ignores the moves its own placing causes)
+  let t: ReturnType<typeof setTimeout> | undefined;
+  void onWindowChange(() => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const r = await windowRect();
+      const s = get();
+      if (r && isView(view) && wanted(view, s)) act.setPopupRect(view, popupKey(view, s), r);
+    }, 400);
+  });
 }
 void boot();

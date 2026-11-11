@@ -3,25 +3,31 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, fmt, fmtEst, fmtSpent, hasKids, hlForCard, hlForRow, nextModel, navList, prLinks, whenLabel, inLabel } from './model';
+import type { Inside } from './model';
+import { Dots } from './Chips';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, viewKeep, insideOf, nodeTurn, outOfNext, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
-  addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropRowInSeg, dropRowSplit, dropSubItem, editText, focusItem, indentItems, isDone, moveCard, moveRow,
-  moveRows, openAllNext, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
-  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem,
+  addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
+  moveRows, openAllNext, openStepTree, foldStep, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
+  toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
 import { InlineEdit } from './Inline';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
-import { Chips, DueChip } from './Chips';
+import { Chips, DueChip, Prio, RemindChip } from './Chips';
+import { SourceOff } from './Pr';
+import { ScopePill } from './Scope';
 import { useFlip } from './flip';
-import { cx, focusArea, isEditable, mod } from './kbd';
+import { useDragEnd } from './drag';
+import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
 
-/** owner: the group the item belongs to (its parent, or the top level); listed: it is a top-level row of its card (not nested) */
-type Drag = { t: 'row'; id: string; owner: string; parent: string | null; seg: string; listed: boolean } | { t: 'card'; key: string };
-/** sub: a sub-item back among its siblings / onto its parent ('into') — a tree move, not a plan move */
-type Hint = { t: 'row'; id: string; pos: 'before' | 'after' | 'into'; sub?: true } | { t: 'card'; key: string; pos: 'before' | 'after' } | { t: 'end' };
+/** whole: the row is its card's top row, so dragging it between cards moves the whole card */
+type Drag = { t: 'row'; id: string; seg: string; whole: boolean } | { t: 'card'; key: string };
+/** on a row: before / after it (its sibling) or into it (its child) — a tree move, anywhere; between cards: a plan move */
+type Hint = { t: 'row'; id: string; card: string; pos: 'before' | 'after' | 'into' } | { t: 'card'; key: string; pos: 'before' | 'after' } | { t: 'end' };
+const sameHint = (a: Hint | null, b: Hint | null) => JSON.stringify(a) === JSON.stringify(b);
 
 const srcIcon: Record<string, string> = { pr: '⑂', pipeline: '⚙', workitem: '▣', ai: '✦' };
 
@@ -48,31 +54,35 @@ function Stopwatch({ spent, since }: { spent: number; since: number }) {
 }
 
 /* ---------- drag helpers ---------- */
+/** between cards: before / after this one (a card's own top row cannot go next to its own card) */
 function cardHint(e: React.DragEvent, card: CardM, d: Drag): Hint | null {
   if (!card.seg || card.pinned) return null;
   if (d.t === 'card' && d.key === card.key) return null;
-  if (d.t === 'row' && d.listed && d.seg === card.key) return null; // a sub-item may split out right beside its own card
+  if (d.t === 'row' && d.whole && d.seg === card.key) return null;
   const el = (e.currentTarget as HTMLElement).closest('[data-fc]') as HTMLElement;
   const r = el.getBoundingClientRect();
   return { t: 'card', key: card.key, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
 }
-function rowHint(e: React.DragEvent, card: CardM, row: Row, d: Drag): Hint | null {
-  if (d.t !== 'row' || !card.seg || d.id === row.id) return null;
-  const half = () => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    return e.clientY < r.top + r.height / 2 ? ('before' as const) : ('after' as const);
-  };
-  const listed = card.seg.items.includes(row.id);
-  // a top-level row of a card of the same group: reorder / move between that group's cards
-  if (listed && card.seg.owner === d.owner) return { t: 'row', id: row.id, pos: half() };
-  const t = row.node;
-  if (t && d.parent) {
-    // a pulled-out sub-item dropped on its parent row goes back under it
-    if (t.id === d.parent) return d.listed ? { t: 'row', id: row.id, pos: 'into', sub: true } : null;
-    // …or among its siblings nested there
-    if (!listed && t.parentId === d.parent) return { t: 'row', id: row.id, pos: half(), sub: true };
-  }
-  return cardHint(e, card, d);
+/** on a row: top edge = before it, bottom edge = after it, middle = into it. 'no' = not here (into itself) */
+function rowHint(e: React.DragEvent, card: CardM, ri: number, d: Drag, nodes: State['nodes']): Hint | 'no' | null {
+  const row = card.rows[ri];
+  if (d.t !== 'row' || !row.node || !card.seg) return null;
+  if (isUnder(nodes, row.node.id, d.id)) return 'no';
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const edge = Math.min(r.height * 0.3, 14);
+  const pos = e.clientY < r.top + edge ? 'before' : e.clientY > r.bottom - edge ? 'after' : 'into';
+  // above / below a card's item that is not in Next itself: next to the card
+  if (row.head && pos !== 'into') return cardHint(e, card, d);
+  // just below an open item: its first child
+  const below = card.rows[ri + 1];
+  if (pos === 'after' && row.kids && row.node.open !== false && below && below.depth > row.depth) return isUnder(nodes, below.id, d.id) ? 'no' : { t: 'row', id: below.id, card: card.key, pos: 'before' };
+  return { t: 'row', id: row.id, card: card.key, pos };
+}
+/** a drop between cards: the whole card moves, or a row splits out into a card of its own there */
+function dropBetween(d: Drag, key: string | null, pos: 'before' | 'after', last: string | null) {
+  if (d.t === 'card') return dropCard(d.key, key, pos);
+  if (d.whole) return dropCard(d.seg, key, pos);
+  if (key ?? last) dropRowSplit(d.id, (key ?? last)!, key ? pos : 'after');
 }
 
 /** purple: what a pending AI proposal adds / changes / removes */
@@ -95,11 +105,19 @@ interface Shared {
   dnd: React.MutableRefObject<Drag | null>;
   dragId: string | null;
   setDragId: (id: string | null) => void;
+  endDrag: () => void;
   onSelect: (e: React.MouseEvent, card: CardM, row: string | null) => void;
+  /** where each yellow highlight shows (hlTargets): `row:<id>` / `card:<key>` -> the highlighted ids */
+  hlAt: Map<string, string[]>;
+  /** per item: a move that is mine / theirs, or a change, somewhere below it */
+  inside: Map<string, Inside>;
+  /** per item: how many items under it are not in Next (the count pill) */
+  outside: Map<string, number>;
 }
 
 /* ---------- one row ---------- */
-function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
+function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
+  const row = card.rows[ri];
   const { s, sel, hint, dnd } = x;
   const n = row.node;
   const selected = sel.row === row.id;
@@ -120,42 +138,40 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
           draggable: !editing,
           onDragStart: (e: React.DragEvent) => {
             e.stopPropagation();
-            dnd.current = { t: 'row', id: row.id, owner: n.parentId ?? ROOT, parent: n.parentId, seg: card.key, listed: !!card.seg?.items.includes(row.id) };
+            const whole = ri === 0 && (!!row.head || card.ownerId === ROOT);
+            dnd.current = { t: 'row', id: row.id, seg: card.key, whole };
             e.dataTransfer.setData('text/plain', row.id);
             e.dataTransfer.effectAllowed = 'move';
-            x.setDragId(row.id);
+            x.setDragId(whole ? card.key : row.id);
           },
-          onDragEnd: () => {
-            dnd.current = null;
-            x.setHint(null);
-            x.setDragId(null);
-          },
+          onDragEnd: x.endDrag,
         }
       : {};
   const over = {
     onDragOver: (e: React.DragEvent) => {
       const d = dnd.current;
       if (!d) return;
-      const h = rowHint(e, card, row, d);
+      const h = rowHint(e, card, ri, d, s.nodes);
       if (!h) return;
-      e.preventDefault();
       e.stopPropagation();
+      if (h === 'no') return x.setHint(null);
+      e.preventDefault();
       x.setHint(h);
     },
     onDrop: (e: React.DragEvent) => {
       const d = dnd.current;
-      if (!d || d.t !== 'row') return;
-      const h = rowHint(e, card, row, d);
-      x.setHint(null);
-      dnd.current = null;
+      if (!d) return;
+      const h = rowHint(e, card, ri, d, s.nodes);
       if (!h) return;
       e.preventDefault();
       e.stopPropagation();
-      if (h.t === 'row') h.sub || h.pos === 'into' ? dropSubItem(d.id, h.id, h.pos) : dropRowInSeg(d.id, h.id, h.pos);
-      else if (h.t === 'card') dropRowSplit(d.id, h.key, h.pos);
+      x.endDrag();
+      if (h === 'no' || d.t !== 'row') return;
+      if (h.t === 'row') dropOnRow(d.id, h.id, h.pos, card.seg?.id ?? null);
+      else if (h.t === 'card') dropBetween(d, h.key, h.pos, null);
     },
   };
-  const hcls = hint?.t === 'row' && hint.id === row.id ? `drop-${hint.pos}` : '';
+  const hcls = hint?.t === 'row' && hint.id === row.id && hint.card === card.key ? `drop-${hint.pos}` : '';
 
   /* fixed calendar row of a meeting */
   if (row.fx) {
@@ -196,7 +212,10 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
   const open = !!s.expanded[node.id];
   const hasBody = info.rest.some((l) => l.trim());
   const container = hasKids(s.nodes, node.id); // "task": has children → square check, derived done
-  const hlIds = hlForRow(s.nodes, s.hl, row);
+  const hlIds = (x.hlAt.get(`row:${row.id}`) ?? []).filter((id) => id === node.id); // only its own change is yellow; what hides below shows as a circle
+  const folded = !!row.kids && node.open === false;
+  const inner = folded ? x.inside.get(node.id) : undefined;
+  const innerHl = folded && (x.hlAt.get(`row:${row.id}`) ?? []).some((id) => id !== node.id);
   const isPr = prLinks(info.first).length > 0;
   const done = isDone(s.nodes, node.id);
   const pm = x.marks?.[node.id];
@@ -242,6 +261,17 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
         <>
           {/* floats right: the first line wraps around it, later lines use the full width */}
           <div className="meta">
+            {row.head && card.part && card.part.i > 1 && (
+              <span className="part" title={`This item is split across the schedule: part ${card.part.i} of ${card.part.n}. /consolidate brings everything together.`}>
+                ⑂ {card.part.i}/{card.part.n}
+              </span>
+            )}
+            {row.head && node.open === false && card.total > 0 && (
+              <span className="csum">
+                {card.done}/{card.total}
+                {card.est > 0 && ` · ${fmtEst(card.est)}`}
+              </span>
+            )}
             {running ? (
               <Stopwatch spent={node.spent ?? 0} since={s.current!.since} />
             ) : node.spent ? (
@@ -249,7 +279,16 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
                 {fmtSpent(node.spent)}
               </span>
             ) : null}
+            {node.notify && (
+              <span className="bell" title="Notifies you when it changes (/notify to stop)">
+                🔔
+              </span>
+            )}
             <DueChip node={node} />
+            <RemindChip node={node} />
+            {(x.outside.get(node.id) ?? 0) > 0 && !x.dragId && (
+              <ScopePill id={node.id} count={x.outside.get(node.id)!} active={!!sel.row && (sel.row === node.id || isUnder(s.nodes, sel.row, node.id))} />
+            )}
             {pk('est') && pm!.prev.est ? <s className="est-chip was">{fmtEst(pm!.prev.est as number)}</s> : null}
             {node.est ? (
               <button
@@ -283,10 +322,14 @@ function RowView({ x, card, row }: { x: Shared; card: CardM; row: Row }) {
                 {running ? '❚❚' : '▶'}
               </button>
             )}
+            <Dots m={inner || innerHl ? { me: !!inner?.me, them: !!inner?.them, hl: innerHl } : undefined} />
+            <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} ids={picked && x.multi.size > 1 ? [...x.multi] : [node.id]} />
           </div>
           <div className="abody">
             <div className={cx('first', pk('title') && 'pk')}>
+              {row.head && card.path.length > 1 && <span className="muted crumbs">{card.path.slice(0, -1).join(' › ')} › </span>}
               {node.smart && !isPr && <span className="src">{srcIcon[node.smart.source]}</span>}
+              {node.smart && !isPr && <SourceOff node={node} />}
               {inline(info.first)}
               {pm?.kind === 'add' && <span className="propchip">new</span>}
               <Chips node={node} />
@@ -320,13 +363,20 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
   const cardSel = sel.card === card.key && !sel.row;
   const hasSel = sel.card === card.key;
   const picked = !!card.task && x.multi.has(card.task.id);
-  // a change the user did not make: highlight the card when it is a meeting, or when the item is hidden inside it
-  const hlIds = hlForCard(s.nodes, s.hl, card);
+  // a change the user did not make: on the card when it is a meeting, or when the item is hidden inside it
+  const hlAll = x.hlAt.get(`card:${card.key}`) ?? [];
+  const hlIds = card.collapsed ? hlAll.filter((id) => id === card.ownerId) : hlAll; // a change hidden in a collapsed card is a circle, not yellow
+  const dots = card.collapsed
+    ? card.rows.reduce((a, r) => {
+        const i = r.node ? x.inside.get(r.node.id) : undefined;
+        const t = r.node ? nodeTurn(r.node, s.snaps) : undefined;
+        return { me: a.me || t === 'me' || !!i?.me, them: a.them || t === 'them' || !!i?.them, hl: a.hl };
+      }, { me: false, them: false, hl: hlAll.length > hlIds.length })
+    : undefined;
   // purple header: the owner itself is touched, or a proposed change hides inside the collapsed card
   const pm = card.task ? x.marks?.[card.task.id] : undefined;
   const propHidden = !!x.marks && card.collapsed && card.rows.some((r) => r.node && x.marks![r.node.id]);
   const live = card.rows.some((r) => r.node && s.current?.id === r.node.id);
-  const titleEdit = s.edit === 'card:' + card.key;
   const movable = !!card.seg && !card.pinned;
   const ins = s.ins?.kind === 'action' ? s.ins : null;
 
@@ -344,7 +394,9 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
       while (card.rows[j + 1] && card.rows[j + 1].depth > card.rows[i].depth) j++;
       return { after: card.rows[j].id, depth: card.rows[i].depth };
     }
-    return ins.seg === card.key ? { top: true, depth: 0 } : null;
+    if (ins.seg !== card.key) return null;
+    if (card.rows[0]?.head) return card.rows[1] ? { before: card.rows[1].id, depth: 1 } : { after: card.rows[0].id, depth: 1 };
+    return { top: true, depth: 0 };
   };
   const slot = draftSlot();
   const draft = (depth: number) =>
@@ -369,12 +421,11 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
 
   const hcls = hint?.t === 'card' && hint.key === card.key ? `drop-${hint.pos}` : '';
   const title = card.kind === 'meeting' ? null : card.path;
-  const rowDone = card.allDone;
 
   return (
     <section
       ref={ref}
-      className={cx('card', card.kind, isLoose(card) && 'loose', card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', picked && !cardSel && 'is-multi', live && 'has-live', hlIds.length > 0 && 'hl', hcls, x.dragId === card.key && 'dragging')}
+      className={cx('card', card.kind, card.meeting?.state === 'now' && card.meeting.dayOffset === 0 && 'inprogress', isLoose(card) && 'loose', card.collapsed && 'collapsed', cardSel && 'is-sel', hasSel && 'has-sel', picked && !cardSel && 'is-multi', live && 'has-live', hlIds.length > 0 && 'hl', hcls, x.dragId === card.key && 'dragging')}
       data-fc={card.key}
       data-sel={cardSel || undefined}
       onMouseMove={hlIds.length ? () => dismissHl(hlIds) : undefined}
@@ -395,45 +446,28 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
         const d = dnd.current;
         if (!d) return;
         const h = cardHint(e, card, d);
-        x.setHint(null);
-        dnd.current = null;
         if (!h || h.t !== 'card') return;
         e.preventDefault();
-        if (d.t === 'card') dropCard(d.key, h.key, h.pos);
-        else dropRowSplit(d.id, h.key, h.pos);
+        x.endDrag();
+        dropBetween(d, h.key, h.pos, null);
       }}
     >
       {!isLoose(card) && <header
         className={cx('chead', (pm || propHidden) && 'prop', pm && `prop-${pm.kind}`)}
         title={propTip(pm) ?? (propHidden ? 'Proposed AI changes inside' : undefined)}
-        draggable={movable && !titleEdit}
+        draggable={movable}
         onClick={(e) => x.onSelect(e, card, null)}
-        onDoubleClick={() => card.kind === 'task' && toggleCardOpen(card, card.collapsed)}
         onDragStart={(e) => {
           dnd.current = { t: 'card', key: card.key };
           e.dataTransfer.setData('text/plain', card.key);
           e.dataTransfer.effectAllowed = 'move';
           x.setDragId(card.key);
         }}
-        onDragEnd={() => {
-          dnd.current = null;
-          x.setHint(null);
-          x.setDragId(null);
-        }}
+        onDragEnd={x.endDrag}
       >
         <button className="fold" tabIndex={-1} aria-label={card.collapsed ? 'Expand' : 'Collapse'} onClick={(e) => (e.stopPropagation(), toggleCardOpen(card, card.collapsed))} disabled={card.kind === 'attention'}>
           {card.collapsed ? '▸' : '▾'}
         </button>
-        {card.kind === 'task' && (
-          <button
-            className={cx('check sq hd', rowDone && 'on')}
-            tabIndex={-1}
-            aria-label={rowDone ? 'Mark not done' : 'Mark done'}
-            onClick={(e) => (e.stopPropagation(), toggleDoneNodes(card.task ? [card.task.id] : []))}
-          >
-            {rowDone ? '✓' : ''}
-          </button>
-        )}
         {card.kind === 'meeting' ? (
           <>
             <div className="mtime">
@@ -443,47 +477,33 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
             <div className="mtitle">{card.meeting!.title}</div>
           </>
         ) : (
-          <div className={cx('path', titleEdit && 'editing')}>
-            {titleEdit && card.task ? (
-              <InlineEdit
-                multiline={false}
-                initial={card.task.title}
-                onCommit={(t) => (editText(card.task!.id, t), set(() => ({ edit: null })), focusArea())}
-                onCancel={() => (set(() => ({ edit: null })), focusArea())}
-              />
-            ) : (
-              <>
-                {title!.slice(0, -1).map((p, i) => (
-                  <span key={i} className="muted">
-                    {p} ›{' '}
-                  </span>
-                ))}
-                <span className={cx('accent', rowDone && card.rows.length > 0 && 'struck')}>{title![title!.length - 1] ?? '—'}</span>
-              </>
-            )}
+          <div className="path">
+            {title!.slice(0, -1).map((p, i) => (
+              <span key={i} className="muted">
+                {p} ›{' '}
+              </span>
+            ))}
+            <span className="accent">{title![title!.length - 1] ?? '—'}</span>
           </div>
         )}
         <span className="grow" />
-        {card.part && card.part.i > 1 && (
-          <span className="part" title={`This item is split across the schedule: part ${card.part.i} of ${card.part.n}. /consolidate brings everything together.`}>
-            ⑂ {card.part.i}/{card.part.n}
-          </span>
-        )}
         {card.pinned && card.kind === 'meeting' && <span className="pin" title="Pinned by time — rises as it approaches">⏶</span>}
         <span className="csum">
           {card.total > 0 && `${card.done}/${card.total}`}
           {card.est > 0 && ` · ${fmtEst(card.est)}`}
         </span>
+        {card.collapsed && <Dots m={dots} />}
+        {card.collapsed && <Prio v={bestPrio(card.rows.map((r) => (r.node ? prioShown(s.nodes, r.node.id, true) : null)))} />}
       </header>}
 
       <div className="collapse" data-open={!card.collapsed}>
         <div className="collapse-in">
           <div className="rows">
             {slot?.top && draft(0)}
-            {card.rows.map((r) => (
+            {card.rows.map((r, ri) => (
               <div key={r.id} className="rowwrap">
                 {slot?.before === r.id && draft(slot.depth)}
-                <RowView x={x} card={card} row={r} />
+                <RowView x={x} card={card} ri={ri} />
                 {slot?.after === r.id && draft(slot.depth)}
               </div>
             ))}
@@ -514,15 +534,28 @@ const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}
 
 export function Next() {
   const { s, marks } = useView();
-  const m = useMemo(() => nextModel(s), [s.nodes, s.plan, s.meetings, s.clock, s.snaps]);
+  const m = useMemo(() => {
+    const keep = viewKeep(s);
+    return keep ? filterNext(s, keep) : nextModel(s);
+  }, [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter, s.turnFilter]);
   const nav = useMemo(() => navList(m.cards), [m]);
+  const inside = useMemo(() => insideOf(s.nodes, s.snaps, s.hl), [s.nodes, s.snaps, s.hl]);
+  const hlAt = useMemo(() => hlTargets(m.cards, s.nodes, s.hl), [m, s.nodes, s.hl]);
+  const outside = useMemo(() => outOfNext(s.nodes), [s.nodes]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<Drag | null>(null);
-  const [hint, setHint] = useState<Hint | null>(null);
+  const [hint, setHintRaw] = useState<Hint | null>(null);
+  const setHint = (h: Hint | null) => setHintRaw((p) => (sameHint(p, h) ? p : h));
   const [dragId, setDragId] = useState<string | null>(null);
   useFlip(area, 'data-fc');
+  const endDrag = () => {
+    dnd.current = null;
+    setHintRaw(null);
+    setDragId(null);
+  };
+  useDragEnd(!!dragId, endDrag);
 
   useEffect(() => {
     area.current?.focus({ preventScroll: true });
@@ -530,6 +563,11 @@ export function Next() {
   useEffect(() => {
     area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [sel.card, sel.row]);
+  // the priority filter changes the rows around the selection: bring it back into view (after the rows settle)
+  useEffect(() => {
+    const f = requestAnimationFrame(() => area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'center' }));
+    return () => cancelAnimationFrame(f);
+  }, [s.prioFilter, s.turnFilter]);
 
   // moving the keyboard cursor onto a yellow highlight counts as having seen it
   const lastSel = useRef<string | null>(null);
@@ -537,7 +575,8 @@ export function Next() {
     const k = keyOf(sel.card, sel.row);
     if (lastSel.current !== null && lastSel.current !== k && card) {
       const row = sel.row ? card.rows.find((r) => r.id === sel.row) : undefined;
-      dismissHl(row ? hlForRow(s.nodes, s.hl, row) : hlForCard(s.nodes, s.hl, card));
+      const ids = (row ? hlAt.get(`row:${row.id}`) : hlAt.get(`card:${card.key}`)) ?? [];
+      dismissHl(row ? ids.filter((id) => id === row.node?.id) : card.collapsed ? ids.filter((id) => id === card.ownerId) : ids);
     }
     lastSel.current = k;
   }, [sel.card, sel.row]);
@@ -570,7 +609,7 @@ export function Next() {
     }
     pick(c.key, row);
   };
-  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, onSelect };
+  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt, inside, outside };
 
   /** what a command applies to: the multi-selection, or the one selected item */
   const targets = (): string[] => {
@@ -587,15 +626,28 @@ export function Next() {
   /** on a card header, "below" / "above" both mean: the first item inside it (after the calendar row of a meeting) */
   const insideHeader = () =>
     set(() => ({ ins: { kind: 'action', owner: card!.ownerId, seg: card!.seg?.id, after: card!.kind === 'meeting' ? card!.rows.find((r) => r.fx)?.id ?? null : null } }));
+  /** on an open item with children (or a card's item), new items go in as its first child */
+  const firstChild = () => {
+    if (!card || !sel.row) return false;
+    const ri = card.rows.findIndex((r) => r.id === sel.row);
+    const r = card.rows[ri];
+    if (!r?.node || !(r.head || (r.kids && r.node.open !== false))) return false;
+    const below = card.rows[ri + 1];
+    if (below && below.depth > r.depth) set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: null, before: below.id } }));
+    else set(() => ({ ins: { kind: 'action', owner: r.node!.id, seg: card.seg?.id, after: null } }));
+    return true;
+  };
   /** Enter: a new item below the selection */
   const insertHere = () => {
     if (!card) return set(() => ({ ins: { kind: 'task', afterSeg: null } }));
+    if (firstChild()) return;
     if (sel.row) return set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: sel.row } }));
     insideHeader();
   };
   /** ⇧Enter: a new item above it */
   const insertAbove = () => {
     if (!card) return set(() => ({ ins: { kind: 'task', afterSeg: null } }));
+    if (card.rows.find((r) => r.id === sel.row)?.head) return void firstChild();
     if (sel.row) return set(() => ({ ins: { kind: 'action', owner: card.ownerId, seg: card.seg?.id, after: null, before: sel.row! } }));
     insideHeader();
   };
@@ -638,12 +690,15 @@ export function Next() {
       }
       return e.shiftKey ? insertAbove() : insertHere();
     }
+    // Ctrl+1–5: quick priority (same again, or Ctrl+0, clears) · 1–5: show only priorities up to it (0 / same again: all)
+    if (prioKey(e) >= 0) return ids.length ? (stop(), setPrio(ids, prioKey(e))) : undefined;
     if (M && k === ']') return (stop(), indentItems(ids, rowsOnly));
     if (M && k === '[') return (stop(), outdentItems(ids));
     if (M && (k === 'ArrowUp' || k === 'ArrowDown')) {
       stop();
       const dir = k === 'ArrowUp' ? -1 : 1;
       if (bulk) moveRows(live, dir);
+      else if (row?.head) moveCard(card!.key, dir);
       else if (sel.row) moveRow(sel.row, dir);
       else if (card?.pinned) toast(card.kind === 'meeting' ? 'Pinned by time — it rises as the meeting approaches' : 'Pinned: needs your attention', 'info');
       else if (card?.seg) moveCard(card.key, dir);
@@ -674,10 +729,24 @@ export function Next() {
       else if (card) startCard(card);
       return;
     }
-    // − / + : collapse / expand everything
-    if (!M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
-    if (!M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
+    // ⌘− / ⌘+ : collapse / expand everything · − / + : one level at a time under the current item
+    if (M && (k === '-' || k === '_')) return (stop(), openAllNext(false));
+    if (M && (k === '+' || k === '=')) return (stop(), openAllNext(true));
+    if (!M && (k === '-' || k === '_' || k === '+' || k === '=')) {
+      stop();
+      const open = k === '+' || k === '=';
+      if (card?.kind === 'meeting' && !rowNode) return toggleCardOpen(card, open);
+      const roots = rowNode ? [rowNode.id] : card?.task ? [card.task.id] : m.cards.flatMap((c) => (c.task ? [c.task.id] : []));
+      // nothing left to close under a row: step out to its parent row and close that
+      const par = rowNode?.parentId && !bulk && !open && !foldStep(s.nodes, (n) => !!n.open, roots, false).length ? card!.rows.find((r) => r.id === rowNode.parentId) : undefined;
+      if (par?.node) {
+        pick(card!.key, par.id);
+        return openStepTree([par.id], false);
+      }
+      return openStepTree(roots, open);
+    }
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
+    if (/^[0-5]$/.test(k)) return (stop(), setPrioFilter(+k));
 
     switch (k) {
       case 'ArrowDown':
@@ -712,7 +781,7 @@ export function Next() {
           else if (row!.depth > 0) {
             // back to the parent row
             for (let j = ri - 1; j >= 0; j--) if (card.rows[j].depth < row!.depth) return pick(card.key, card.rows[j].id);
-          } else pick(card.key, null);
+          } else if (!isLoose(card)) pick(card.key, null);
         } else if (!card.collapsed && card.kind !== 'attention') toggleCardOpen(card, false);
         return;
       }
@@ -800,7 +869,7 @@ export function Next() {
           <InlineEdit
             chain
             onCommit={(t, chain) => {
-              const loose = m.cards.find(isLoose);
+              const loose = [...m.cards].reverse().find((c) => isLoose(c) && c.ownerId === ROOT);
               const last = loose?.rows.filter((r) => r.depth === 0).pop()?.id ?? null;
               const id = addAction(ROOT, loose?.seg?.id, last, t);
               set(() => ({ ins: chain ? { kind: 'action', owner: ROOT, seg: loose?.seg?.id ?? 's_' + ROOT, after: id } : null }));
@@ -838,7 +907,8 @@ export function Next() {
           const next = { owner: card?.ownerId ?? ROOT, seg: card?.seg?.id };
           const node = card && sel.row ? card.rows.find((r) => r.id === sel.row)?.node : undefined;
           // below the selected item; on a header or the calendar row: into that card
-          pasteItems(tree, node ? { parentId: node.parentId, afterId: node.id, next } : { parentId: !card || card.ownerId === ROOT ? null : card.ownerId, afterId: null, next });
+          const head = !!card?.rows.find((r) => r.id === sel.row)?.head;
+          pasteItems(tree, node && !head ? { parentId: node.parentId, afterId: node.id, next } : { parentId: !card || card.ownerId === ROOT ? null : card.ownerId, afterId: null, next });
         }}
         aria-label="Next — arrows to navigate, ? for shortcuts"
         onDragOver={(e) => {
@@ -851,10 +921,8 @@ export function Next() {
           const d = dnd.current;
           if (!d || !lastMovable || e.defaultPrevented) return;
           e.preventDefault();
-          dnd.current = null;
-          setHint(null);
-          if (d.t === 'card') dropCard(d.key, null, 'after');
-          else dropRowSplit(d.id, lastMovable.key, 'after');
+          endDrag();
+          dropBetween(d, null, 'after', lastMovable.key);
         }}
       >
         {/* the columns live on an inner box of natural height: on the scroller itself they would overflow sideways */}

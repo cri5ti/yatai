@@ -1,4 +1,4 @@
-import type { Node, PrStatus, State } from './store';
+import type { Node, PrStatus, State, BuildStatus } from './store';
 import { childrenOf, nextActions, nextModel, pathOf } from './model';
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -135,6 +135,10 @@ export interface AdoEntry {
   note: string;
 }
 export const ADO: Record<string, AdoEntry[]> = {
+  following: [
+    { id: '18190', title: 'Investigate sqlite-vec for embeddings', type: 'Story', state: 'Active', note: 'you follow it · changed 2h ago' },
+    { id: '18256', title: 'Payroll export: add the new tax fields', type: 'Story', state: 'Resolved', note: 'you follow it · changed 1d ago' },
+  ],
   mentions: [
     { id: '18301', title: 'Staff export times out for large tenants', type: 'Bug', state: 'Active', note: 'Priya mentioned you · 1h' },
     { id: '18288', title: 'Clarify the extraction acceptance criteria', type: 'Story', state: 'New', note: 'Sam mentioned you · 1d' },
@@ -149,3 +153,22 @@ export const ADO: Record<string, AdoEntry[]> = {
     { id: '18204', title: 'Remove dead feature flags', type: 'Task', state: 'New', note: 'created by you · 4d' },
   ],
 };
+
+/** the mocked DevOps "Pipelines" list: recent runs (each one a link, tracked like a PR) */
+export interface PipelineEntry {
+  base: string; // dev.azure.com/<org>/<project>
+  id: string;
+  name: string;
+  number: string;
+  branch: string;
+  status: BuildStatus;
+  note: string;
+}
+export const PIPELINES: PipelineEntry[] = [
+  { base: 'dev.azure.com/acme/Payroll', id: '4211', name: 'payroll-ci', number: '20261109.4', branch: 'feature/staff-export', status: 'building', note: 'started 2m ago' },
+  { base: 'dev.azure.com/acme/Payroll', id: '4212', name: 'payroll-deploy', number: '2.4.0', branch: 'main', status: 'queued', note: 'waiting for an agent' },
+  { base: 'dev.azure.com/acme/Web', id: '977', name: 'web-ci', number: '20261109.2', branch: 'main', status: 'failed', note: 'unit tests · 20m ago' },
+  { base: 'dev.azure.com/acme/Web', id: '975', name: 'web-ci', number: '20261109.1', branch: 'main', status: 'done', note: '1h ago' },
+  { base: 'dev.azure.com/acme/Web', id: '981', name: 'web-e2e', number: '20261109.3', branch: 'feature/login', status: 'building', note: 'started 6m ago' },
+  { base: 'dev.azure.com/acme/Payroll', id: '4213', name: 'payroll-ci', number: '20261109.5', branch: 'main', status: 'queued', note: 'queued 1m ago' },
+];
