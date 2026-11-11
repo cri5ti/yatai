@@ -3,7 +3,9 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, outOfNext, whenLabel, inLabel } from './model';
+import type { Inside } from './model';
+import { Dots } from './Chips';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, viewKeep, insideOf, nodeTurn, outOfNext, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
@@ -107,6 +109,8 @@ interface Shared {
   onSelect: (e: React.MouseEvent, card: CardM, row: string | null) => void;
   /** where each yellow highlight shows (hlTargets): `row:<id>` / `card:<key>` -> the highlighted ids */
   hlAt: Map<string, string[]>;
+  /** per item: a move that is mine / theirs, or a change, somewhere below it */
+  inside: Map<string, Inside>;
   /** per item: how many items under it are not in Next (the count pill) */
   outside: Map<string, number>;
 }
@@ -208,7 +212,10 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
   const open = !!s.expanded[node.id];
   const hasBody = info.rest.some((l) => l.trim());
   const container = hasKids(s.nodes, node.id); // "task": has children → square check, derived done
-  const hlIds = x.hlAt.get(`row:${row.id}`) ?? [];
+  const hlIds = (x.hlAt.get(`row:${row.id}`) ?? []).filter((id) => id === node.id); // only its own change is yellow; what hides below shows as a circle
+  const folded = !!row.kids && node.open === false;
+  const inner = folded ? x.inside.get(node.id) : undefined;
+  const innerHl = folded && (x.hlAt.get(`row:${row.id}`) ?? []).some((id) => id !== node.id);
   const isPr = prLinks(info.first).length > 0;
   const done = isDone(s.nodes, node.id);
   const pm = x.marks?.[node.id];
@@ -315,6 +322,7 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
                 {running ? '❚❚' : '▶'}
               </button>
             )}
+            <Dots m={inner || innerHl ? { me: !!inner?.me, them: !!inner?.them, hl: innerHl } : undefined} />
             <Prio v={prioShown(s.nodes, node.id, !!row.kids && node.open === false)} ids={picked && x.multi.size > 1 ? [...x.multi] : [node.id]} />
           </div>
           <div className="abody">
@@ -356,7 +364,15 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
   const hasSel = sel.card === card.key;
   const picked = !!card.task && x.multi.has(card.task.id);
   // a change the user did not make: on the card when it is a meeting, or when the item is hidden inside it
-  const hlIds = x.hlAt.get(`card:${card.key}`) ?? [];
+  const hlAll = x.hlAt.get(`card:${card.key}`) ?? [];
+  const hlIds = card.collapsed ? hlAll.filter((id) => id === card.ownerId) : hlAll; // a change hidden in a collapsed card is a circle, not yellow
+  const dots = card.collapsed
+    ? card.rows.reduce((a, r) => {
+        const i = r.node ? x.inside.get(r.node.id) : undefined;
+        const t = r.node ? nodeTurn(r.node, s.snaps) : undefined;
+        return { me: a.me || t === 'me' || !!i?.me, them: a.them || t === 'them' || !!i?.them, hl: a.hl };
+      }, { me: false, them: false, hl: hlAll.length > hlIds.length })
+    : undefined;
   // purple header: the owner itself is touched, or a proposed change hides inside the collapsed card
   const pm = card.task ? x.marks?.[card.task.id] : undefined;
   const propHidden = !!x.marks && card.collapsed && card.rows.some((r) => r.node && x.marks![r.node.id]);
@@ -476,6 +492,7 @@ function CardView({ x, card }: { x: Shared; card: CardM }) {
           {card.total > 0 && `${card.done}/${card.total}`}
           {card.est > 0 && ` · ${fmtEst(card.est)}`}
         </span>
+        {card.collapsed && <Dots m={dots} />}
         {card.collapsed && <Prio v={bestPrio(card.rows.map((r) => (r.node ? prioShown(s.nodes, r.node.id, true) : null)))} />}
       </header>}
 
@@ -517,8 +534,12 @@ const keyOf = (card: string | null, row: string | null) => `${card}|${row ?? ''}
 
 export function Next() {
   const { s, marks } = useView();
-  const m = useMemo(() => (s.prioFilter ? filterNext(s, s.prioFilter) : nextModel(s)), [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter]);
+  const m = useMemo(() => {
+    const keep = viewKeep(s);
+    return keep ? filterNext(s, keep) : nextModel(s);
+  }, [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter, s.turnFilter]);
   const nav = useMemo(() => navList(m.cards), [m]);
+  const inside = useMemo(() => insideOf(s.nodes, s.snaps, s.hl), [s.nodes, s.snaps, s.hl]);
   const hlAt = useMemo(() => hlTargets(m.cards, s.nodes, s.hl), [m, s.nodes, s.hl]);
   const outside = useMemo(() => outOfNext(s.nodes), [s.nodes]);
   const sel = effSel(m.cards, s.nsel);
@@ -546,7 +567,7 @@ export function Next() {
   useEffect(() => {
     const f = requestAnimationFrame(() => area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'center' }));
     return () => cancelAnimationFrame(f);
-  }, [s.prioFilter]);
+  }, [s.prioFilter, s.turnFilter]);
 
   // moving the keyboard cursor onto a yellow highlight counts as having seen it
   const lastSel = useRef<string | null>(null);
@@ -554,7 +575,8 @@ export function Next() {
     const k = keyOf(sel.card, sel.row);
     if (lastSel.current !== null && lastSel.current !== k && card) {
       const row = sel.row ? card.rows.find((r) => r.id === sel.row) : undefined;
-      dismissHl((row ? hlAt.get(`row:${row.id}`) : hlAt.get(`card:${card.key}`)) ?? []);
+      const ids = (row ? hlAt.get(`row:${row.id}`) : hlAt.get(`card:${card.key}`)) ?? [];
+      dismissHl(row ? ids.filter((id) => id === row.node?.id) : card.collapsed ? ids.filter((id) => id === card.ownerId) : ids);
     }
     lastSel.current = k;
   }, [sel.card, sel.row]);
@@ -587,7 +609,7 @@ export function Next() {
     }
     pick(c.key, row);
   };
-  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt, outside };
+  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt, inside, outside };
 
   /** what a command applies to: the multi-selection, or the one selected item */
   const targets = (): string[] => {

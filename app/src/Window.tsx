@@ -10,7 +10,8 @@ import { TAB_MOD } from './kbd';
 import { PrioPick, prioBg } from './Chips';
 import { ScopePick } from './Scope';
 import { AiPop, ProposalBar } from './AiPop';
-import { capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
+import { pluginOf } from './plugins/types';
+import { cycleTurnFilter, capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { Drawer } from './Drawer';
 import { DisplayButton } from './display';
 import { enabled } from './plugins/config';
@@ -76,6 +77,7 @@ function useOsWindow() {
 /* ---------- the yatai window ---------- */
 function Win() {
   const s = useS();
+  const fresh = (kind: string) => Object.keys(s.fresh).some((r) => pluginOf(r) === kind);
   const urgentMail = s.mail.items.filter((m) => m.unread && m.cls === 'urgent').length;
   const layout = effLayout(s);
   useOsWindow();
@@ -127,6 +129,16 @@ function Win() {
             ))}
           </nav>
           <div className="wc">
+            {(s.turnFilter || s.tab !== 'inbox') && (
+              <button
+                className={s.turnFilter ? `tfilt on ${s.turnFilter}` : 'tfilt'}
+                title={s.turnFilter === 'me' ? 'Showing what you can act on now — click: what you are waiting for' : s.turnFilter === 'them' ? 'Showing what you are waiting for — click: show everything' : 'Show only what you can act on / what you are waiting for'}
+                aria-label="Actionable / waiting filter"
+                onClick={cycleTurnFilter}
+              >
+                <i className={`td ${s.turnFilter ?? 'off'}`} />
+              </button>
+            )}
             {(s.prioFilter || s.tab !== 'inbox') && (
               <button
                 className={s.prioFilter ? 'pfilt on' : 'pfilt'}
@@ -177,32 +189,38 @@ function Win() {
           <div className="ugrp drawers" role="group" aria-label="Sources">
             {enabled(s.settings, 'outlook') && (
               <button className={s.drawer?.kind === 'outlook' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'outlook'} title="Calendar — bring meetings in" onClick={() => openDrawer('outlook')}>
+                {fresh('outlook') && <i className="td me nb" title="New for you" />}
                 <span aria-hidden>📅</span> Calendar
               </button>
             )}
             {enabled(s.settings, 'github') && (
               <button className={s.drawer?.kind === 'github' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'github'} title="GitHub — bring pull requests in" onClick={() => openDrawer('github')}>
+                {fresh('github') && <i className="td me nb" title="New for you" />}
                 <GhIcon /> GitHub
               </button>
             )}
             {enabled(s.settings, 'devops') && (
               <button className={s.drawer?.kind === 'devops' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'devops'} title="DevOps — pipelines and work items" onClick={() => openDrawer('devops')}>
+                {fresh('devops') && <i className="td me nb" title="New for you" />}
                 <span aria-hidden>◈</span> DevOps
               </button>
             )}
             {enabled(s.settings, 'mail') && (
               <button className={s.drawer?.kind === 'mail' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'mail'} title="Emails — sorted by a local model" onClick={() => openDrawer('mail')}>
+                {fresh('mail') && <i className="td me nb" title="New for you" />}
                 <span aria-hidden>✉</span> Emails
                 {urgentMail > 0 && <b className="ucount" title={`${urgentMail} urgent`}>{urgentMail}</b>}
               </button>
             )}
             {enabled(s.settings, 'claude') && (
               <button className={s.drawer?.kind === 'claude' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'claude'} title="Claude — follow Claude Code sessions" onClick={() => openDrawer('claude')}>
+                {fresh('claude') && <i className="td me nb" title="New for you" />}
                 <span aria-hidden>✦</span> Claude
               </button>
             )}
             {enabled(s.settings, 'copilot') && (
               <button className={s.drawer?.kind === 'copilot' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'copilot'} title="Copilot — follow GitHub Copilot sessions" onClick={() => openDrawer('copilot')}>
+                {fresh('copilot') && <i className="td me nb" title="New for you" />}
                 <span aria-hidden>◐</span> Copilot
               </button>
             )}

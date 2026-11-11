@@ -43,6 +43,18 @@ export const prioBg = (p: number) => {
   return p <= 3 ? `color-mix(in oklch, var(--prio-mid) ${(p - 1) * 50}%, var(--prio-hi))` : `color-mix(in oklch, var(--prio-lo) ${(p - 3) * 50}%, var(--prio-mid))`;
 };
 
+/** tiny circles on a collapsed parent: something inside is mine to act on (blue) / I am waiting for (purple) / changed (yellow) */
+export function Dots({ m }: { m?: { me: boolean; them: boolean; hl: boolean } }) {
+  if (!m || !(m.me || m.them || m.hl)) return null;
+  return (
+    <span className="tdots" aria-hidden>
+      {m.me && <i className="td me" title="Inside: something for you to act on" />}
+      {m.them && <i className="td them" title="Inside: waiting on someone else" />}
+      {m.hl && <i className="td hl" title="Inside: something changed (open it to see what)" />}
+    </span>
+  );
+}
+
 /** the quick-priority square (1 = highest … 5); `inside` = it comes from something hidden under a collapsed item.
  *  With `ids` it is a button that opens the little picker — and shows as a faint ghost on hover when there is no priority yet. */
 export function Prio({ v, ids }: { v: { p: number; inside: boolean } | null; ids?: string[] }) {

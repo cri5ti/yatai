@@ -1,5 +1,5 @@
 import type { BuildStatus, Meeting, Node, Nsel, PrStatus, Seg, State } from './store';
-import type { AgendaEvent, Alert, Snapshot } from './plugins/types';
+import type { AgendaEvent, Alert, Snapshot, Turn } from './plugins/types';
 
 export const FX = 'fx_'; // fixed calendar row inside a meeting card: fx_<meetingId>
 
@@ -141,6 +141,57 @@ export function prAttention(n: Node, snaps: Snaps) {
   });
 }
 
+/**
+ * Whose move it is on an item, the same for every source: 'me' = I can act on it now (approve, answer, fix, look),
+ * 'them' = I am waiting on someone or something; unset = neither. What its plugins report (`view.turn`); mine wins.
+ */
+export function nodeTurn(n: Node, snaps: Snaps): Turn | undefined {
+  if (n.status === 'done' || n.status === 'dropped') return undefined;
+  let turn: Turn | undefined;
+  for (const r of refsOf(n)) {
+    const sn = snaps[r];
+    if (!sn || sn.gone) continue;
+    if (sn.view.turn === 'me') return 'me';
+    if (sn.view.turn === 'them') turn = 'them';
+  }
+  return turn;
+}
+export interface Inside { me: boolean; them: boolean; hl: boolean }
+/** per item: what is hidden below it (a move that is mine / theirs, a yellow highlight): the little circles on a collapsed parent */
+export function insideOf(nodes: Node[], snaps: Snaps, hl: Record<string, true>): Map<string, Inside> {
+  const out = new Map<string, Inside>();
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    const t = nodeTurn(n, snaps);
+    const h = !!hl[n.id];
+    if (!t && !h) continue;
+    for (let cur = n.parentId ? byId.get(n.parentId) : undefined, i = 0; cur && i < 100; cur = cur.parentId ? byId.get(cur.parentId) : undefined, i++) {
+      const o = out.get(cur.id) ?? { me: false, them: false, hl: false };
+      if (t === 'me') o.me = true;
+      if (t === 'them') o.them = true;
+      if (h) o.hl = true;
+      out.set(cur.id, o);
+    }
+  }
+  return out;
+}
+/** the turn filter: items whose move is `turn`, and every parent above them */
+export function turnKeep(nodes: Node[], snaps: Snaps, turn: Turn): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const keep = new Set<string>();
+  for (const n of nodes) {
+    if (nodeTurn(n, snaps) !== turn) continue;
+    for (let cur: Node | undefined = n; cur && !keep.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined) keep.add(cur.id);
+  }
+  return keep;
+}
+/** what the view filters (priority, turn) let through; undefined = no filter */
+export function viewKeep(s: Pick<State, 'nodes' | 'snaps' | 'prioFilter' | 'turnFilter'>): Set<string> | undefined {
+  const a = s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined;
+  const b = s.turnFilter ? turnKeep(s.nodes, s.snaps, s.turnFilter) : undefined;
+  return a && b ? new Set([...a].filter((id) => b.has(id))) : a ?? b;
+}
+
 /** does any item in the subtree of `id` carry a highlight? (used so a collapsed parent can show it) */
 export function anyHl(nodes: Node[], id: string, hl: Record<string, true>) {
   if (!Object.keys(hl).length) return false;
@@ -220,8 +271,7 @@ export function prioKeep(nodes: Node[], p: number): Set<string> {
   return keep;
 }
 /** Next under the priority filter: everything unfolded, then only the kept rows (cards left empty go) */
-export function filterNext(s: Parameters<typeof nextModel>[0], p: number) {
-  const keep = prioKeep(s.nodes, p);
+export function filterNext(s: Parameters<typeof nextModel>[0], keep: Set<string>) {
   const m = nextModel({ ...s, nodes: s.nodes.map((n) => (n.open === false ? { ...n, open: true } : n)) });
   const cards = m.cards.flatMap((c) => {
     const rows = c.rows.filter((r) => r.node && keep.has(r.node.id));

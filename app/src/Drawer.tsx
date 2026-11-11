@@ -23,8 +23,8 @@ interface Row {
   dim?: boolean;
   add: (to: 'next' | 'inbox') => void;
   canInbox: boolean;
-  repo?: string; // 'org/repo' of a pull request, for the filter
   details?: [string, string][]; // the little popup behind the arrow
+  repo?: string; // 'org/repo' of a pull request, for the filter
   clash?: boolean; // a double-booked meeting
   at?: { start: number; dur: number }; // a meeting's time (the schedule view plots it)
   /** where "now" is: a line inside this row (0–1 of the way through it), or just above / below it */
@@ -173,9 +173,9 @@ export function Drawer() {
   const [menu, setMenu] = useState(false); // the repository drop-down is open
   const [mq, setMq] = useState(''); // search inside the drop-down
   const [mi, setMi] = useState(0); // highlighted row of the drop-down
+  const [more, setMore] = useState<string | null>(null); // the row whose details popup is open
   const [manual, setManual] = useState(false); // a refresh the user asked for is running: show placeholders
   const [listH, setListH] = useState(400); // the list's height: the schedule fits the working hours on 80% of it
-  const [more, setMore] = useState<string | null>(null); // the row whose details popup is open
   useEffect(() => {
     const el = list.current;
     if (!el) return;
@@ -187,9 +187,9 @@ export function Drawer() {
   useEffect(() => {
     if (d) list.current?.focus({ preventScroll: true });
   }, [d?.kind, d?.tab]);
+  useEffect(() => setMore(null), [d?.kind, d?.tab, d?.sel]);
   useEffect(() => {
     list.current?.querySelector('.drow.is-sel, .sblock.is-sel')?.scrollIntoView({ block: 'nearest' });
-  useEffect(() => setMore(null), [d?.kind, d?.tab, d?.sel]);
   }, [d?.sel]);
   // the schedule opens at the start of the working day (today: a little before now, if that is later)
   const plotKey = d && d.kind === 'outlook' && (d.tab === 'today' || d.tab === 'tomorrow') && s.outlookView === 'day' ? d.tab : '';
@@ -409,6 +409,7 @@ export function Drawer() {
             onClick={() => (act.setDrawerSel(i), more && more !== en.id && setMore(null))}
             onDoubleClick={() => !en.have && en.add('next')}
           >
+            {(s.fresh[en.id] || s.fresh[`${d.kind}:${en.id}`]) && <i className="td me" title="New for you" />}
             {en.lead}
             <div className="dmain">
               <div className={cx('dt', en.details && 'one')}>{en.title}</div>
@@ -429,8 +430,6 @@ export function Drawer() {
               </span>
             )}
             {en.have && <span className="dgo" />}
-          </div>
-        ))}
             {en.details && (
               <button className={cx('dmore', more === en.id && 'on')} tabIndex={-1} aria-label="Details" aria-expanded={more === en.id} title="Details (D)" onClick={(e) => (e.stopPropagation(), act.setDrawerSel(i), setMore(more === en.id ? null : en.id))}>
                 ▾
@@ -446,6 +445,8 @@ export function Drawer() {
                 ))}
               </dl>
             )}
+          </div>
+        ))}
       </div>
       <div className="dfoot">
         <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {cur?.details && (<><kbd>D</kbd> details · </>)}{canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}

@@ -16,5 +16,6 @@ export const github: Plugin = {
   match: (text) => prLinks(text).map((l) => refKey('github', l.key)),
   live: isTauri ? { fetch: fetchPrs, lists: LISTS, list: listPrs } : undefined,
   mock,
+  watch: ['assigned', 'mine'],
   pollMs: { active: 60_000, idle: 180_000 },
 };

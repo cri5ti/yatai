@@ -260,6 +260,9 @@ export interface State extends Doc {
   menu: MenuState | null;
   prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–5 picker (no ids: it picks the view filter)
   scopePick: { id: string; x: number; y: number } | null; // the "what is under this item" list of Next: tick boxes to bring sub-items in / out
+  turnFilter: 'me' | 'them' | null; // the title bar's second filter: only what I can act on now ('me') / what I wait for ('them'), and their parents
+  seen: Record<string, string[]>; // plugin/list -> refs it listed last time (what is new is what is not here); saved
+  fresh: Record<string, true>; // refs of things to act on that turned up since the drawer was last closed; saved
   prioFilter: number | null; // keys 1–5: Next and the Organizer show only items of priority 1…this, and their parents
   ai: AiState | null;
   proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
@@ -435,6 +438,9 @@ export function initialState(): State {
     prioPick: null,
     scopePick: null,
     prioFilter: null,
+    turnFilter: null,
+    seen: {},
+    fresh: {},
     ai: null,
     proposal: null,
     help: false,
@@ -510,7 +516,7 @@ export const useS = () => useSyncExternalStore(subscribe, get);
 
 /** developer panel: replace the whole document (empty, or the demo data); UI preferences stay */
 export function resetDoc(doc: Doc, demo: boolean) {
-  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, runs: {}, snaps: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
+  state = { ...state, ...doc, ...TRANSIENT, accounts: state.accounts, agenda: {}, demo, flags: defaultFlags(), prs: demo ? { 'acme/api#482': 'review', 'acme/web#1203': 'draft' } : {}, prc: {}, runs: {}, snaps: {}, seen: {}, fresh: {}, hl: {}, expanded: {}, sel: null, nsel: { card: null, row: null }, isel: null, dev: state.dev };
   emit();
 }
 export const resetAll = () => resetDoc(emptyDoc(), false);

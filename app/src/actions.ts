@@ -12,6 +12,7 @@ import { connectAccount, disconnectAccount, refreshAccounts, refreshNow, refresh
 import { grant, signOut } from './plugins/entra';
 import type { Source } from './plugins/entra';
 import { resort } from './plugins/mail';
+import { pluginOf } from './plugins/types';
 import type { Snapshot } from './plugins/types';
 import { FX, ROOT, effSel, fmt, plain, hasKids, isUnder, isoDay, leavesOf, meetingsFor, nextModel, reconcilePlan, refsOf, startable } from './model';
 import type { CardM } from './model';
@@ -187,7 +188,12 @@ export const openDrawer = (kind: DrawerKind) =>
     return { drawer: s.drawer?.kind === kind ? null : { kind, tab, sel: 0 }, menu: null };
   });
 export const closeDrawer = () => {
-  set(() => ({ drawer: null }));
+  // what turned up for you has been seen once the drawer that lists it is closed
+  set((s) => {
+    const kind = s.drawer?.kind;
+    const fresh = kind ? Object.fromEntries(Object.entries(s.fresh).filter(([r]) => pluginOf(r) !== kind)) : s.fresh;
+    return { drawer: null, ...(Object.keys(fresh).length !== Object.keys(s.fresh).length ? { fresh } : {}) };
+  });
   focusArea();
 };
 export const setDrawerTab = (tab: string) => set((s) => (s.drawer ? { drawer: { ...s.drawer, tab, sel: 0 } } : {}));
@@ -468,6 +474,8 @@ export function toggleCardOpen(c: CardM, open: boolean) {
 
 export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `Estimate ${v} min` : 'Clear estimate', ids, { est: v });
 /** keys 1–5: show priorities 1…p (the same one again, or 0, shows everything) */
+/** the title bar's turn filter: everything → what I can act on → what I am waiting for → everything */
+export const cycleTurnFilter = () => set((s) => ({ turnFilter: s.turnFilter === null ? 'me' : s.turnFilter === 'me' ? 'them' : null }));
 export const setPrioFilter = (p: number) => set((s) => ({ prioFilter: p && s.prioFilter !== p ? p : null, prioPick: null }));
 export const openPrioPick = (ids: string[] | undefined, x: number, y: number) => set(() => ({ prioPick: { ids, x, y }, menu: null }));
 export const closePrioPick = () => set(() => ({ prioPick: null }));

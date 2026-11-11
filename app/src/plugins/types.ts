@@ -123,6 +123,8 @@ export interface Plugin {
   };
   live?: Impl;
   mock?: Impl;
+  /** lists to look at in the background (not only while their drawer is open) to notice new things to act on */
+  watch?: string[];
   pollMs: { active: number; idle: number };
 }
 

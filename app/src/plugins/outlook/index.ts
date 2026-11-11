@@ -123,5 +123,6 @@ export const outlook: Plugin = {
   live: isTauri ? live : undefined,
   mock,
   // the published feed lags behind Outlook (asking more often does not help); Graph is live
+  watch: ['today'],
   pollMs: { active: 3 * 60_000, idle: 10 * 60_000 },
 };

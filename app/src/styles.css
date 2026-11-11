@@ -657,3 +657,11 @@ button.prio:hover { filter: brightness(1.08); }
 .snow::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
 .dhead .viewtoggle.on { color: var(--accent); }
 .set-hours { display: inline-flex; align-items: center; gap: var(--sp-3); } .set-hours span { color: var(--text-muted); font-size: var(--fs-sm); }
+
+/* the turn marks: blue = mine to act on, purple = waiting on someone else, yellow = changed */
+.td { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.td.me { background: var(--pr-me); } .td.them { background: var(--pr-wait); } .td.hl { background: var(--hl-bar); } .td.off { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; opacity: .7; }
+.tdots { display: inline-flex; align-items: center; gap: 3px; flex: none; margin: 0 4px; }
+.wc .tfilt { display: inline-grid; place-items: center; } .wc .tfilt .td { width: 10px; height: 10px; }
+.ugrp button { position: relative; } .ugrp button .td.nb { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; }
+.drow > .td { margin-right: -4px; }

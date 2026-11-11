@@ -35,7 +35,7 @@ export function snapshotOf(brand: string, plugin: string, it: Item): Snapshot {
   const g = it.glyph;
   const named = `${brand} ${oneLine(it.name, 40)}`;
   const why = it.waitingFor && it.waitingFor !== 'input needed' ? it.waitingFor : '';
-  const view: View = { glyph: g, label: SESSION_LABELS[g], tone: g === 'waiting' ? 'warn' : g === 'idle' ? 'good' : 'info', quiet: g === 'working' || g === 'ended' };
+  const view: View = { glyph: g, label: SESSION_LABELS[g], tone: g === 'waiting' ? 'warn' : g === 'idle' ? 'good' : 'info', quiet: g === 'working' || g === 'ended', ...(g === 'waiting' || g === 'idle' ? { turn: 'me' as const } : g === 'working' ? { turn: 'them' as const } : {}) };
   const alert =
     g === 'waiting'
       ? ({ key: `${plugin}:waiting:${it.at}`, tone: 'warn', text: why ? `Needs you: ${why}` : 'Needs you', toast: `${named} needs you${why ? ` (${why})` : ''}` } as const)
@@ -44,7 +44,7 @@ export function snapshotOf(brand: string, plugin: string, it: Item): Snapshot {
         : g === 'ended'
           ? ({ key: `${plugin}:ended`, tone: 'info', text: 'Session ended' } as const)
           : ({ key: `${plugin}:working`, tone: 'info', text: 'Working…' } as const);
-  return { ref: `${plugin}:${it.id}`, name: named, title: `${brand}: ${oneLine(it.name, 80)}`, view, alerts: [alert], rev: `${g}|${it.at}|${it.waitingFor ?? ''}|${it.name}` };
+  return { ref: `${plugin}:${it.id}`, name: named, title: `${brand}: ${oneLine(it.name, 80)}`, view, alerts: [alert], rev: `${g}|${view.turn ?? ''}|${it.at}|${it.waitingFor ?? ''}|${it.name}` };
 }
 
 /** a tracked session that is not among the open ones any more (closed, or its window quit) */

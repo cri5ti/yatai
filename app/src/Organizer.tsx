@@ -7,11 +7,11 @@ import {
   fileInboxTo, openAllTree, openStepTree, foldStep, pasteItems, subtree, toast, toggleDoneNodes, toggleOpen, toggleScope, toggleStartItem, toggleToday, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
-import { childrenOf, depthOf, fmtEst, prioShown, prioKeep, hlSubtree, laterLabel, plain, relTime } from './model';
+import { childrenOf, depthOf, fmtEst, prioShown, viewKeep, insideOf, laterLabel, plain, relTime } from './model';
 import { InlineEdit } from './Inline';
 import { inline } from './md';
 import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
-import { Chips, DueChip, Prio, RemindChip } from './Chips';
+import { Chips, Dots, DueChip, Prio, RemindChip } from './Chips';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
@@ -56,7 +56,8 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
     const sub = subtree(s.nodes, top);
     setOpened(new Set(open ? s.nodes.filter((n) => sub.has(n.id) && s.nodes.some((c) => c.parentId === n.id)).map((n) => n.id) : []));
   };
-  const rows = useMemo(() => visibleRows(s.nodes, isOpen, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined, top), [s.nodes, s.prioFilter, top, opened]);
+  const inside = useMemo(() => insideOf(s.nodes, s.snaps, s.hl), [s.nodes, s.snaps, s.hl]);
+  const rows = useMemo(() => visibleRows(s.nodes, isOpen, viewKeep(s), top), [s.nodes, s.snaps, s.prioFilter, s.turnFilter, top, opened]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
@@ -96,14 +97,14 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
   useEffect(() => {
     const f = requestAnimationFrame(() => area.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'center' }));
     return () => cancelAnimationFrame(f);
-  }, [s.prioFilter]);
+  }, [s.prioFilter, s.turnFilter]);
   // moving the keyboard cursor onto a yellow highlight counts as having seen it
   const lastSel = useRef<string | null>(null);
   useEffect(() => {
     if (lastSel.current !== null && lastSel.current !== selId && selId) {
       const n = s.nodes.find((x) => x.id === selId);
       const kids = s.nodes.some((c) => c.parentId === selId);
-      dismissHl(s.hl[selId] ? [selId] : n && kids && !isOpen(n) ? hlSubtree(s.nodes, s.hl, selId) : []);
+      dismissHl(s.hl[selId] ? [selId] : []); // a parent's circles stay until you open it and see which item it was
     }
     lastSel.current = selId;
   }, [selId]);
@@ -368,7 +369,8 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
           const picked = multi.has(n.id);
           const editing = s.edit === n.id;
           const isRun = running === n.id;
-          const hlIds = s.hl[n.id] ? [n.id] : kids && !isOpen(n) ? hlSubtree(s.nodes, s.hl, n.id) : [];
+          const hlIds = s.hl[n.id] ? [n.id] : [];
+          const inner = kids && !isOpen(n) ? inside.get(n.id) : undefined;
           const done = isDone(s.nodes, n.id);
           const h = hint?.id === n.id ? hint.zone : null;
           const pm = marks?.[n.id];
@@ -471,10 +473,14 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
                   )}
                   {wide ? (
                     <span className="c-p">
+                      <Dots m={inner} />
                       <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
                     </span>
                   ) : (
-                    <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                    <>
+                      <Dots m={inner} />
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                    </>
                   )}
                   {checks && (
                     <input

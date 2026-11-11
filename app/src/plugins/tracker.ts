@@ -8,7 +8,7 @@ import type { Node, State } from '../store';
 import { fmt, prLinks, refsOf, setPrHost } from '../model';
 import { PLUGINS, implFor, pluginById } from './registry';
 import { AuthError, pluginOf } from './types';
-import type { AgendaEvent, Alert, Impl, Plugin, Snapshot, Tone } from './types';
+import type { AgendaEvent, Alert, Entry, Impl, Plugin, Snapshot, Tone } from './types';
 import { requests } from '../platform';
 import { countRequest } from './requests';
 
@@ -45,6 +45,7 @@ export function changes(prev: Snapshot, next: Snapshot, all = false): { text: st
   const fresh = next.alerts.filter((a: Alert) => a.tone !== 'info' && !prev.alerts.some((p) => p.key === a.key));
   if (fresh.length) return fresh.map((a) => ({ text: a.toast ?? `${next.name}: ${a.text}`, tone: a.tone }));
   if (prev.view.glyph !== next.view.glyph && (all || !next.view.quiet)) return [{ text: `${next.name}: ${next.view.label}`, tone: next.view.tone }];
+  if (prev.view.turn !== 'me' && next.view.turn === 'me' && !next.view.quiet) return [{ text: `${next.name}: your move`, tone: 'info' }];
   if (all) {
     const info = next.alerts.filter((a) => !prev.alerts.some((p) => p.key === a.key));
     if (info.length) return info.map((a) => ({ text: `${next.name}: ${a.text}`, tone: a.tone }));
@@ -168,7 +169,27 @@ export function applyAgenda(plugin: string, events: AgendaEvent[], first: boolea
   if (hl.length) sink.highlight(hl);
 }
 
+/**
+ * New things to act on: an entry of a list whose move is mine (a PR to review, an answer owed) or a meeting today, that
+ * the list did not have last time. The first look at a list only learns what is there. What is new is toasted once and
+ * kept in `fresh` (a dot on the source's button and on the row) until that source's drawer has been opened and closed.
+ */
+export function noteNew(p: Plugin, listId: string, entries: Entry[]) {
+  const s = get();
+  const key = `${p.id}/${listId}`;
+  const now = entries.map((e) => e.ref);
+  const before = s.seen[key];
+  const mine = (e: Entry) => e.snap?.view.turn === 'me' || (!!e.meeting && e.meeting.day === today());
+  const fresh = before ? entries.filter((e) => mine(e) && !before.includes(e.ref) && !s.fresh[e.ref]) : [];
+  if (before && before.length === now.length && before.every((r, i) => r === now[i]) && !fresh.length) return;
+  set(() => ({ seen: { ...get().seen, [key]: now }, ...(fresh.length ? { fresh: { ...get().fresh, ...Object.fromEntries(fresh.map((e) => [e.ref, true as const])) } } : {}) }));
+  if (!fresh.length) return;
+  const name = (e: Entry) => e.label ?? e.snap?.name ?? e.title;
+  sink.toast(fresh.length === 1 ? `${p.name}: new for you — ${name(fresh[0])} ${fresh[0].meeting ? '' : fresh[0].title}`.trim() : `${p.name}: ${fresh.length} new for you — ${fresh.slice(0, 3).map(name).join(' · ')}${fresh.length > 3 ? ' …' : ''}`, 'info');
+}
+
 /* ---------- the loop ---------- */
+const watchedAt = new Map<string, number>();
 const nextAt = new Map<string, number>();
 const running = new Map<string, Promise<void>>();
 const lastError = new Map<string, string>();
@@ -204,12 +225,25 @@ async function runPlugin(p: Plugin) {
       try {
         const entries = await impl.list(drawer.tab);
         set((st) => ({ lists: { ...st.lists, [key]: { entries, at: Date.now() } } }));
+        noteNew(p, drawer.tab, entries);
       } catch (e) {
         if (e instanceof AuthError) {
           set((st) => ({ lists: { ...st.lists, [key]: { ...st.lists[key], entries: st.lists[key]?.entries ?? [], at: st.lists[key]?.at ?? 0, loading: false } } }));
           throw e;
         }
         set((st) => ({ lists: { ...st.lists, [key]: { entries: st.lists[key]?.entries ?? [], at: Date.now(), error: e instanceof Error ? e.message : String(e) } } }));
+      }
+    }
+    // lists watched in the background: new things to act on are noticed with the drawer closed (not more than every 5 min, except the calendar)
+    if (impl.list) {
+      for (const id of p.watch ?? []) {
+        if (drawer?.tab === id) continue;
+        const k = `${p.id}/${id}`;
+        if (Date.now() - (watchedAt.get(k) ?? 0) < (p.id === 'github' ? 5 * 60_000 : 0)) continue;
+        watchedAt.set(k, Date.now());
+        const entries = await impl.list(id);
+        set((st) => ({ lists: { ...st.lists, [k]: { entries, at: Date.now() } } }));
+        noteNew(p, id, entries);
       }
     }
     lastError.delete(p.id);
