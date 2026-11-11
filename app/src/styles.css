@@ -176,6 +176,16 @@ button.prio:hover { filter: brightness(1.08); }
 .arow:hover .prio.ghost, .arow.is-sel .prio.ghost, .orow:hover .prio.ghost, .orow.is-sel .prio.ghost { opacity: 1; }
 /* the little picker (click a priority square, /priority, or the title bar filter) */
 .ppick { position: fixed; z-index: var(--z-menu); padding: 6px 8px 8px; background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-pop); outline: none; animation: menu-in var(--dur-2) var(--ease); }
+.scope-pill { border: 0; border-radius: 999px; padding: 0 6px; font-size: var(--fs-xs); line-height: 1.5em; font-variant-numeric: tabular-nums; background: transparent; color: var(--text-muted); opacity: .35; cursor: pointer; }
+.scope-pill:hover { opacity: .8; background: var(--surface-2); }
+.scope-pill.on { opacity: 1; background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+.spick { position: fixed; z-index: var(--z-menu); min-width: 200px; max-width: 340px; max-height: 60vh; overflow-y: auto; padding: 6px 4px 4px; background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-pop); outline: none; animation: menu-in var(--dur-2) var(--ease); }
+.spick-t { font-size: var(--fs-2xs, 10px); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; padding: 0 6px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spick-none { padding: 4px 6px; color: var(--text-muted); font-size: var(--fs-sm, 12px); }
+.spick-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: var(--r-xs); font-size: var(--fs-sm, 12px); cursor: pointer; }
+.spick-row.hi { background: var(--surface-2); }
+.spick-row.done .spick-x { text-decoration: line-through; color: var(--text-muted); }
+.spick-x { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ppick-t { font-size: var(--fs-2xs, 10px); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
 .ppick-row { display: flex; gap: 4px; }
 .ppick .prio { width: 20px; height: 20px; font-size: 11px; border-radius: 4px; }

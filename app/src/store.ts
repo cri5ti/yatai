@@ -259,6 +259,7 @@ export interface State extends Doc {
   ins: Ins | null; // inline "create here" draft
   menu: MenuState | null;
   prioPick: { ids?: string[]; x: number; y: number } | null; // the little 1–5 picker (no ids: it picks the view filter)
+  scopePick: { id: string; x: number; y: number } | null; // the "what is under this item" list of Next: tick boxes to bring sub-items in / out
   prioFilter: number | null; // keys 1–5: Next and the Organizer show only items of priority 1…this, and their parents
   ai: AiState | null;
   proposal: Proposal | null; // pending AI changes (not part of the document until accepted)
@@ -432,6 +433,7 @@ export function initialState(): State {
     ins: null,
     menu: null,
     prioPick: null,
+    scopePick: null,
     prioFilter: null,
     ai: null,
     proposal: null,

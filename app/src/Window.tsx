@@ -8,6 +8,7 @@ import { Focus } from './Focus';
 import { Menu } from './Menu';
 import { TAB_MOD } from './kbd';
 import { PrioPick, prioBg } from './Chips';
+import { ScopePick } from './Scope';
 import { AiPop, ProposalBar } from './AiPop';
 import { capture, closeCapture, openPrioPick, setBounds, dismissToast, openDrawer, openSettings, setLayout, setTab, toggleHelp, toggleHidden, toggleOnTop } from './actions';
 import { Drawer } from './Drawer';
@@ -246,6 +247,7 @@ export function Shell() {
       <Win />
       <Menu />
       <PrioPick />
+      <ScopePick />
       {/* the app opens these as their own windows (popups.ts); the browser build shows them in the page */}
       {!isTauri && (
         <>

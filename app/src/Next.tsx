@@ -3,7 +3,7 @@ import { set } from './store';
 import type { State } from './store';
 import { useView } from './proposal';
 import type { Mark, Marks } from './proposal';
-import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, whenLabel, inLabel } from './model';
+import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTargets, nextModel, navList, prLinks, prioShown, bestPrio, filterNext, outOfNext, whenLabel, inLabel } from './model';
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
@@ -16,6 +16,7 @@ import { countItems, parseMarkdown, toMarkdown, treeOf } from './clip';
 import { Md, bodyInfo, inline } from './md';
 import { Chips, DueChip, Prio, RemindChip } from './Chips';
 import { SourceOff } from './Pr';
+import { ScopePill } from './Scope';
 import { useFlip } from './flip';
 import { useDragEnd } from './drag';
 import { cx, focusArea, isEditable, mod, prioKey } from './kbd';
@@ -106,6 +107,8 @@ interface Shared {
   onSelect: (e: React.MouseEvent, card: CardM, row: string | null) => void;
   /** where each yellow highlight shows (hlTargets): `row:<id>` / `card:<key>` -> the highlighted ids */
   hlAt: Map<string, string[]>;
+  /** per item: how many items under it are not in Next (the count pill) */
+  outside: Map<string, number>;
 }
 
 /* ---------- one row ---------- */
@@ -276,6 +279,9 @@ function RowView({ x, card, ri }: { x: Shared; card: CardM; ri: number }) {
             )}
             <DueChip node={node} />
             <RemindChip node={node} />
+            {(x.outside.get(node.id) ?? 0) > 0 && !x.dragId && (
+              <ScopePill id={node.id} count={x.outside.get(node.id)!} active={!!sel.row && (sel.row === node.id || isUnder(s.nodes, sel.row, node.id))} />
+            )}
             {pk('est') && pm!.prev.est ? <s className="est-chip was">{fmtEst(pm!.prev.est as number)}</s> : null}
             {node.est ? (
               <button
@@ -514,6 +520,7 @@ export function Next() {
   const m = useMemo(() => (s.prioFilter ? filterNext(s, s.prioFilter) : nextModel(s)), [s.nodes, s.plan, s.meetings, s.clock, s.snaps, s.prioFilter]);
   const nav = useMemo(() => navList(m.cards), [m]);
   const hlAt = useMemo(() => hlTargets(m.cards, s.nodes, s.hl), [m, s.nodes, s.hl]);
+  const outside = useMemo(() => outOfNext(s.nodes), [s.nodes]);
   const sel = effSel(m.cards, s.nsel);
   const card = m.cards.find((c) => c.key === sel.card) ?? null;
   const area = useRef<HTMLDivElement>(null);
@@ -580,7 +587,7 @@ export function Next() {
     }
     pick(c.key, row);
   };
-  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt };
+  const x: Shared = { s, marks, sel, multi, hint, setHint, dnd, dragId, setDragId, endDrag, onSelect, hlAt, outside };
 
   /** what a command applies to: the multi-selection, or the one selected item */
   const targets = (): string[] => {

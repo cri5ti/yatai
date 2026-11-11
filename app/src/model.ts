@@ -231,6 +231,19 @@ export function filterNext(s: Parameters<typeof nextModel>[0], p: number) {
   return { ...m, cards };
 }
 
+/** can this item be brought into Next from under a row? (open, and not in Next already) */
+export const bringable = (n: Node) => !n.today && n.status !== 'done' && n.status !== 'dropped';
+/** per item: how many items below it are not in Next (the count pill on a row of Next) */
+export function outOfNext(nodes: Node[]): Map<string, number> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out = new Map<string, number>();
+  for (const n of nodes) {
+    if (!bringable(n)) continue;
+    for (let cur = n.parentId ? byId.get(n.parentId) : undefined, i = 0; cur && i < 100; cur = cur.parentId ? byId.get(cur.parentId) : undefined, i++) out.set(cur.id, (out.get(cur.id) ?? 0) + 1);
+  }
+  return out;
+}
+
 /** the highest of several shown priorities (a collapsed card) */
 export const bestPrio = (vs: ({ p: number; inside: boolean } | null)[]) =>
   vs.reduce<{ p: number; inside: boolean } | null>((b, v) => (v && (!b || v.p < b.p) ? { p: v.p, inside: true } : b), null);

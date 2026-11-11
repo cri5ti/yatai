@@ -471,6 +471,10 @@ export const setEst = (ids: string[], v: number | undefined) => patchNodes(v ? `
 export const setPrioFilter = (p: number) => set((s) => ({ prioFilter: p && s.prioFilter !== p ? p : null, prioPick: null }));
 export const openPrioPick = (ids: string[] | undefined, x: number, y: number) => set(() => ({ prioPick: { ids, x, y }, menu: null }));
 export const closePrioPick = () => set(() => ({ prioPick: null }));
+export const openScopePick = (id: string, x: number, y: number) => set(() => ({ scopePick: { id, x, y }, prioPick: null, menu: null }));
+export const closeScopePick = () => set(() => ({ scopePick: null }));
+/** the tick box beside a sub-item: in Next → out (with everything under it); out → in (with everything open under it) */
+export const toggleScope = (id: string) => (get().nodes.find((n) => n.id === id)?.today ? unplan([id]) : addToNext([id]));
 /** Ctrl+1–5: set the quick priority (the same digit again on all of them clears it; 0 clears) */
 export function setPrio(ids: string[], p: number) {
   const nodes = get().nodes.filter((n) => ids.includes(n.id));
