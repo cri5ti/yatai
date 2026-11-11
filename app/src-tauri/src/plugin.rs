@@ -74,6 +74,8 @@ pub struct HttpReq {
     /// instead of the plugin's own token: an access token of the Microsoft account for this resource ("graph", "devops"),
     /// renewed when it is about to expire (entra.rs); only sent to that resource's hosts
     entra: Option<String>,
+    /// likewise, but the token comes from the Azure CLI's sign-in (`az login`): "devops" only (azcli.rs)
+    az: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -99,8 +101,18 @@ fn check_url(url: &str, bound: Option<&str>) -> Result<Url, String> {
 
 #[tauri::command]
 pub async fn plugin_http(req: HttpReq) -> Result<HttpRes, String> {
-    let mut secret = if req.auth && req.entra.is_none() { Some(load(&req.plugin).ok_or("not connected")?) } else { None };
+    let mut secret = if req.auth && req.entra.is_none() && req.az.is_none() { Some(load(&req.plugin).ok_or("not connected")?) } else { None };
     let url = check_url(&req.url, secret.as_ref().map(|(h, _)| h.as_str()))?;
+    if let Some(res) = &req.az {
+        if !url.host_str().is_some_and(|h| crate::entra::host_ok(res, h)) {
+            return Err(format!("the Azure CLI's {res} token is not for this host"));
+        }
+        match crate::azcli::access_token(res).await {
+            Ok(t) => secret = Some((url.host_str().unwrap_or_default().to_string(), t)),
+            Err((true, why)) => return Ok(HttpRes { status: 401, headers: HashMap::new(), body: why }),
+            Err((false, why)) => return Err(why),
+        }
+    }
     if let Some(res) = &req.entra {
         if !url.host_str().is_some_and(|h| crate::entra::host_ok(res, h)) {
             return Err(format!("the Microsoft account's {res} token is not for this host"));

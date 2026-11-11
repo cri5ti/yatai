@@ -1,4 +1,5 @@
 mod ai;
+mod azcli;
 mod backup;
 mod db;
 mod entra;
@@ -398,6 +399,7 @@ pub fn run() {
             plugin::plugin_secret_set,
             plugin::plugin_http,
             plugin::plugin_get_secret_url,
+            azcli::az_check,
             entra::entra_status,
             entra::entra_begin,
             entra::entra_finish,
