@@ -194,10 +194,17 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
       stop();
       const open = k === '+' || k === '=';
       const roots = ids.length ? ids : childrenOf(s.nodes, top).map((n) => n.id);
-      if (!top) return openStepTree(roots, open);
-      const flip = new Set(foldStep(s.nodes, isOpen, roots, open));
-      if (flip.size) setOpened((o) => new Set(open ? [...o, ...flip] : [...o].filter((x) => !flip.has(x))));
-      return;
+      const step = (rs: string[]) => {
+        const flip = foldStep(s.nodes, isOpen, rs, open);
+        if (!top) return openStepTree(rs, open);
+        if (flip.length) setOpened((o) => new Set(open ? [...o, ...flip] : [...o].filter((x) => !flip.includes(x))));
+      };
+      // nothing left to close under a single item: step out to its parent and close that
+      if (!open && !bulk && cur && !foldStep(s.nodes, isOpen, roots, false).length && cur.parentId && cur.parentId !== top && s.nodes.some((n) => n.id === cur.parentId)) {
+        select(cur.parentId);
+        return step([cur.parentId]);
+      }
+      return step(roots);
     }
     if (M || (e.shiftKey && k !== 'N')) return;
 

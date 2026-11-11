@@ -7,7 +7,7 @@ import { ROOT, effSel, isLoose, isUnder, fmt, fmtEst, fmtSpent, hasKids, hlTarge
 import type { CardM, Row } from './model';
 import {
   addAction, cycleEst, dismissHl, removeMeeting, dropCard, dropOnRow, dropRowSplit, editText, focusItem, indentItems, isDone, moveCard, moveRow,
-  moveRows, openAllNext, openStepTree, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
+  moveRows, openAllNext, openStepTree, foldStep, outdentItems, pasteItems, pick, removeNodes, unplan, setExpanded, setMulti, startCard, toast, toggleCardOpen, toggleCheckbox,
   toggleDoneNodes, toggleOpen, toggleStart, toggleStartItem, setPrio, setPrioFilter,
 } from './actions';
 import { openEstMenu, openMenu } from './commands';
@@ -715,6 +715,12 @@ export function Next() {
       const open = k === '+' || k === '=';
       if (card?.kind === 'meeting' && !rowNode) return toggleCardOpen(card, open);
       const roots = rowNode ? [rowNode.id] : card?.task ? [card.task.id] : m.cards.flatMap((c) => (c.task ? [c.task.id] : []));
+      // nothing left to close under a row: step out to its parent row and close that
+      const par = rowNode?.parentId && !bulk && !open && !foldStep(s.nodes, (n) => !!n.open, roots, false).length ? card!.rows.find((r) => r.id === rowNode.parentId) : undefined;
+      if (par?.node) {
+        pick(card!.key, par.id);
+        return openStepTree([par.id], false);
+      }
       return openStepTree(roots, open);
     }
     if (M || (e.shiftKey && k !== 'Delete' && k !== 'Backspace')) return;
