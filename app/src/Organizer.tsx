@@ -22,14 +22,14 @@ interface RowItem {
   kids: boolean;
 }
 /** keep: the priority filter (only these, everything unfolded) */
-function visibleRows(nodes: Node[], keep?: Set<string>, root: string | null = null): RowItem[] {
+function visibleRows(nodes: Node[], isOpen: (n: Node) => boolean, keep?: Set<string>, root: string | null = null): RowItem[] {
   const out: RowItem[] = [];
   const walk = (pid: string | null, d: number) => {
     for (const n of childrenOf(nodes, pid)) {
       if (keep && !keep.has(n.id)) continue;
       const kids = nodes.some((c) => c.parentId === n.id && (!keep || keep.has(c.id)));
       out.push({ n, depth: d, kids });
-      if ((n.open || keep) && kids) walk(n.id, d + 1);
+      if ((isOpen(n) || keep) && kids) walk(n.id, d + 1);
     }
   };
   walk(root, 0);
@@ -47,7 +47,16 @@ const TABLE_AT = 880; // px: below this the organizer is a list, above it the sa
  */
 export function Organizer({ embedded = false, root: top = null, checks = false }: { embedded?: boolean; root?: string | null; checks?: boolean }) {
   const { s, marks } = useView();
-  const rows = useMemo(() => visibleRows(s.nodes, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined, top), [s.nodes, s.prioFilter, top]);
+  // a sub-view keeps its own folds (it starts folded to the first level), so the lists around it stay as they are
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const isOpen = (n: Node) => (top ? opened.has(n.id) : !!n.open);
+  const setOpen = (id: string, open: boolean) => (top ? setOpened((o) => (open ? new Set(o).add(id) : new Set([...o].filter((x) => x !== id)))) : toggleOpen(id, open));
+  const openAll = (open: boolean) => {
+    if (!top) return openAllTree(open);
+    const sub = subtree(s.nodes, top);
+    setOpened(new Set(open ? s.nodes.filter((n) => sub.has(n.id) && s.nodes.some((c) => c.parentId === n.id)).map((n) => n.id) : []));
+  };
+  const rows = useMemo(() => visibleRows(s.nodes, isOpen, s.prioFilter ? prioKeep(s.nodes, s.prioFilter) : undefined, top), [s.nodes, s.prioFilter, top, opened]);
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const dnd = useRef<string | null>(null);
@@ -94,7 +103,7 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
     if (lastSel.current !== null && lastSel.current !== selId && selId) {
       const n = s.nodes.find((x) => x.id === selId);
       const kids = s.nodes.some((c) => c.parentId === selId);
-      dismissHl(s.hl[selId] ? [selId] : n && kids && !n.open ? hlSubtree(s.nodes, s.hl, selId) : []);
+      dismissHl(s.hl[selId] ? [selId] : n && kids && !isOpen(n) ? hlSubtree(s.nodes, s.hl, selId) : []);
     }
     lastSel.current = selId;
   }, [selId]);
@@ -124,7 +133,7 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
   const insertAbove = (n: Node) => set(() => ({ ins: { kind: 'node', parentId: n.parentId, afterId: null, beforeId: n.id } }));
   const insertChild = (n: Node) => {
     set(() => ({ ins: { kind: 'node', parentId: n.id, afterId: [...s.nodes].reverse().find((c) => c.parentId === n.id)?.id ?? n.id } }));
-    toggleOpen(n.id, true);
+    setOpen(n.id, true);
   };
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -179,8 +188,8 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
       return cycleEst(ids, k === 'ArrowRight' ? 1 : -1);
     }
     // − / + : collapse / expand everything
-    if (!M && (k === '-' || k === '_')) return (stop(), openAllTree(false));
-    if (!M && (k === '+' || k === '=')) return (stop(), openAllTree(true));
+    if (!M && (k === '-' || k === '_')) return (stop(), openAll(false));
+    if (!M && (k === '+' || k === '=')) return (stop(), openAll(true));
     if (M || (e.shiftKey && k !== 'N')) return;
 
     if (k === 'ArrowDown' || k === 'ArrowUp') {
@@ -189,12 +198,12 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
     } else if (k === 'ArrowRight' && cur) {
       stop();
       const kids = childrenOf(s.nodes, cur.id);
-      if (kids.length && !cur.open) toggleOpen(cur.id, true);
+      if (kids.length && !isOpen(cur)) setOpen(cur.id, true);
       else if (kids.length) select(kids[0].id);
     } else if (k === 'ArrowLeft' && cur) {
       stop();
       const kids = childrenOf(s.nodes, cur.id);
-      if (kids.length && cur.open) toggleOpen(cur.id, false);
+      if (kids.length && isOpen(cur)) setOpen(cur.id, false);
       else if (cur.parentId && s.nodes.some((n) => n.id === cur.parentId)) select(cur.parentId);
     } else if (k === 'Home') (stop(), select(rows[0]?.n.id ?? null));
     else if (k === 'End') (stop(), select(rows[rows.length - 1]?.n.id ?? null));
@@ -343,13 +352,13 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
           const picked = multi.has(n.id);
           const editing = s.edit === n.id;
           const isRun = running === n.id;
-          const hlIds = s.hl[n.id] ? [n.id] : kids && !n.open ? hlSubtree(s.nodes, s.hl, n.id) : [];
+          const hlIds = s.hl[n.id] ? [n.id] : kids && !isOpen(n) ? hlSubtree(s.nodes, s.hl, n.id) : [];
           const done = isDone(s.nodes, n.id);
           const h = hint?.id === n.id ? hint.zone : null;
           const pm = marks?.[n.id];
           const pk = (k: string) => pm?.kind === 'change' && k in pm.prev;
           // a proposed change hidden under a collapsed parent shows on the parent
-          const propHidden = !!marks && kids && !n.open && [...subtree(s.nodes, n.id)].some((id) => id !== n.id && marks[id]);
+          const propHidden = !!marks && kids && !isOpen(n) && [...subtree(s.nodes, n.id)].some((id) => id !== n.id && marks[id]);
           return (
             <div
               key={n.id}
@@ -406,8 +415,8 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
               }}
             >
               {kids ? (
-                <button className="rchev" tabIndex={-1} aria-label={n.open ? 'Collapse' : 'Expand'} onClick={(e) => (e.stopPropagation(), toggleOpen(n.id, !n.open))}>
-                  {n.open ? '▾' : '▸'}
+                <button className="rchev" tabIndex={-1} aria-label={isOpen(n) ? 'Collapse' : 'Expand'} onClick={(e) => (e.stopPropagation(), setOpen(n.id, !isOpen(n)))}>
+                  {isOpen(n) ? '▾' : '▸'}
                 </button>
               ) : null}
               <button className={cx('check', kids && 'sq', done && 'on')} tabIndex={-1} aria-label={done ? 'Mark not done' : 'Mark done'} onClick={(e) => (e.stopPropagation(), toggleDoneNodes([n.id]))}>
@@ -446,10 +455,10 @@ export function Organizer({ embedded = false, root: top = null, checks = false }
                   )}
                   {wide ? (
                     <span className="c-p">
-                      <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                      <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
                     </span>
                   ) : (
-                    <Prio v={prioShown(s.nodes, n.id, !!kids && !n.open && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
+                    <Prio v={prioShown(s.nodes, n.id, !!kids && !isOpen(n) && !s.prioFilter)} ids={live.length > 1 && live.includes(n.id) ? live : [n.id]} />
                   )}
                   {checks && (
                     <input
