@@ -4,6 +4,7 @@ mod backup;
 mod db;
 mod entra;
 mod claude;
+mod codex;
 mod laya;
 mod llm;
 mod mail;
@@ -406,6 +407,7 @@ pub fn run() {
             entra::entra_sign_out,
             mail::mail_fetch,
             claude::claude_sessions,
+            codex::codex_sessions,
             copilot::copilot_sessions,
             llm::llm_local,
             laya::laya_predict,

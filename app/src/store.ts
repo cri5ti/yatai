@@ -6,10 +6,18 @@ export type Status = 'todo' | 'doing' | 'waiting' | 'done' | 'dropped';
 export type SmartSource = 'pr' | 'pipeline' | 'workitem' | 'ai';
 /** what the (mocked) GitHub connector reports for a pull request */
 export type PrStatus = 'draft' | 'review' | 'building' | 'feedback' | 'failing' | 'ready' | 'merged' | 'closed';
+export interface Quota {
+  left: number;
+  limit: number;
+  reset: number; // ms since epoch; zero when unknown
+  label?: string;
+  observedAt?: number;
+}
 export interface ReqCount {
   at: number[]; // the last hour's
   total: number;
-  quota?: { left: number; limit: number; reset: number };
+  quota?: Quota;
+  quotas?: Quota[];
 }
 /** an Azure DevOps pipeline run (build) */
 export type BuildStatus = 'queued' | 'building' | 'failed' | 'done' | 'cancelled';

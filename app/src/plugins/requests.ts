@@ -12,3 +12,8 @@ export function countRequest(plugin: string) {
 export function setQuota(plugin: string, quota: NonNullable<State['reqs'][string]['quota']>) {
   set((s) => ({ reqs: { ...s.reqs, [plugin]: { ...(s.reqs[plugin] ?? { at: [], total: 0 }), quota } } }));
 }
+
+/** Replace all reported windows, including clearing an unavailable reading. */
+export function setQuotas(plugin: string, quotas: import('../store').Quota[]) {
+  set((s) => ({ reqs: { ...s.reqs, [plugin]: { ...(s.reqs[plugin] ?? { at: [], total: 0 }), quota: undefined, quotas } } }));
+}

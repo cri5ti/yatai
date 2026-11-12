@@ -218,6 +218,12 @@ function Win() {
                 <span aria-hidden>✦</span> Claude
               </button>
             )}
+            {enabled(s.settings, 'codex') && (
+              <button className={s.drawer?.kind === 'codex' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'codex'} title="Codex — follow recent local sessions" onClick={() => openDrawer('codex')}>
+                {fresh('codex') && <i className="td me nb" title="New for you" />}
+                <span aria-hidden>✧</span> Codex
+              </button>
+            )}
             {enabled(s.settings, 'copilot') && (
               <button className={s.drawer?.kind === 'copilot' ? 'on' : ''} aria-pressed={s.drawer?.kind === 'copilot'} title="Copilot — follow GitHub Copilot sessions" onClick={() => openDrawer('copilot')}>
                 {fresh('copilot') && <i className="td me nb" title="New for you" />}

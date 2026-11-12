@@ -4,6 +4,8 @@
  */
 import type { Layout } from './store';
 import type { Session as ClaudeSession } from './plugins/claude/map';
+import type { Session as CodexSession } from './plugins/codex/map';
+import type { Quota } from './store';
 import type { Session as CopilotSession } from './plugins/copilot/map';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -446,3 +448,6 @@ export function openLinksWithModifier() {
     true,
   );
 }
+
+/** Recent Codex activity and usage observations, with no conversation content. */
+export const codexSessions = async (): Promise<{ sessions: CodexSession[]; quotas: Quota[] }> => JSON.parse(await invoke<string>('codex_sessions'));

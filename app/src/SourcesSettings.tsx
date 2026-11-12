@@ -8,7 +8,8 @@ import { azCheck } from './plugins/azcli';
 import { Guide } from './guides';
 
 /** the sources that can be switched on and off, in the footer's order */
-const ORDER = ['outlook', 'github', 'devops', 'mail', 'claude', 'copilot'];
+const ORDER = ['outlook', 'github', 'devops', 'mail', 'claude', 'copilot', 'codex'];
+const HARNESSES = ['claude', 'copilot', 'codex'];
 const WHAT: Record<string, string> = {
   outlook: 'Meetings for Next and the schedule.',
   github: 'Pull requests, followed live.',
@@ -16,6 +17,7 @@ const WHAT: Record<string, string> = {
   mail: 'Unread mail, sorted on this PC.',
   claude: 'Claude Code sessions on this PC.',
   copilot: 'GitHub Copilot sessions on this PC.',
+  codex: 'Recent Codex sessions on this PC.',
 };
 
 export function SourcesSettings({ cfg, patch }: { cfg: Settings; patch: (p: Partial<Settings>) => void }) {
@@ -27,7 +29,9 @@ export function SourcesSettings({ cfg, patch }: { cfg: Settings; patch: (p: Part
         <span className="set-hint">{ORDER.filter((id) => enabled(cfg, id)).length} on</span>
       </header>
       <p className="set-note">Switch on what you use and choose how each one signs in. A source that is off disappears from the footer and is not polled; the settings pages of the ones that are on appear on the left.</p>
-      {PLUGINS.filter((p) => ORDER.includes(p.id))
+      {[false, true].map((harnesses) => <div key={String(harnesses)}>
+      {harnesses && <h4>Coding harnesses</h4>}
+      {PLUGINS.filter((p) => ORDER.includes(p.id) && HARNESSES.includes(p.id) === harnesses)
         .sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id))
         .map((p) => {
           const ms = METHODS[p.id] ?? [];
@@ -56,6 +60,7 @@ export function SourcesSettings({ cfg, patch }: { cfg: Settings; patch: (p: Part
             </div>
           );
         })}
+      </div>)}
     </section>
   );
 }

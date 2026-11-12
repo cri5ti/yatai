@@ -76,7 +76,7 @@ export function entriesOf(brand: string, plugin: string, items: Item[], now: num
           ...(i.branch ? [['Branch', i.branch] as [string, string]] : []),
           ['Id', i.id],
         ].filter(([, v]) => v) as [string, string][],
-        lead: { glyph: i.glyph, kind: plugin as 'claude' | 'copilot' },
+        lead: { glyph: i.glyph, kind: plugin as 'claude' | 'copilot' | 'codex' },
         text: `${brand}: ${oneLine(i.name, 80)}`,
         snap,
         smart: 'ai',

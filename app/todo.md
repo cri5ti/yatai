@@ -2,6 +2,9 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Settings → Sources → Coding harnesses: switch Claude, Copilot and Codex off/on, Save, restart; buttons and polling follow the saved choices.
+- [ ] Codex: start and finish a local turn, open its drawer, add a session to Next and observe its status; verify with CLI and desktop logs. Recent idle sessions can remain for two days; activity older than 30 minutes does not prove a running turn.
+
 - [ ] Next: drag rows between cards, split and consolidate, and outdent several sub-items to the top level; undo/redo and reopen the app. Each item should appear once (apart from intentional repeated parent headings on split cards), with no duplicate-key warning or leftover duplicate cards.
 
 - [ ] Plugin drawers: drag the slim top header (including its centre grip) to move the window; resize still works; the top-right ✕ closes it. At narrow widths / larger UI scales, tabs scroll and the close button stays visible. DevOps group-row blank space also drags; tab and toolbar buttons still click normally.
