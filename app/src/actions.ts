@@ -629,7 +629,7 @@ export function outdentItems(ids: string[]) {
       plan = plan.map((sg, j) => (j === ti ? { ...sg, items: sg.items.filter((v) => v !== id) } : sg));
       plan = plan.map((sg, j) => (j === ri ? { ...sg, items: [...sg.items.slice(0, sg.items.indexOf(ref) + 1), id, ...sg.items.slice(sg.items.indexOf(ref) + 1)] } : sg));
     }
-    return { nodes, plan };
+    return { nodes, plan: reconcilePlan(plan, nodes, s.meetings) };
   });
   if (!done) toast('Already at the top level');
 }

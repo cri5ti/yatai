@@ -401,6 +401,15 @@ export const depthOf = (nodes: Node[], id: string) => {
  * Next rows under a Next row simply nest beneath it and are not listed in seg.items.
  */
 export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): Seg[] {
+  // Segment IDs are React keys AND action targets. Reserve existing IDs before creating
+  // cards: an old split can already use the natural ID of a newly top-level item.
+  const reserved = new Set(plan.map((sg) => sg.id));
+  const allocate = (base: string) => {
+    let id = base;
+    for (let suffix = 2; reserved.has(id); suffix++) id = `${base}_${suffix}`;
+    reserved.add(id);
+    return id;
+  };
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const mIds = new Set(meetings.map((m) => m.id));
   const isOwner = (id: string) => id === ROOT || mIds.has(id) || byId.has(id);
@@ -433,7 +442,7 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
     const sg = lastSegOf(owner);
     // top-level items are never grouped: each one is its own (header-less) card
     if (sg && owner !== ROOT) sg.items.push(id);
-    else segs.push({ id: 's_' + owner, owner, items: [id] });
+    else segs.push({ id: allocate('s_' + (owner === ROOT ? id : owner)), owner, items: [id] });
   };
 
   for (const n of nodes) {
@@ -454,13 +463,13 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
   for (let i = 0; i < segs.length; i++) {
     const sg = segs[i];
     if (sg.owner !== ROOT || sg.items.length < 2) continue;
-    segs.splice(i, 1, ...sg.items.map((id, k) => (k === 0 ? { ...sg, items: [id] } : { id: 's_' + id, owner: ROOT, items: [id] })));
+    segs.splice(i, 1, ...sg.items.map((id, k) => (k === 0 ? { ...sg, items: [id] } : { id: allocate('s_' + id), owner: ROOT, items: [id] })));
   }
 
   // prune empties: an owner keeps one empty segment only if it was created on purpose and has nothing else
   const hasItems = new Set(segs.filter((sg) => sg.items.length).map((sg) => sg.owner));
   const keptEmpty = new Set<string>();
-  return segs.filter((sg) => {
+  const kept = segs.filter((sg) => {
     if (sg.items.length) return true;
     if (hasItems.has(sg.owner) || keptEmpty.has(sg.owner)) return false;
     if (sg.keep && byId.has(sg.owner)) {
@@ -468,6 +477,14 @@ export function reconcilePlan(plan: Seg[], nodes: Node[], meetings: Meeting[]): 
       return true;
     }
     return false;
+  });
+  // Repair plans saved by earlier versions too. Keep the first occurrence and all
+  // row ordering; never generate random keys during rendering or discard a card.
+  const ids = new Set<string>();
+  return kept.map((sg) => {
+    const id = ids.has(sg.id) ? allocate(sg.id) : sg.id;
+    ids.add(id);
+    return id === sg.id ? sg : { ...sg, id };
   });
 }
 

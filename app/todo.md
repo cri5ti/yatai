@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Next: drag rows between cards, split and consolidate, and outdent several sub-items to the top level; undo/redo and reopen the app. Each item should appear once (apart from intentional repeated parent headings on split cards), with no duplicate-key warning or leftover duplicate cards.
+
 - [ ] Plugin drawers: drag the slim top header (including its centre grip) to move the window; resize still works; the top-right ✕ closes it. At narrow widths / larger UI scales, tabs scroll and the close button stays visible. DevOps group-row blank space also drags; tab and toolbar buttons still click normally.
 
 - [ ] Organizer: Delete on a row (with sub-items open) selects the next sibling, else the previous sibling, else the parent; the cursor no longer jumps to the top; ⇧Delete the same
