@@ -53,6 +53,11 @@
   --z-toast: 70;
   --z-menu: 80;
 
+  --quota-h: 4px;
+  --quota-detail-h: 6px;
+  --quota-detail-w: 220px;
+  --source-button-h: 32px;
+
   /* ---- window geometry ---- */
   --dock-w: 372px;
   --float-w: 560px;

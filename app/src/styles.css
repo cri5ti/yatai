@@ -669,3 +669,18 @@ button.prio:hover { filter: brightness(1.08); }
 .wc .tfilt { display: inline-grid; place-items: center; } .wc .tfilt .td { width: 10px; height: 10px; }
 .ugrp button { position: relative; } .ugrp button .td.nb { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; }
 .drow > .td { margin-right: -4px; }
+
+/* Remaining quota: compact tracks under source labels, labelled windows in the drawer. */
+.uibar .drawers { min-width: 0; overflow-x: auto; padding-bottom: var(--sp-1); }
+.uibar .drawers button { flex: none; height: auto; min-height: var(--source-button-h); padding-bottom: var(--sp-4); }
+.quota { display: flex; gap: var(--sp-2); min-width: 0; }
+.quota-window { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--sp-2); }
+.quota-track { display: block; height: var(--quota-h); border-radius: var(--r-pill); background: var(--surface-3); overflow: hidden; }
+.quota-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.quota-track.low .quota-fill { background: var(--bad); }
+.quota-track.unknown { background: var(--border); border-bottom: var(--bw) dotted var(--text-muted); }
+.quota.compact { position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: var(--sp-1); }
+.quota.detailed { flex-wrap: wrap; margin: var(--sp-2) 0 var(--sp-3); gap: var(--sp-5); }
+.quota.detailed .quota-window { flex-basis: var(--quota-detail-w); }
+.quota.detailed .quota-track { height: var(--quota-detail-h); }
+.quota-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-muted); font-variant-numeric: tabular-nums; }

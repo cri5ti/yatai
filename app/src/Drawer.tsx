@@ -1,3 +1,4 @@
+import { QuotaBar } from './QuotaBar';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { get, useS } from './store';
@@ -452,6 +453,7 @@ export function Drawer() {
         ))}
       </div>
       <div className="dfoot">
+        {['claude', 'copilot', 'codex'].includes(d.kind) && <QuotaBar r={s.demo ? undefined : s.reqs[d.kind]} />}
         <kbd>↑↓</kbd> choose · {tabs.length > 1 && (<><kbd>←→</kbd> tab · </>)}<kbd>⏎</kbd> add to Next · <kbd>R</kbd> refresh · {cur?.details && (<><kbd>D</kbd> details · </>)}{canFilter && (<><kbd>F</kbd> filter · </>)}{d.kind !== 'outlook' && (<><kbd>I</kbd> add to Inbox · </>)}<kbd>Esc</kbd> close{ls?.at ? ` · updated ${relTime(ls.at)}` : ''}
         {d.kind !== 'claude' && d.kind !== 'copilot' && d.kind !== 'codex' && <ReqCount r={s.reqs[d.kind]} />}
       </div>
