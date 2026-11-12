@@ -169,7 +169,7 @@ UI scale and row density are behind the **Aa** button at the right of the footer
 
 ## Popup windows keep their place
 
-Settings, help, the AI chat, the developer panel and the drawers open where you last put them (moved or resized), kept per drawer source: the GitHub, Outlook and DevOps drawers each have their own place. A place that is no longer on any screen is dropped, and the popup goes back beside the main window. Popups you never moved still follow the main window. The drawers carry no title: the tabs (and, for DevOps, the Builds · Work items row) are the header, and dragging it moves the window.
+Settings, help, the AI chat, the developer panel and the drawers open where you last put them (moved or resized), kept per drawer source: the GitHub, Outlook and DevOps drawers each have their own place. A place that is no longer on any screen is dropped, and the popup goes back beside the main window. Popups you never moved still follow the main window. The drawers carry no title: a slim header above the tabs provides a drag area and a close button in the top-right corner. Empty space beside the tabs (and, for DevOps, the Builds · Work items buttons) also moves the window; buttons keep their normal click actions.
 
 ## Outlook: list or schedule
 

@@ -64,7 +64,7 @@ function Popup({ v }: { v: View }) {
     const drag = (e: PointerEvent) => {
       const el = e.target as HTMLElement;
       if (e.button !== 0 || el.closest('button, input, select, textarea, a, [role="tab"]')) return;
-      if (el.closest('.ai-head, .dhead, .dev-head, .help > h3')) (e.preventDefault(), void startDrag('move'));
+      if (el.closest('.ai-head, .dtitlebar, .dhead, .dgroups, .dev-head, .help > h3')) (e.preventDefault(), void startDrag('move'));
     };
     const blur = () => (VIEWS[v] as { blurCloses?: boolean }).blurCloses && closeMe();
     window.addEventListener('keydown', keys, true);

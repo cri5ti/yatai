@@ -284,6 +284,12 @@ export function Drawer() {
 
   return (
     <div className={`drawer drawer-${d.kind}`} role="dialog" aria-label={`${d.kind} — bring things in`} onKeyDown={onKey}>
+      <div className="dtitlebar">
+        <span className="dgrip" aria-hidden="true">⋯</span>
+        <button className="x" aria-label="Close" title="Close (Esc)" onClick={() => act.closeDrawer()}>
+          ✕
+        </button>
+      </div>
       {groups.length > 1 && (
         <div className="dgroups" role="tablist" aria-label="Kinds">
           {groups.map((g) => (
@@ -331,9 +337,6 @@ export function Drawer() {
         )}
         <button className={cx('x', 'refresh', ls?.loading && 'spin')} aria-label="Refresh" title="Refresh (R)" disabled={!!ls?.loading || !!block} onClick={refresh}>
           ↻
-        </button>
-        <button className="x" aria-label="Close" title="Close (Esc)" onClick={() => act.closeDrawer()}>
-          ✕
         </button>
       </div>
       {bar && canFilter && (
