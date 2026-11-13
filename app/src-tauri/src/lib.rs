@@ -356,6 +356,10 @@ pub fn run() {
             }
             app.manage(Taken(taken));
             updater::start(app.handle());
+            // created last: a window loads its page at once, and the page calls commands that need the state above
+            for cfg in &app.config().app.windows {
+                WebviewWindowBuilder::from_config(app.handle(), cfg)?.build()?;
+            }
             Ok(())
         })
         .on_window_event(|w, e| {
