@@ -2,6 +2,8 @@
 
 ## Check by hand (couldn't be verified headlessly)
 
+- [ ] Published build (`bun run tauri build`, then run the installer or exe): yatai opens with the main window and loads its data, with no "state not managed for field `db`" error. Also check that the capture window (⌥Space) still opens.
+
 - [ ] Source bar: 4px quota tracks sit only under Claude, Copilot and Codex labels; all sources remain reachable by horizontal scrolling in the narrow dock. Coding harness drawer footer: usage windows have remaining allowance/reset labels; other source footers have no bars; missing and expired readings stay neutral; inspect light/dark themes and keyboard focus.
 
 - [ ] Settings → Sources → Coding harnesses: switch Claude, Copilot and Codex off/on, Save, restart; buttons and polling follow the saved choices.
